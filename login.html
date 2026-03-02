@@ -176,7 +176,7 @@
           state.err = null
           state.loading = true
           try {
-            const res = await api.login(state.email, '', auth.deviceId)
+            const res = await api.login(state.email, '', auth.deviceId, auth.deviceLabel)
             if (res.step === 'password_required') {
               state.step = 'password'
             } else if (res.step === 'otp_required') {
@@ -196,7 +196,7 @@
           state.err = null
           state.loading = true
           try {
-            const res = await api.login(state.email, state.password, auth.deviceId)
+            const res = await api.login(state.email, state.password, auth.deviceId, auth.deviceLabel)
             if (res.step === 'otp_required') {
               state.step = 'otp'
             } else {
@@ -214,7 +214,7 @@
           state.err = null
           state.loading = true
           try {
-            const { token, user } = await api.verifyOtp(state.email, state.otp, auth.deviceId)
+            const { token, user } = await api.verifyOtp(state.email, state.otp, auth.deviceId, auth.deviceLabel)
             auth.save(token, user)
             window.location.href = 'app/index.html'
           } catch (e) {

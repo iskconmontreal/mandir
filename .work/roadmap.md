@@ -6,14 +6,18 @@
 * [ ] Events
 * [ ] Website
 * [ ] Library
-* [ ] Store
+* [ ] Store/boutique
 * [ ] Grants from govmt
+* [ ] Books tracking
+
 
 ---
 
-Backlog
+# Ideas
 
 Kirtans
 Classes
 School
 Courses
+
+! Stats for the website: how many books distributed, how much donations accumulated

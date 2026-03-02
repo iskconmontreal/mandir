@@ -5,222 +5,272 @@
     <h1>Members</h1>
   </div>
   <div style="display:flex; gap:var(--s-sm)">
-    <button class="btn btn-outline btn-sm" :onclick="exportCSV()">Export CSV</button>
-    <button class="btn btn-primary btn-sm" :if="!showAdd" :onclick="openAdd()">+ Add Member</button>
+    <button class="btn btn-primary btn-sm" :onclick="openAdd()">+ Add Member</button>
   </div>
 </div>
 
-<!-- Inline add/edit form -->
-<div class="card" :if="showAdd" style="margin-bottom:var(--s-lg)">
-  <div class="card-header">
-    <h3 :text="editing ? 'Edit Member' : 'Add Member'"></h3>
-    <button class="modal-close" :onclick="closeForm()">&times;</button>
-  </div>
-  <div style="padding:var(--s-md) var(--s-lg) var(--s-lg)">
-    <form :onsubmit.prevent="saveMember">
-      <div class="form-row">
-        <div class="field">
-          <label for="m-first">First Name</label>
-          <input id="m-first" type="text" :value="form.first_name" placeholder="Legal first name" required>
-        </div>
-        <div class="field">
-          <label for="m-last">Last Name</label>
-          <input id="m-last" type="text" :value="form.last_name" placeholder="Family name" required>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="m-email">Email</label>
-          <input id="m-email" type="email" :value="form.email" placeholder="email@example.com">
-        </div>
-        <div class="field">
-          <label for="m-phone">Phone</label>
-          <input id="m-phone" type="tel" :value="form.phone" placeholder="514-000-0000">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="m-role">Role</label>
-          <select id="m-role" :value="form.role">
-            <option :each="r in roles" :value="r" :text="r"></option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="m-joined">Joined</label>
-          <input id="m-joined" type="date" :value="form.joined">
-        </div>
-      </div>
-      <div class="field" style="margin-bottom:var(--s-md)">
-        <label for="m-address">Address</label>
-        <textarea id="m-address" :value="form.address" placeholder="For tax receipts…" rows="2"></textarea>
-      </div>
-      <div class="field" style="margin-bottom:var(--s-md)">
-        <label for="m-notes">Notes</label>
-        <textarea id="m-notes" :value="form.notes" placeholder="Optional…" rows="2"></textarea>
-      </div>
-
-      <!-- Spiritual details (collapsible) -->
-      <details style="margin-bottom:var(--s-md)">
-        <summary style="cursor:pointer; font-weight:600; margin-bottom:var(--s-sm); color:var(--c-text-dim)">Spiritual Details</summary>
+<!-- Edit / Add modal -->
+<div class="modal-overlay" :if="showEdit" :onclick="e => { if (e.target === e.currentTarget) closeEdit() }">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 :text="editing ? 'Edit Member' : 'Add Member'"></h2>
+      <button class="modal-close" :onclick="closeEdit()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form :onsubmit.prevent="saveMember">
         <div class="form-row">
           <div class="field">
-            <label for="m-initiated">Initiated Name</label>
-            <input id="m-initiated" type="text" :value="form.initiated_name" placeholder="Spiritual name">
+            <label for="m-first">First Name</label>
+            <input id="m-first" type="text" :value="form.first_name" placeholder="Legal first name" required>
           </div>
           <div class="field">
-            <label for="m-guru">Diksa Guru</label>
-            <input id="m-guru" type="text" :value="form.diksa_guru" placeholder="Initiating spiritual master">
+            <label for="m-last">Last Name</label>
+            <input id="m-last" type="text" :value="form.last_name" placeholder="Family name" required>
           </div>
         </div>
         <div class="form-row">
           <div class="field">
-            <label for="m-guide">Guiding Devotee</label>
-            <input id="m-guide" type="text" :value="form.guiding_devotee" placeholder="Siksa guru / mentor">
+            <label for="m-email">Email</label>
+            <input id="m-email" type="email" :value="form.email" placeholder="email@example.com">
           </div>
           <div class="field">
-            <label for="m-services">Devotional Services</label>
-            <input id="m-services" type="text" :value="form.services" placeholder="Cooking, pujari, etc.">
+            <label for="m-phone">Phone</label>
+            <input id="m-phone" type="tel" :value="form.phone" placeholder="514-000-0000">
           </div>
         </div>
         <div class="form-row">
           <div class="field">
-            <label for="m-rounds">Japa Rounds</label>
-            <input id="m-rounds" type="number" :value="form.rounds" placeholder="16" min="0">
-          </div>
-          <div class="field">
-            <label for="m-rounds-years">Rounds for (years)</label>
-            <input id="m-rounds-years" type="number" :value="form.rounds_years" min="0">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="field" style="display:flex; align-items:center; gap:var(--s-sm); min-height:2.5rem">
-            <input id="m-regs" type="checkbox" :checked="form.four_regs" style="width:auto">
-            <label for="m-regs" style="margin:0">Follows 4 regulative principles</label>
-          </div>
-          <div class="field">
-            <label for="m-regs-years">Principles for (years)</label>
-            <input id="m-regs-years" type="number" :value="form.four_regs_years" min="0">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="m-kc-years">KC contact (years)</label>
-            <input id="m-kc-years" type="number" :value="form.kc_years" min="0">
-          </div>
-          <div class="field">
-            <label for="m-temple">Temple</label>
-            <input id="m-temple" type="text" :value="form.temple" placeholder="ISKCON Montreal">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="m-dob">Date of Birth</label>
-            <input id="m-dob" type="date" :value="form.dob">
-          </div>
-          <div class="field">
-            <label for="m-gender">Gender</label>
-            <select id="m-gender" :value="form.gender">
-              <option value="">—</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="m-nationality">Nationality</label>
-            <input id="m-nationality" type="text" :value="form.nationality">
-          </div>
-          <div class="field">
-            <label for="m-occupation">Occupation</label>
-            <input id="m-occupation" type="text" :value="form.occupation">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="m-marriage">Marriage Status</label>
-            <select id="m-marriage" :value="form.marriage_status">
-              <option value="">—</option>
-              <option value="Single">Single</option>
-              <option value="Married">Married</option>
-              <option value="Widowed">Widowed</option>
+            <label for="m-role">Role</label>
+            <select id="m-role" :value="form.role">
+              <option :each="r in roles" :value="r" :text="r"></option>
             </select>
           </div>
           <div class="field">
-            <label for="m-spouse">Spouse Name</label>
-            <input id="m-spouse" type="text" :value="form.spouse">
+            <label for="m-joined">Joined</label>
+            <input id="m-joined" type="date" :value="form.joined">
           </div>
         </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="m-spouse-kc">Spouse KC Status</label>
-            <input id="m-spouse-kc" type="text" :value="form.spouse_kc" placeholder="Friend of Krishna, initiated, etc.">
-          </div>
-          <div class="field">
-            <label for="m-children">Children</label>
-            <input id="m-children" type="text" :value="form.children" placeholder="Names and ages">
-          </div>
+        <div class="field">
+          <label for="m-notes">Notes</label>
+          <textarea id="m-notes" :value="form.notes" placeholder="Optional…" rows="2"></textarea>
         </div>
-        <div class="form-row">
-          <div class="field" style="display:flex; align-items:center; gap:var(--s-sm); min-height:2.5rem">
-            <input id="m-temple-live" type="checkbox" :checked="form.lives_in_temple" style="width:auto">
-            <label for="m-temple-live" style="margin:0">Lives in temple</label>
+
+        <details>
+          <summary style="cursor:pointer; font-weight:600; margin-bottom:var(--s-sm); color:var(--c-text-dim)">Personal Details</summary>
+          <div style="gap:var(--s-md); display:flex; flex-direction:column">
+            <div class="form-row">
+              <div class="field">
+                <label for="m-dob">Date of Birth</label>
+                <input id="m-dob" type="date" :value="form.dob">
+              </div>
+              <div class="field">
+                <label for="m-gender">Gender</label>
+                <select id="m-gender" :value="form.gender">
+                  <option value="">—</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="m-nationality">Nationality</label>
+                <input id="m-nationality" type="text" :value="form.nationality">
+              </div>
+              <div class="field">
+                <label for="m-occupation">Occupation</label>
+                <input id="m-occupation" type="text" :value="form.occupation">
+              </div>
+            </div>
+            <div class="field">
+              <label for="m-address">Address</label>
+              <textarea id="m-address" :value="form.address" placeholder="For tax receipts…" rows="2"></textarea>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="m-marriage">Marriage Status</label>
+                <select id="m-marriage" :value="form.marriage_status">
+                  <option value="">—</option>
+                  <option value="Single">Single</option>
+                  <option value="Married">Married</option>
+                  <option value="Widowed">Widowed</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="m-spouse">Spouse</label>
+                <input id="m-spouse" type="text" :value="form.spouse" placeholder="Name; KC status">
+              </div>
+            </div>
+            <div class="field">
+              <label for="m-children">Children</label>
+              <input id="m-children" type="text" :value="form.children" placeholder="Names and ages">
+            </div>
           </div>
-          <div class="field" style="display:flex; align-items:center; gap:var(--s-sm); min-height:2.5rem">
-            <input id="m-namahatta" type="checkbox" :checked="form.namahatta" style="width:auto">
-            <label for="m-namahatta" style="margin:0">Namahatta member</label>
+        </details>
+
+        <details>
+          <summary style="cursor:pointer; font-weight:600; margin-bottom:var(--s-sm); color:var(--c-text-dim)">Spiritual Details</summary>
+          <div style="gap:var(--s-md); display:flex; flex-direction:column">
+            <div class="form-row">
+              <div class="field">
+                <label for="m-initiated">Initiated Name</label>
+                <input id="m-initiated" type="text" :value="form.initiated_name" placeholder="Spiritual name">
+              </div>
+              <div class="field">
+                <label for="m-guru">Diksa Guru</label>
+                <input id="m-guru" type="text" :value="form.diksa_guru" placeholder="Initiating spiritual master">
+              </div>
+            </div>
+            <div class="field">
+              <label for="m-guide">Guiding Devotee</label>
+              <input id="m-guide" type="text" :value="form.guiding_devotee" placeholder="Siksa guru / mentor">
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="m-rounds">Japa Rounds</label>
+                <input id="m-rounds" type="number" :value="form.rounds" placeholder="16" min="0">
+              </div>
+              <div class="field">
+                <label for="m-rounds-years">Chanting for (years)</label>
+                <input id="m-rounds-years" type="number" :value="form.rounds_years" min="0">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="m-regs-years">4 Regs for (years)</label>
+                <input id="m-regs-years" type="number" :value="form.four_regs_years" min="0">
+              </div>
+              <div class="field">
+                <label for="m-kc-years">Years in KC</label>
+                <input id="m-kc-years" type="number" :value="form.kc_years" min="0">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="m-temple">Temple</label>
+                <input id="m-temple" type="text" :value="form.temple" placeholder="ISKCON Montreal">
+              </div>
+              <div class="field">
+                <label for="m-services">Services</label>
+                <input id="m-services" type="text" :value="form.services" placeholder="Cooking, pujari, etc.">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field" style="display:flex; align-items:center; gap:var(--s-sm); min-height:2.5rem">
+                <input id="m-temple-live" type="checkbox" :checked="form.lives_in_temple" style="width:auto">
+                <label for="m-temple-live" style="margin:0">Lives in temple</label>
+              </div>
+              <div class="field" style="display:flex; align-items:center; gap:var(--s-sm); min-height:2.5rem">
+                <input id="m-namahatta" type="checkbox" :checked="form.namahatta" style="width:auto">
+                <label for="m-namahatta" style="margin:0">Namahatta member</label>
+              </div>
+            </div>
           </div>
+        </details>
+
+        <div class="field" :if="editing" style="margin-bottom:var(--s-md)">
+          <label for="m-status">Status</label>
+          <input id="m-status" type="text" :value="form.status" placeholder="Leave blank if active. E.g. Moved away, Passed away…">
         </div>
-      </details>
 
-      <!-- Status (only in edit mode, for marking departed/moved) -->
-      <div class="field" :if="editing" style="margin-bottom:var(--s-md)">
-        <label for="m-status">Status</label>
-        <input id="m-status" type="text" :value="form.status" placeholder="Leave blank if active. E.g. Moved away, Passed away…">
-      </div>
+        <div class="login-error" :if="formErr" :text="formErr" style="margin-bottom:var(--s-sm)"></div>
 
-      <div class="login-error" :if="formErr" :text="formErr" style="margin-bottom:var(--s-sm)"></div>
-
-      <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); margin-top:var(--s-lg)">
-        <button type="button" class="btn btn-outline" :onclick="closeForm()">Cancel</button>
-        <button type="submit" class="btn btn-primary" :class="{dim: saving}" :text="editing ? 'Update' : 'Save'"></button>
-      </div>
-    </form>
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); margin-top:var(--s-lg)">
+          <button type="button" class="btn btn-outline" :onclick="closeEdit()">Cancel</button>
+          <button type="submit" class="btn btn-primary" :class="{dim: saving}" :text="saving ? 'Saving…' : 'Save'"></button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
-<!-- Summary cards -->
-<div class="card-grid" style="margin-bottom:var(--s-lg)">
-  <div class="card">
-    <div class="stat-label">Total</div>
-    <div class="stat-value" :text="total"></div>
-  </div>
-  <div class="card">
-    <div class="stat-label">Joined This Year</div>
-    <div class="stat-value" :text="members.filter(m => m.joined?.startsWith(thisYear)).length"></div>
-  </div>
-  <div class="card">
-    <div class="stat-label">By Role</div>
-    <div style="margin-top:var(--s-xs)">
-      <div :each="r in roleSummary" style="display:flex; justify-content:space-between; font-size:var(--f-sm); padding:2px 0">
-        <span :text="r.role"></span>
-        <span class="dim" :text="r.count"></span>
+<!-- Member detail modal -->
+<div class="modal-overlay" :if="showDetail" :onclick="e => { if (e.target === e.currentTarget) closeDetail() }">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 :text="detail.first_name + ' ' + detail.last_name"></h2>
+      <button class="modal-close" :onclick="closeDetail()">&times;</button>
+    </div>
+    <div class="modal-body" style="display:flex; flex-direction:column; gap:var(--s-md)">
+      <div style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
+        <div>
+          <div class="stat-label">Email</div>
+          <div :text="detail.email || '—'"></div>
+        </div>
+        <div>
+          <div class="stat-label">Phone</div>
+          <div :text="detail.phone || '—'"></div>
+        </div>
+        <div>
+          <div class="stat-label">Role</div>
+          <span class="badge" :text="detail.role || '—'"></span>
+        </div>
+        <div>
+          <div class="stat-label">Joined</div>
+          <div :text="detail.joined || '—'"></div>
+        </div>
+      </div>
+
+      <div :if="detail.initiated_name || detail.diksa_guru" style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
+        <div :if="detail.initiated_name">
+          <div class="stat-label">Initiated Name</div>
+          <div :text="detail.initiated_name"></div>
+        </div>
+        <div :if="detail.diksa_guru">
+          <div class="stat-label">Diksa Guru</div>
+          <div :text="detail.diksa_guru"></div>
+        </div>
+      </div>
+
+      <div :if="detail.notes" style="font-size:var(--f-sm); color:var(--c-text-dim)" :text="detail.notes"></div>
+
+      <!-- System account section -->
+      <div :if="detail._user_id && can('users:view')" style="border-top:1px solid var(--c-border); padding-top:var(--s-md)">
+        <div style="display:flex; align-items:center; gap:var(--s-sm); margin-bottom:var(--s-sm)">
+          <span class="badge" style="background:rgba(107,92,231,.1); color:var(--c-accent)">System User</span>
+          <span class="dim" style="font-size:var(--f-sm)" :if="userDetail.role" :text="userRoleName(userDetail)"></span>
+        </div>
+        <div style="display:flex; gap:var(--s-lg); flex-wrap:wrap; font-size:var(--f-sm)">
+          <div>
+            <div class="stat-label">Last Login</div>
+            <div :text="userDetail.last_login?.slice(0, 10) || 'Never'"></div>
+          </div>
+          <div :if="userDetail.device">
+            <div class="stat-label">Trusted Device</div>
+            <div style="display:flex; align-items:center; gap:var(--s-sm)">
+              <span :text="userDetail.device?.label || userDetail.device?.device_id?.slice(0, 8) + '…'"></span>
+              <button class="btn-link" style="color:var(--c-err); font-size:var(--f-sm)" :onclick="revokeDevice()" :class="{dim: revoking}">Revoke</button>
+            </div>
+          </div>
+          <div :if="!userDetail.device && userDetail.id">
+            <div class="stat-label">Trusted Device</div>
+            <div class="dim">None</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Invite section (no account yet) -->
+      <div :if="!detail._user_id && detail.email" style="border-top:1px solid var(--c-border); padding-top:var(--s-md)">
+        <div class="dim" style="font-size:var(--f-sm); margin-bottom:var(--s-sm)">No system account</div>
+        <button class="btn btn-outline btn-sm" :onclick="inviteMember()" :class="{dim: inviting}">Send Invite</button>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); border-top:1px solid var(--c-border); padding-top:var(--s-md)">
+        <button class="btn btn-outline btn-sm" :onclick="editFromDetail()">Edit</button>
       </div>
     </div>
   </div>
 </div>
 
 <!-- Filter bar -->
-<div class="filter-bar" style="display:flex; gap:var(--s-sm); margin-bottom:var(--s-md); flex-wrap:wrap">
-  <input type="search" placeholder="Search name, email or phone…" :value="search"
-    :oninput="search = e.target.value; searchDebounce()"
-    style="flex:1; min-width:12rem">
-  <select :onchange="filterRole = e.target.value; load()" style="width:auto">
+<div class="filter-bar">
+  <input class="filter-search" type="search" placeholder="Search name, email or phone…"
+    :value="search" :oninput.debounce-150="e => { search = e.target.value; page = 1; load() }">
+  <select :onchange="e => { filterRole = e.target.value; load() }" style="width:auto">
     <option value="">All roles</option>
     <option :each="r in roles" :value="r" :text="r"></option>
   </select>
-  <button class="btn btn-outline btn-sm" :if="search || filterRole"
-    :onclick="search = ''; filterRole = ''; load()">Clear</button>
+  <button class="btn btn-outline btn-sm" :if="search || filterRole" :onclick="e => { search = ''; filterRole = ''; load() }">Clear</button>
 </div>
 
 <!-- Members list -->
@@ -235,31 +285,26 @@
           <th>Phone</th>
           <th>Role</th>
           <th>Joined</th>
-          <th></th>
         </tr>
       </thead>
       <tbody>
-        <tr :each="m in members" :class="{'dim': m.status}">
+        <tr :each="m in members" :class="{'dim': m.status}" style="cursor:pointer" :onclick="openDetail(m)">
           <td>
             <span :text="m.first_name + ' ' + m.last_name"></span>
             <span :if="m.status" class="badge" style="margin-left:var(--s-xs); font-size:var(--f-xs)" :text="m.status"></span>
+            <span :if="m._user_id" class="badge" style="margin-left:var(--s-xs); font-size:var(--f-xs); background:rgba(107,92,231,.1); color:var(--c-accent)">User</span>
           </td>
-          <td><a :href="'mailto:' + m.email" :text="m.email || '—'" style="color:var(--c-accent)"></a></td>
+          <td :text="m.email || '—'"></td>
           <td :text="m.phone || '—'"></td>
           <td><span class="badge" :text="m.role || '—'"></span></td>
           <td class="dim" :text="m.joined || '—'"></td>
-          <td style="text-align:right; white-space:nowrap">
-            <button class="btn-link" style="color:var(--c-accent)" :onclick="editMember(m)">Edit</button>
-            <button class="btn-link dim" :if="m.email && !m._user_id" :onclick="inviteMember(m)">Invite</button>
-          </td>
         </tr>
         <tr :if="!members.length && !loadErr">
-          <td colspan="6" class="dim" style="text-align:center; padding:var(--s-lg)" :text="loading ? 'Loading…' : 'No members found'"></td>
+          <td colspan="5" class="dim" style="text-align:center; padding:var(--s-lg)" :text="loading ? 'Loading…' : 'No members found'"></td>
         </tr>
       </tbody>
     </table>
   </div>
-  <!-- Pagination -->
   <div :if="totalPages > 1" style="display:flex; justify-content:space-between; align-items:center; padding:var(--s-sm) var(--s-md); border-top:1px solid var(--c-border)">
     <span class="dim" style="font-size:var(--f-sm)" :text="total + ' members'"></span>
     <div style="display:flex; gap:var(--s-xs)">
@@ -271,20 +316,19 @@
 </div>
 
 <script type="module">
-  import { init, ROLES } from '../lib/app.js'
+  import { init, ROLES, auth } from '../lib/app.js'
   import { api } from '../lib/api.js'
 
   const today = new Date().toISOString().slice(0, 10)
-  const thisYear = today.slice(0, 4)
   const perPage = 20
 
   const emptyForm = () => ({
     first_name: '', last_name: '', email: '', phone: '', role: 'Devotee', joined: today,
     address: '', notes: '', status: '',
     initiated_name: '', diksa_guru: '', guiding_devotee: '', services: '',
-    rounds: '', rounds_years: '', four_regs: false, four_regs_years: '',
+    rounds: '', rounds_years: '', four_regs_years: '',
     kc_years: '', temple: '', dob: '', gender: '', nationality: '', occupation: '',
-    marriage_status: '', spouse: '', spouse_kc: '', children: '',
+    marriage_status: '', spouse: '', children: '',
     lives_in_temple: false, namahatta: false
   })
 
@@ -293,65 +337,62 @@
     return { _id: c.id, _public: c.public_id, _user_id: c.user_id, ...d }
   }
 
-  let debounceTimer
-
   const s = init({
-    showAdd: false,
+    showEdit: false,
+    showDetail: false,
     editing: null,
     form: emptyForm(),
+    detail: {},
+    userDetail: {},
     members: [],
     total: 0,
     roles: ROLES,
-    thisYear,
     loading: false,
     saving: false,
+    inviting: false,
+    revoking: false,
     loadErr: null,
     formErr: null,
-
     search: '',
     filterRole: '',
     page: 1,
 
     get totalPages() { return Math.max(1, Math.ceil(this.total / perPage)) },
 
-    get roleSummary() {
-      const map = {}
-      for (const m of this.members) map[m.role] = (map[m.role] || 0) + 1
-      return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([role, count]) => ({ role, count }))
-    },
-
-    searchDebounce() {
-      clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(() => { s.page = 1; load() }, 300)
-    },
-
     openAdd() {
       s.editing = null
       s.form = emptyForm()
       s.formErr = null
-      s.showAdd = true
+      s.showEdit = true
     },
 
-    editMember(m) {
-      s.editing = m
-      s.form = { ...m }
-      s.formErr = null
-      s.showAdd = true
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    },
-
-    async inviteMember(m) {
-      if (!confirm(`Send invite to ${m.email}?`)) return
-      try {
-        await api.inviteMember(m._id)
-        alert(`Invite sent to ${m.email}`)
-      } catch (e) {
-        alert(e.message || 'Failed to send invite')
+    async openDetail(m) {
+      s.detail = m
+      s.userDetail = {}
+      s.showDetail = true
+      if (m._user_id && auth.can('users:view')) {
+        try { s.userDetail = await api.getUser(m._user_id) }
+        catch {}
       }
     },
 
-    closeForm() {
-      s.showAdd = false
+    closeDetail() {
+      s.showDetail = false
+      s.detail = {}
+      s.userDetail = {}
+    },
+
+    editFromDetail() {
+      const m = s.detail
+      s.showDetail = false
+      s.editing = m
+      s.form = { ...m }
+      s.formErr = null
+      s.showEdit = true
+    },
+
+    closeEdit() {
+      s.showEdit = false
       s.editing = null
       s.form = emptyForm()
       s.formErr = null
@@ -363,14 +404,17 @@
       const data = { ...s.form }
       delete data._id
       delete data._public
+      delete data._user_id
       try {
         if (s.editing) {
           await api.updateMember(s.editing._id, data)
+          const updated = { ...s.editing, ...data }
+          s.closeEdit()
+          s.openDetail(updated)
         } else {
           await api.createMember(data)
+          s.closeEdit()
         }
-        s.form = emptyForm()
-        s.editing = null
         load()
       } catch (e) {
         s.formErr = e.message || 'Failed to save member'
@@ -379,17 +423,33 @@
       }
     },
 
-    exportCSV() {
-      const rows = [['First Name', 'Last Name', 'Email', 'Phone', 'Role', 'Joined', 'Address', 'Notes']]
-      for (const m of s.members) rows.push([m.first_name, m.last_name, m.email, m.phone, m.role, m.joined || '', m.address || '', m.notes || ''])
-      const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
-      const blob = new Blob([csv], { type: 'text/csv' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = 'members.csv'
-      a.click()
-      URL.revokeObjectURL(a.href)
+    async inviteMember() {
+      if (!confirm(`Send invite to ${s.detail.email}?`)) return
+      s.inviting = true
+      try {
+        await api.inviteMember(s.detail._id)
+        alert(`Invite sent to ${s.detail.email}`)
+      } catch (e) {
+        alert(e.message || 'Failed to send invite')
+      } finally { s.inviting = false }
     },
+
+    async revokeDevice() {
+      s.revoking = true
+      try {
+        await api.revokeDevice(s.userDetail.id)
+        s.userDetail = { ...s.userDetail, device: null }
+      } catch (e) { alert(e.message || 'Failed to revoke') }
+      finally { s.revoking = false }
+    },
+
+    userRoleName(u) {
+      if (!u.role?.role) return ''
+      const r = typeof u.role.role === 'string' ? JSON.parse(u.role.role) : u.role.role
+      return r.name || ''
+    },
+
+    load,
   })
 
   async function load() {

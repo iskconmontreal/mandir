@@ -1,215 +1,98 @@
 ---
 ---
-<div class="page-header" style="display:flex; align-items:baseline; justify-content:space-between">
-  <div>
-    <h1>Overview</h1>
-  </div>
-  <div style="display:flex; align-items:center; gap:var(--s-md)">
-    <!-- <div style="position:relative">
-      <button class="btn btn-primary btn-sm" :onclick="showAdd = !showAdd">+</button>
-      <div class="quick-add" :if="showAdd">
-        <a href="donations.html" class="quick-add-item">+ Donation</a>
-        <a href="expenses.html" class="quick-add-item">+ Expense</a>
-      </div>
-    </div> -->
-    <select class="year-select" :onchange="year = +e.target.value">
-      <option :each="y in years" :value="y" :text="y" :selected="y === year"></option>
-    </select>
-    <select class="year-select" :onchange="month = +e.target.value">
-      <option :each="m in months" :value="m.val" :text="m.label" :selected="m.val === month"></option>
-    </select>
-  </div>
+<div class="page-header">
+  <h1>ISKCON Montreal</h1>
+  <p>Organization overview</p>
 </div>
 
-<!-- Stat cards -->
-<div class="card-grid">
-  <div class="card">
-    <div class="stat-label stat-ok">Donations</div>
-    <div class="stat-value" :text="'$' + totals.donations.toLocaleString(undefined, {minimumFractionDigits: 2})"></div>
-    <div class="stat-sub stat-ok" :text="totals.donationChange"></div>
-  </div>
-  <div class="card">
-    <div class="stat-label stat-err">Expenses</div>
-    <div class="stat-value" :text="'$' + totals.expenses.toLocaleString(undefined, {minimumFractionDigits: 2})"></div>
-    <div class="stat-sub stat-err" :text="totals.expenseChange"></div>
-  </div>
-  <div class="card">
-    <div class="stat-label">Donors</div>
-    <div class="stat-value" :text="totals.donors"></div>
-    <div class="stat-sub" :text="totals.donorSub"></div>
-  </div>
-</div>
-
-<!-- Category breakdowns side by side -->
-<div class="card-grid" style="grid-template-columns: 1fr 1fr">
-  <div class="card">
-    <div class="card-header"><h3>Donations by Category</h3></div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Category</th><th style="text-align:right">Amount</th><th style="text-align:right">%</th></tr></thead>
-        <tbody>
-          <tr :each="c in donCats">
-            <td :text="c.cat"></td>
-            <td style="text-align:right" :text="'$' + c.amt.toLocaleString(undefined, {minimumFractionDigits: 2})"></td>
-            <td style="text-align:right" class="dim" :text="c.pct + '%'"></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-header"><h3>Expenses by Category</h3></div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Category</th><th style="text-align:right">Amount</th><th style="text-align:right">%</th></tr></thead>
-        <tbody>
-          <tr :each="c in expCats">
-            <td :text="c.cat"></td>
-            <td style="text-align:right" :text="'$' + c.amt.toLocaleString(undefined, {minimumFractionDigits: 2})"></td>
-            <td style="text-align:right" class="dim" :text="c.pct + '%'"></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- Top donors -->
-<div class="card" style="margin-bottom:var(--s-lg)">
-  <div class="card-header"><h3>Top Donors</h3></div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>#</th><th>Donor</th><th style="text-align:right">Total</th><th style="text-align:right">Count</th></tr></thead>
-      <tbody>
-        <tr :each="d, i in topDonors">
-          <td class="dim" :text="i + 1"></td>
-          <td :text="d.name"></td>
-          <td style="text-align:right" :text="'$' + d.total.toLocaleString(undefined, {minimumFractionDigits: 2})"></td>
-          <td style="text-align:right" :text="d.count"></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Recent transactions -->
-<div class="card">
+<!-- Financial pulse -->
+<div class="card" style="margin-bottom:var(--s-xl)">
   <div class="card-header">
-    <h3>Recent Transactions</h3>
-    <div class="stat-sub" :text="totals.txSummary"></div>
+    <h3>Financial Pulse</h3>
+    <a href="finance.html" class="btn-link" style="color:var(--c-accent)">View details →</a>
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Description</th>
-          <th>Category</th>
-          <th style="text-align:right">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr :each="item in recent">
-          <td :text="item.date"></td>
-          <td :text="item.desc"></td>
-          <td><span class="badge" :text="item.cat"></span></td>
-          <td style="text-align:right" :class="item.type === 'in' ? 'stat-ok' : 'stat-err'"
-            :text="(item.type === 'in' ? '+' : '−') + '$' + item.amt.toLocaleString(undefined, {minimumFractionDigits: 2})"></td>
-        </tr>
-      </tbody>
-    </table>
+  <div style="display:flex; gap:var(--s-xl); flex-wrap:wrap">
+    <div>
+      <div class="stat-label stat-ok">Donations this month</div>
+      <div class="stat-value" :text="'$' + fin.donations.toLocaleString(undefined, {minimumFractionDigits: 2})"></div>
+    </div>
+    <div>
+      <div class="stat-label stat-err">Expenses this month</div>
+      <div class="stat-value" :text="'$' + fin.expenses.toLocaleString(undefined, {minimumFractionDigits: 2})"></div>
+    </div>
+    <div>
+      <div class="stat-label" :text="fin.net >= 0 ? 'Surplus' : 'Deficit'"></div>
+      <div class="stat-value" :class="fin.net >= 0 ? 'stat-ok' : 'stat-err'"
+        :text="'$' + Math.abs(fin.net).toLocaleString(undefined, {minimumFractionDigits: 2})"></div>
+    </div>
   </div>
+  <div class="ratio-bar" style="margin-top:var(--s-lg)">
+    <span :style="{width: fin.donPct + '%', background: 'var(--c-ok)'}"></span>
+    <span :style="{width: fin.expPct + '%', background: 'var(--c-err)'}"></span>
+  </div>
+  <div style="display:flex; justify-content:space-between; font-size:var(--f-sm); color:var(--c-text-dim)">
+    <span :text="'Donations ' + fin.donPct + '%'"></span>
+    <span :text="'Expenses ' + fin.expPct + '%'"></span>
+  </div>
+</div>
+
+<!-- Members pulse -->
+<div class="card" style="margin-bottom:var(--s-xl)">
+  <div class="card-header">
+    <h3>Members</h3>
+    <a href="members.html" class="btn-link" style="color:var(--c-accent)">View all →</a>
+  </div>
+  <div style="display:flex; gap:var(--s-xl); flex-wrap:wrap">
+    <div>
+      <div class="stat-label">Total members</div>
+      <div class="stat-value" :text="members.total"></div>
+    </div>
+    <div>
+      <div class="stat-label">Active</div>
+      <div class="stat-value" :text="members.active"></div>
+    </div>
+    <div>
+      <div class="stat-label">Joined this month</div>
+      <div class="stat-value" :text="members.recent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick links -->
+<div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr))">
+  <a href="finance.html" class="card" style="text-decoration:none; color:inherit; transition: box-shadow .15s">
+    <div style="display:flex; align-items:center; gap:var(--s-sm); margin-bottom:var(--s-sm)">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--c-accent)" stroke-width="2" stroke-linecap="round"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <b>Finance</b>
+    </div>
+    <div class="dim" style="font-size:var(--f-sm)">Donations, expenses, reports</div>
+  </a>
+  <a href="members.html" class="card" style="text-decoration:none; color:inherit; transition: box-shadow .15s">
+    <div style="display:flex; align-items:center; gap:var(--s-sm); margin-bottom:var(--s-sm)">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--c-accent)" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+      <b>Members</b>
+    </div>
+    <div class="dim" style="font-size:var(--f-sm)">Devotees, contacts, spiritual info</div>
+  </a>
 </div>
 
 <script type="module">
   import { init } from '../lib/app.js'
 
-  const now = new Date()
-  const curYear = now.getFullYear()
-  const years = Array.from({ length: 3 }, (_, i) => curYear - i)
-
-  // Temp sample data — replace with api.get('/overview')
-  const tmpRecent = [
-    { date: '2026-02-25', desc: 'Sunday Feast donation',       cat: 'Donation',    type: 'in',  amt: 1250.00 },
-    { date: '2026-02-25', desc: 'Electricity bill',            cat: 'Utilities',   type: 'out', amt: 342.18 },
-    { date: '2026-02-24', desc: 'Monthly pledge — Govinda Das', cat: 'Donation',    type: 'in',  amt: 500.00 },
-    { date: '2026-02-24', desc: 'Groceries for prasadam',      cat: 'Kitchen',     type: 'out', amt: 287.45 },
-    { date: '2026-02-23', desc: 'Book distribution proceeds',  cat: 'Donation',    type: 'in',  amt: 830.00 },
-    { date: '2026-02-23', desc: 'Flower garlands',             cat: 'Deity',       type: 'out', amt: 125.00 },
-    { date: '2026-02-22', desc: 'Gaura Purnima sponsorship',   cat: 'Donation',    type: 'in',  amt: 2000.00 },
-    { date: '2026-02-22', desc: 'Printer ink & paper',         cat: 'Office',      type: 'out', amt: 89.99 },
-    { date: '2026-02-21', desc: 'Annadana donation',           cat: 'Donation',    type: 'in',  amt: 375.00 },
-    { date: '2026-02-21', desc: 'Plumber repair',              cat: 'Maintenance', type: 'out', amt: 210.00 },
-  ]
-
-  const don = 12480.00, exp = 8635.47, total = don + exp
-
-  const donCats = [
-    { cat: 'General',           amt: 3750.00, count: 8 },
-    { cat: 'Sunday Feast',      amt: 2850.00, count: 12 },
-    { cat: 'Deity Worship',     amt: 1980.00, count: 5 },
-    { cat: 'Book Distribution', amt: 1650.00, count: 4 },
-    { cat: 'Festival',          amt: 1200.00, count: 2 },
-    { cat: 'Annadana',          amt: 750.00,  count: 6 },
-    { cat: 'Building Fund',     amt: 300.00,  count: 1 },
-  ].map(c => ({ ...c, pct: Math.round(c.amt / don * 100) }))
-
-  const expCats = [
-    { cat: 'Rent',        amt: 3500.00, count: 1 },
-    { cat: 'Kitchen',     amt: 1835.30, count: 8 },
-    { cat: 'Utilities',   amt: 1122.17, count: 4 },
-    { cat: 'Insurance',   amt: 900.00,  count: 2 },
-    { cat: 'Maintenance', amt: 577.42,  count: 3 },
-    { cat: 'Deity',       amt: 425.00,  count: 4 },
-    { cat: 'Office',      amt: 275.58,  count: 2 },
-  ].map(c => ({ ...c, pct: Math.round(c.amt / exp * 100) }))
-
-  const topDonors = [
-    { name: 'Radha Devi Dasi',      total: 3200.00, count: 6 },
-    { name: 'Govinda Das',          total: 2500.00, count: 5 },
-    { name: 'Yamuna Devi',          total: 1800.00, count: 4 },
-    { name: 'Madhava Prabhu',       total: 1350.00, count: 3 },
-    { name: 'Bhakta Michel',        total: 1050.00, count: 8 },
-    { name: 'Syama Priya Dasi',     total: 880.00,  count: 3 },
-    { name: 'Gaura Hari Das',       total: 750.00,  count: 2 },
-    { name: 'Nitai Chandra Prabhu', total: 500.00,  count: 1 },
-    { name: 'Bhaktin Marie',        total: 250.00,  count: 2 },
-    { name: 'Tulasi Devi Dasi',     total: 200.00,  count: 1 },
-  ]
-
-  const months = [
-    { val: 0, label: 'All Year' },
-    { val: 1, label: 'Jan' },  { val: 2, label: 'Feb' },
-    { val: 3, label: 'Mar' },  { val: 4, label: 'Apr' },
-    { val: 5, label: 'May' },  { val: 6, label: 'Jun' },
-    { val: 7, label: 'Jul' },  { val: 8, label: 'Aug' },
-    { val: 9, label: 'Sep' },  { val: 10, label: 'Oct' },
-    { val: 11, label: 'Nov' }, { val: 12, label: 'Dec' },
-  ]
+  const don = 12480.00, exp = 8635.47, gross = don + exp
 
   init({
-    year: curYear,
-    month: 0,
-    years,
-    months,
-    showAdd: false,
-
-    totals: {
+    fin: {
       donations: don,
       expenses: exp,
       net: don - exp,
-      donPct: Math.round(don / total * 100),
-      expPct: Math.round(exp / total * 100),
-      netNote: '+$3,844.53 surplus this period',
-      donationChange: '↑ 18% vs last year',
-      expenseChange: '↑ 4% vs last year',
-      donors: 23,
-      donorSub: '5 recurring',
-      txSummary: '5 donations and 5 expenses this month',
+      donPct: Math.round(don / gross * 100),
+      expPct: Math.round(exp / gross * 100),
     },
-    donCats,
-    expCats,
-    topDonors,
-    recent: tmpRecent,
+    members: {
+      total: 47,
+      active: 38,
+      recent: 3,
+    },
   })
 </script>

@@ -1,0 +1,545 @@
+---
+---
+<div class="page-header" style="display:flex; align-items:baseline; justify-content:space-between">
+  <div>
+    <h1>Finance</h1>
+  </div>
+  <div style="display:flex; align-items:center; gap:var(--s-md)">
+    <select class="year-select" :onchange="year = +e.target.value">
+      <option :each="y in years" :value="y" :text="y" :selected="y === year"></option>
+    </select>
+  </div>
+</div>
+
+<!-- Stat cards as tabs -->
+<div class="card-tab-group" :scope.parent="{ activeTab: 'expenses' }">
+  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'expenses'}"
+    :onclick="e => { activeTab = 'expenses'; e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
+    <div class="stat-label stat-err">Expenses</div>
+    <div class="stat-value" :text="'$' + totals.expenses.toLocaleString(undefined, {minimumFractionDigits: 2})"></div>
+    <div class="stat-sub stat-err" :text="totals.expenseChange"></div>
+  </div>
+  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'donations'}"
+    :onclick="e => { activeTab = 'donations'; e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
+    <div class="stat-label stat-ok">Donations</div>
+    <div class="stat-value" :text="'$' + totals.donations.toLocaleString(undefined, {minimumFractionDigits: 2})"></div>
+    <div class="stat-sub stat-ok" :text="totals.donationChange"></div>
+  </div>
+  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'donors'}"
+    :onclick="e => { activeTab = 'donors'; e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
+    <div class="stat-label">Donors</div>
+    <div class="stat-value" :text="totals.donors"></div>
+    <div class="stat-sub" :text="totals.donorSub"></div>
+  </div>
+</div>
+
+<!-- Add donation modal -->
+<div class="modal-overlay" :if="showAdd && activeTab === 'donations'" :onclick="e => { if (e.target === e.currentTarget) showAdd = false }">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add Donation</h2>
+      <button class="modal-close" :onclick="showAdd = false">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form :onsubmit.prevent="addDonation">
+        <div class="form-row">
+          <div class="field">
+            <label for="don-donor">Donor</label>
+            <input id="don-donor" type="text" :value="donForm.donor" placeholder="Name or search…" required list="donor-list">
+            <datalist id="donor-list">
+              <option :each="d in knownDonors" :value="d"></option>
+            </datalist>
+          </div>
+          <div class="field">
+            <label for="don-amount">Amount ($)</label>
+            <input id="don-amount" type="number" :value="donForm.amount" step="0.01" min="0.01" placeholder="0.00" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="don-cat">Category</label>
+            <select id="don-cat" :value="donForm.category">
+              <option :each="c in donCats" :value="c" :text="c"></option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="don-date">Date</label>
+            <input id="don-date" type="date" :value="donForm.date" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="don-note">Note</label>
+            <input id="don-note" type="text" :value="donForm.note" placeholder="Optional note…">
+          </div>
+          <div class="field" style="flex:0 0 auto; display:flex; align-items:end; gap:var(--s-sm); padding-bottom:var(--s-xs)">
+            <label style="display:flex; align-items:center; gap:var(--s-xs); font-weight:var(--f-wt); cursor:pointer">
+              <input type="checkbox" :checked="donForm.recurring"> Recurring
+            </label>
+          </div>
+        </div>
+
+        <div class="scan-area" :class="{['has-image']: preview}"
+          :onclick="if (!preview) fileInput.click()"
+          :ondragover.prevent=""
+          :ondrop.prevent="handleDrop(e)">
+          <input type="file" accept="image/*" hidden :ref="fileInput" :onchange="handleFile">
+          <div :if="scanning" class="scan-hint">Scanning…</div>
+          <div :if="!preview && !scanning">
+            <div class="scan-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </div>
+            <div class="scan-hint">Drop receipt image or click to upload</div>
+            <div class="scan-hint" style="margin-top:var(--s-xs)">OCR will try to fill empty fields</div>
+          </div>
+          <div :if="preview && !scanning" style="position:relative">
+            <img :src="preview" alt="Receipt">
+            <button type="button" class="btn-link" style="margin-top:var(--s-sm)" :onclick.stop="clearImage()">Remove image</button>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); margin-top:var(--s-lg)">
+          <button type="button" class="btn btn-secondary" :onclick="showAdd = false">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Donation</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add expense modal -->
+<div class="modal-overlay" :if="showAdd && activeTab === 'expenses'" :onclick="e => { if (e.target === e.currentTarget) showAdd = false }">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add Expense</h2>
+      <button class="modal-close" :onclick="showAdd = false">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form :onsubmit.prevent="addExpense">
+        <div class="scan-area" :class="{['has-image']: preview}"
+          :onclick="if (!preview) fileInput.click()"
+          :ondragover.prevent=""
+          :ondrop.prevent="handleDrop(e)">
+          <input type="file" accept="image/*" hidden :ref="fileInput" :onchange="handleFile">
+          <div :if="scanning" class="scan-hint">Scanning…</div>
+          <div :if="!preview && !scanning">
+            <div class="scan-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </div>
+            <div class="scan-hint">Drop receipt image or click to upload</div>
+            <div class="scan-hint" style="margin-top:var(--s-xs)">OCR will try to fill empty fields</div>
+          </div>
+          <div :if="preview && !scanning" style="position:relative">
+            <img :src="preview" alt="Receipt">
+            <button type="button" class="btn-link" style="margin-top:var(--s-sm)" :onclick.stop="clearImage()">Remove image</button>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label for="exp-payee">Payee</label>
+            <input id="exp-payee" type="text" :value="expForm.payee" placeholder="Who was paid…" required>
+          </div>
+          <div class="field">
+            <label for="exp-amount">Amount ($)</label>
+            <input id="exp-amount" type="number" :value="expForm.amount" step="0.01" min="0.01" placeholder="0.00" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="exp-cat">Category</label>
+            <select id="exp-cat" :value="expForm.category">
+              <option :each="c in expCats" :value="c" :text="c"></option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="exp-date">Date</label>
+            <input id="exp-date" type="date" :value="expForm.date" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="exp-note">Note</label>
+            <input id="exp-note" type="text" :value="expForm.note" placeholder="Optional note…">
+          </div>
+          <div class="field" style="flex:0 0 auto; display:flex; align-items:end; gap:var(--s-sm); padding-bottom:var(--s-xs)">
+            <label style="display:flex; align-items:center; gap:var(--s-xs); font-weight:var(--f-wt); cursor:pointer">
+              <input type="checkbox" :checked="expForm.recurring"> Recurring
+            </label>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); margin-top:var(--s-lg)">
+          <button type="button" class="btn btn-secondary" :onclick="showAdd = false">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Expense</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Filter bar -->
+<div :if="activeTab !== 'donors'" class="filter-bar">
+  <button class="btn btn-primary btn-sm" :onclick="showAdd = true"
+    :text="activeTab === 'donations' ? '+ Donation' : '+ Expense'"></button>
+
+  <input class="filter-search" type="search"
+    :placeholder="activeTab === 'donations' ? 'Search donor or note…' : 'Search payee or note…'"
+    :value="search" :oninput="e => { search = e.target.value; page = 1 }">
+
+  <button class="btn btn-outline btn-sm" :onclick="showFilter = true"
+    :style="{color: filterCat || dateFrom || dateTo ? 'var(--c-accent)' : '', borderColor: filterCat || dateFrom || dateTo ? 'var(--c-accent)' : ''}">
+    <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>Filter</button>
+
+  <button class="btn btn-outline btn-sm" :onclick="exportCSV()">
+    <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</button>
+</div>
+
+<!-- Active filter chips -->
+<div :if="activeTab !== 'donors' && (filterCat || dateFrom || dateTo)" class="filter-chips">
+  <span :if="filterCat" class="chip" :onclick="e => { filterCat = ''; page = 1 }" :text="filterCat + ' ×'"></span>
+  <span :if="dateFrom" class="chip" :onclick="e => { dateFrom = ''; page = 1 }" :text="'From ' + dateFrom + ' ×'"></span>
+  <span :if="dateTo" class="chip" :onclick="e => { dateTo = ''; page = 1 }" :text="'To ' + dateTo + ' ×'"></span>
+  <button class="btn-link" style="font-size:var(--f-sm);color:var(--c-text-dim)"
+    :onclick="e => { filterCat = ''; dateFrom = ''; dateTo = ''; page = 1 }">Clear all</button>
+</div>
+
+<!-- Filter modal -->
+<div class="modal-overlay" :if="showFilter" :onclick="e => { if (e.target === e.currentTarget) showFilter = false }">
+  <div class="modal" style="max-width:28rem">
+    <div class="modal-header">
+      <h2>Filters</h2>
+      <button class="modal-close" :onclick="showFilter = false">&times;</button>
+    </div>
+    <div class="modal-body" style="display: flex; flex-direction: column; gap: var(--s-md);">
+      <div class="field">
+        <label>Category</label>
+        <select :value="filterCat" :onchange="e => { filterCat = e.target.value; page = 1 }">
+          <option value="">All categories</option>
+          <option :each="c in activeCats" :value="c" :text="c"></option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Date range</label>
+        <div style="display:flex;gap:var(--s-sm);align-items:center">
+          <input type="date" :value="dateFrom" :onchange="e => { dateFrom = e.target.value; page = 1 }" style="flex:1">
+          <span class="dim">—</span>
+          <input type="date" :value="dateTo" :onchange="e => { dateTo = e.target.value; page = 1 }" style="flex:1">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:var(--s-md)">
+        <button class="btn btn-outline btn-sm" :if="filterCat || dateFrom || dateTo"
+          :onclick="e => { filterCat = ''; dateFrom = ''; dateTo = ''; page = 1 }">Clear all</button>
+        <span :if="!filterCat && !dateFrom && !dateTo"></span>
+        <button class="btn btn-primary btn-sm"
+          :onclick="showFilter = false"
+          :text="'Show ' + filtered.length + ' results'"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Donations table -->
+<div class="card" :if="activeTab === 'donations'">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Donor</th>
+          <th>Category</th>
+          <th>Note</th>
+          <th style="text-align:right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr :each="d in paged">
+          <td :text="d.date"></td>
+          <td :text="d.donor"></td>
+          <td><span class="badge" :text="d.category"></span></td>
+          <td class="dim">
+            <span :text="d.note || '—'"></span>
+            <span :if="d.recurring" class="badge" style="margin-left:var(--s-xs)">↻</span>
+          </td>
+          <td style="text-align:right" class="stat-ok" :text="'+$' + d.amount.toLocaleString(undefined, {minimumFractionDigits: 2})"></td>
+        </tr>
+        <tr :if="!filtered.length">
+          <td colspan="5" class="dim" style="text-align:center; padding:var(--s-lg)">No donations found</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div :if="totalPages > 1" style="display:flex; justify-content:space-between; align-items:center; padding:var(--s-sm) var(--s-md); border-top:1px solid var(--c-border)">
+    <span class="dim" style="font-size:var(--f-sm)" :text="filtered.length + ' donations'"></span>
+    <div style="display:flex; gap:var(--s-xs)">
+      <button class="btn btn-outline btn-sm" :onclick="page = Math.max(1, page - 1)" :class="{dim: page === 1}">←</button>
+      <span style="padding:var(--s-xs) var(--s-sm); font-size:var(--f-sm)" :text="page + ' / ' + totalPages"></span>
+      <button class="btn btn-outline btn-sm" :onclick="page = Math.min(totalPages, page + 1)" :class="{dim: page === totalPages}">→</button>
+    </div>
+  </div>
+</div>
+
+<!-- Expenses table -->
+<div class="card" :if="activeTab === 'expenses'">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Payee</th>
+          <th>Category</th>
+          <th>Note</th>
+          <th style="text-align:right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr :each="x in paged">
+          <td :text="x.date"></td>
+          <td :text="x.payee"></td>
+          <td><span class="badge" :text="x.category"></span></td>
+          <td class="dim">
+            <span :text="x.note || '—'"></span>
+            <span :if="x.recurring" class="badge" style="margin-left:var(--s-xs)">↻</span>
+          </td>
+          <td style="text-align:right" class="stat-err" :text="'−$' + x.amount.toLocaleString(undefined, {minimumFractionDigits: 2})"></td>
+        </tr>
+        <tr :if="!filtered.length">
+          <td colspan="5" class="dim" style="text-align:center; padding:var(--s-lg)">No expenses found</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div :if="totalPages > 1" style="display:flex; justify-content:space-between; align-items:center; padding:var(--s-sm) var(--s-md); border-top:1px solid var(--c-border)">
+    <span class="dim" style="font-size:var(--f-sm)" :text="filtered.length + ' expenses'"></span>
+    <div style="display:flex; gap:var(--s-xs)">
+      <button class="btn btn-outline btn-sm" :onclick="page = Math.max(1, page - 1)" :class="{dim: page === 1}">←</button>
+      <span style="padding:var(--s-xs) var(--s-sm); font-size:var(--f-sm)" :text="page + ' / ' + totalPages"></span>
+      <button class="btn btn-outline btn-sm" :onclick="page = Math.min(totalPages, page + 1)" :class="{dim: page === totalPages}">→</button>
+    </div>
+  </div>
+</div>
+
+<!-- Donors table -->
+<div class="card" :if="activeTab === 'donors'">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Donor</th>
+          <th style="text-align:right">Total</th>
+          <th style="text-align:right">Count</th>
+          <th>Last donation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr :each="d, i in topDonors">
+          <td class="dim" :text="i + 1"></td>
+          <td :text="d.name"></td>
+          <td style="text-align:right" class="stat-ok" :text="'$' + d.total.toLocaleString(undefined, {minimumFractionDigits: 2})"></td>
+          <td style="text-align:right" :text="d.count"></td>
+          <td class="dim" :text="d.last"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script type="module">
+  import { init, DON_CATS, EXP_CATS } from '../lib/app.js'
+
+  const now = new Date()
+  const today = now.toISOString().slice(0, 10)
+  const curYear = now.getFullYear()
+  const years = Array.from({ length: 3 }, (_, i) => curYear - i)
+  const perPage = 20
+
+  const months = [
+    { val: 0, label: 'All Year' },
+    { val: 1, label: 'Jan' },  { val: 2, label: 'Feb' },
+    { val: 3, label: 'Mar' },  { val: 4, label: 'Apr' },
+    { val: 5, label: 'May' },  { val: 6, label: 'Jun' },
+    { val: 7, label: 'Jul' },  { val: 8, label: 'Aug' },
+    { val: 9, label: 'Sep' },  { val: 10, label: 'Oct' },
+    { val: 11, label: 'Nov' }, { val: 12, label: 'Dec' },
+  ]
+
+  const tmpDonations = [
+    { date: '2026-02-25', donor: 'Ananda Das',        category: 'Sunday Feast',      amount: 1250.00, note: 'Weekly contribution', recurring: false },
+    { date: '2026-02-24', donor: 'Govinda Das',       category: 'General',            amount: 500.00,  note: 'Monthly pledge', recurring: true },
+    { date: '2026-02-23', donor: 'Tulasi Devi Dasi',  category: 'Book Distribution',  amount: 830.00,  note: '', recurring: false },
+    { date: '2026-02-22', donor: 'Nityananda Das',    category: 'Festival',           amount: 2000.00, note: 'Gaura Purnima sponsorship', recurring: false },
+    { date: '2026-02-21', donor: 'Laxmi Devi Dasi',   category: 'Annadana',           amount: 375.00,  note: '', recurring: false },
+    { date: '2026-02-19', donor: 'Madhava Das',       category: 'Deity Worship',      amount: 200.00,  note: 'Flower fund', recurring: true },
+    { date: '2026-02-17', donor: 'Hari Das',          category: 'General',            amount: 150.00,  note: '', recurring: false },
+    { date: '2026-02-15', donor: 'Radha Devi Dasi',   category: 'Building Fund',      amount: 5000.00, note: 'Annual pledge', recurring: true },
+    { date: '2026-02-10', donor: 'Saraswati Devi Dasi', category: 'Sunday Feast',     amount: 175.00,  note: '', recurring: false },
+    { date: '2026-02-05', donor: 'Damodar Das',       category: 'General',            amount: 2000.00, note: 'Tax receipt requested', recurring: false },
+  ]
+
+  const tmpExpenses = [
+    { date: '2026-02-25', payee: 'Hydro-Québec',       category: 'Utilities',    amount: 342.18, note: 'February bill', recurring: true },
+    { date: '2026-02-24', payee: 'Marché Jean-Talon',   category: 'Kitchen',      amount: 287.45, note: 'Prasadam groceries', recurring: false },
+    { date: '2026-02-23', payee: 'Fleuriste Shakti',    category: 'Deity',        amount: 125.00, note: 'Flower garlands', recurring: false },
+    { date: '2026-02-22', payee: 'Staples',             category: 'Office',       amount: 89.99,  note: 'Printer ink & paper', recurring: false },
+    { date: '2026-02-21', payee: 'Mario Plomberie',     category: 'Maintenance',  amount: 210.00, note: 'Basement pipe repair', recurring: false },
+    { date: '2026-02-18', payee: 'Bell Canada',         category: 'Utilities',    amount: 79.99,  note: 'Internet', recurring: true },
+    { date: '2026-02-15', payee: 'Landlord',            category: 'Rent',         amount: 3500.00, note: 'March rent', recurring: true },
+    { date: '2026-02-12', payee: 'Intact Insurance',    category: 'Insurance',    amount: 450.00, note: 'Monthly premium', recurring: true },
+    { date: '2026-02-08', payee: 'Marché Jean-Talon',   category: 'Kitchen',      amount: 195.30, note: 'Weekly groceries', recurring: false },
+    { date: '2026-02-03', payee: 'Home Depot',          category: 'Maintenance',  amount: 67.42,  note: 'Light fixtures', recurring: false },
+  ]
+
+  const don = tmpDonations.reduce((s, d) => s + d.amount, 0)
+  const exp = tmpExpenses.reduce((s, x) => s + x.amount, 0)
+  const gross = don + exp
+  const emptyDonForm = () => ({ donor: '', amount: '', category: 'General', date: today, note: '', recurring: false })
+  const emptyExpForm = () => ({ payee: '', amount: '', category: 'Utilities', date: today, note: '', recurring: false })
+
+  init({
+    year: curYear,
+    month: 0,
+    years,
+    months,
+    showAdd: false,
+    showFilter: false,
+    preview: '',
+    scanning: false,
+
+    donations: tmpDonations,
+    expenses: tmpExpenses,
+    donForm: emptyDonForm(),
+    expForm: emptyExpForm(),
+    donCats: DON_CATS,
+    expCats: EXP_CATS,
+    knownDonors: [...new Set(tmpDonations.map(d => d.donor))],
+
+    totals: {
+      donations: don,
+      expenses: exp,
+      net: don - exp,
+      donPct: Math.round(don / gross * 100),
+      expPct: Math.round(exp / gross * 100),
+      netNote: (don - exp) >= 0 ? '+$' + (don - exp).toLocaleString(undefined, {minimumFractionDigits: 2}) + ' surplus' : '−$' + Math.abs(don - exp).toLocaleString(undefined, {minimumFractionDigits: 2}) + ' deficit',
+      donationChange: '↑ 18% vs last year',
+      expenseChange: '↑ 4% vs last year',
+      netChange: '↑ 32% vs last year',
+      donors: 23,
+      donorSub: '5 recurring',
+    },
+
+    topDonors: [
+      { name: 'Radha Devi Dasi',      total: 5000.00, count: 1, last: '2026-02-15' },
+      { name: 'Damodar Das',          total: 2000.00, count: 1, last: '2026-02-05' },
+      { name: 'Nityananda Das',       total: 2000.00, count: 1, last: '2026-02-22' },
+      { name: 'Ananda Das',           total: 1250.00, count: 1, last: '2026-02-25' },
+      { name: 'Tulasi Devi Dasi',     total: 830.00,  count: 1, last: '2026-02-23' },
+      { name: 'Govinda Das',          total: 500.00,  count: 1, last: '2026-02-24' },
+      { name: 'Laxmi Devi Dasi',      total: 375.00,  count: 1, last: '2026-02-21' },
+      { name: 'Madhava Das',          total: 200.00,  count: 1, last: '2026-02-19' },
+      { name: 'Saraswati Devi Dasi',  total: 175.00,  count: 1, last: '2026-02-10' },
+      { name: 'Hari Das',             total: 150.00,  count: 1, last: '2026-02-17' },
+    ],
+
+    search: '',
+    filterCat: '',
+    dateFrom: '',
+    dateTo: '',
+    page: 1,
+
+    get activeCats() { return this.activeTab === 'donations' ? DON_CATS : EXP_CATS },
+
+    get filtered() {
+      const s = this.search.toLowerCase()
+      if (this.activeTab === 'donations') {
+        return this.donations.filter(d => {
+          if (s && !d.donor.toLowerCase().includes(s) && !(d.note || '').toLowerCase().includes(s)) return false
+          if (this.filterCat && d.category !== this.filterCat) return false
+          if (this.dateFrom && d.date < this.dateFrom) return false
+          if (this.dateTo && d.date > this.dateTo) return false
+          return true
+        })
+      }
+      return this.expenses.filter(x => {
+        if (s && !x.payee.toLowerCase().includes(s) && !(x.note || '').toLowerCase().includes(s)) return false
+        if (this.filterCat && x.category !== this.filterCat) return false
+        if (this.dateFrom && x.date < this.dateFrom) return false
+        if (this.dateTo && x.date > this.dateTo) return false
+        return true
+      })
+    },
+    get totalPages() { return Math.max(1, Math.ceil(this.filtered.length / perPage)) },
+    get paged() { return this.filtered.slice((this.page - 1) * perPage, this.page * perPage) },
+
+    handleFile(e) {
+      const file = e.target.files?.[0]
+      if (file) this.processImage(file)
+    },
+    handleDrop(e) {
+      const file = e.dataTransfer.files?.[0]
+      if (file?.type.startsWith('image/')) this.processImage(file)
+    },
+    processImage(file) {
+      this.preview = URL.createObjectURL(file)
+      this.scanning = true
+      setTimeout(() => { this.scanning = false }, 800)
+    },
+    clearImage() {
+      if (this.preview) URL.revokeObjectURL(this.preview)
+      this.preview = ''
+    },
+
+    addDonation() {
+      const entry = {
+        date: this.donForm.date,
+        donor: this.donForm.donor,
+        category: this.donForm.category,
+        amount: parseFloat(this.donForm.amount),
+        note: this.donForm.note,
+        recurring: this.donForm.recurring,
+      }
+      this.donations = [entry, ...this.donations]
+      if (!this.knownDonors.includes(entry.donor)) this.knownDonors = [...this.knownDonors, entry.donor]
+      this.clearImage()
+      this.donForm = emptyDonForm()
+      this.showAdd = false
+    },
+
+    addExpense() {
+      const entry = {
+        date: this.expForm.date,
+        payee: this.expForm.payee,
+        category: this.expForm.category,
+        amount: parseFloat(this.expForm.amount),
+        note: this.expForm.note,
+        recurring: this.expForm.recurring,
+      }
+      this.expenses = [entry, ...this.expenses]
+      this.clearImage()
+      this.expForm = emptyExpForm()
+      this.showAdd = false
+    },
+
+    exportCSV() {
+      if (this.activeTab === 'donations') {
+        const rows = [['Date', 'Donor', 'Category', 'Amount', 'Note', 'Recurring']]
+        for (const d of this.filtered) rows.push([d.date, d.donor, d.category, d.amount.toFixed(2), d.note || '', d.recurring ? 'Yes' : ''])
+        this._downloadCSV(rows, 'donations.csv')
+      } else {
+        const rows = [['Date', 'Payee', 'Category', 'Amount', 'Note', 'Recurring']]
+        for (const x of this.filtered) rows.push([x.date, x.payee, x.category, x.amount.toFixed(2), x.note || '', x.recurring ? 'Yes' : ''])
+        this._downloadCSV(rows, 'expenses.csv')
+      }
+    },
+
+    _downloadCSV(rows, name) {
+      const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = name
+      a.click()
+      URL.revokeObjectURL(a.href)
+    },
+  })
+</script>

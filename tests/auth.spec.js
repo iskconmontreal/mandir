@@ -199,9 +199,22 @@ test.describe('otp flow', () => {
       const { auth } = await import('./lib/auth.js')
       return auth.deviceId
     })
-    expect(deviceId).toMatch(/.+ · .+/)
+    expect(deviceId).toMatch(/^[0-9a-f]{8}-/)
     const same = await page.evaluate(() => localStorage.getItem('mandala_device'))
     expect(same).toBe(deviceId)
+  })
+
+  test('login sends device_label with browser info', async ({ page }) => {
+    await page.goto('/login.html')
+    let captured
+    await page.route('**/auth/login', route => {
+      captured = JSON.parse(route.request().postData())
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ step: 'otp_required' }) })
+    })
+    await page.locator('#email').fill('test@test.local')
+    await page.locator('button[type="submit"]').click()
+    expect(captured.device_id).toMatch(/^[0-9a-f]{8}-/)
+    expect(captured.device_label).toMatch(/.+ on .+/)
   })
 })
 
