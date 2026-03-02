@@ -42,14 +42,34 @@
     * [x] Remove `simple-datatables` CDN dependency
   * [x] Rename `setting.html` → `settings.html`
 
-* [ ] OTP with trusted device
+* [x] OTP with trusted device
 
-* [ ] Donations
+* [x] Donations
   * [ ] "+" → "Donation" → selects/creates donor → amount, category, date, note → Save or save and add one more
+
+## Today
+
+* [ ] Complete expense flow: adding expenses should work well
+* [ ]
+
+
+## Onboard
+
+* Sandeep
+* Imon
+* Remy
+* Rama Keshava
+* TC members
+* Ash
+
+
+## Backlog
+
+* [ ] Enhance frontend looks
 
 * [ ] Limit user/pass login only to temple internal network
 
-* [ ] Dashboard
+* [ ] Overview
   * [ ] donation total this month
   * [ ] expense total
   * [ ] net

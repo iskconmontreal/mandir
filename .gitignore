@@ -2,3 +2,4 @@
 /.ssl
 /node_modules
 /test-results
+/.mcp_data

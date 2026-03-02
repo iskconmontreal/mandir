@@ -1,0 +1,167 @@
+<!-- Expense modal (add/edit) -->
+<div class="modal-overlay" :if="showAdd" :onclick="e => { if (e.target === e.currentTarget) showAdd = false }">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 :text="editId ? 'Edit Expense' : 'Add Expense'"></h2>
+      <button class="modal-close" :onclick="showAdd = false">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div :if="!editId" class="scan-area" :class="{'has-image': receiptPreview}"
+        :onclick="document.getElementById('receipt-input').click()"
+        :ondragover="e => e.preventDefault()"
+        :ondrop="e => { e.preventDefault(); scanFile(e.dataTransfer.files[0]) }">
+        <img :if="receiptPreview" :src="receiptPreview">
+        <div :if="!receiptPreview && !extracting">
+          <div class="scan-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>
+              <line x1="9" y1="3" x2="9" y2="9"/><circle cx="14" cy="15" r="2.5"/><path d="M16 17l2.5 2.5"/>
+            </svg>
+          </div>
+          <div style="font-weight:var(--f-wt-b)">Scan receipt</div>
+          <div class="scan-hint">Drop image or PDF, or click to browse</div>
+        </div>
+        <div :if="extracting" class="dim">Extracting data…</div>
+      </div>
+      <input id="receipt-input" type="file" accept="image/*,.pdf" style="display:none"
+        :onchange="e => { scanFile(e.target.files[0]); e.target.value = '' }">
+
+      <form :onsubmit.prevent="saveExpense">
+        <div class="form-row">
+          <div class="field">
+            <label for="exp-vendor">Paid to</label>
+            <input id="exp-vendor" type="text" :value="expForm.paid_to" placeholder="Store, service, supplier…" required>
+          </div>
+          <div class="field">
+            <label for="exp-amount">Amount ($)</label>
+            <input id="exp-amount" type="number" :value="expForm.amount" step="0.01" min="0.01" placeholder="0.00" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="exp-cat">Category</label>
+            <select id="exp-cat" :value="expForm.category">
+              <option :each="c in expCats" :value="c" :text="fmt(c)"></option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="exp-date">Date</label>
+            <input id="exp-date" type="date" :value="expForm.expense_date" required>
+          </div>
+        </div>
+        <div class="field">
+          <label for="exp-desc">Description</label>
+          <input id="exp-desc" type="text" :value="expForm.description" placeholder="Optional description…">
+        </div>
+
+        <div class="login-error" :if="addErr" :text="addErr" style="margin:var(--s-sm) 0"></div>
+
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); margin-top:var(--s-lg)">
+          <button :if="editId" type="button" class="btn btn-danger btn-sm" style="margin-right:auto" :class="{dim: adding}" :onclick="delExpense()">Delete</button>
+          <button type="button" class="btn btn-outline" :onclick="showAdd = false">Cancel</button>
+          <button type="submit" class="btn btn-primary" :class="{dim: adding}" :text="adding ? 'Saving…' : editId ? 'Update' : 'Save Expense'"></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <button class="btn btn-primary btn-sm" :onclick="openAdd()">+ Expense</button>
+
+  <input class="filter-search" type="search" placeholder="Search paid to or note…"
+    :value="expSearch" :oninput.debounce-150="e => { expSearch = e.target.value; expPage = 1 }">
+
+  <button class="btn btn-outline btn-sm" :onclick="showFilter = true"
+    :style="{color: expFilterCat || expDateFrom || expDateTo ? 'var(--c-accent)' : '', borderColor: expFilterCat || expDateFrom || expDateTo ? 'var(--c-accent)' : ''}">
+    <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>Filter</button>
+
+  <button class="btn btn-outline btn-sm" :onclick="exportCSV()">
+    <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</button>
+</div>
+
+<!-- Active filter chips -->
+<div :if="expFilterCat || expDateFrom || expDateTo" class="filter-chips">
+  <span :if="expFilterCat" class="chip" :onclick="e => { expFilterCat = ''; expPage = 1 }" :text="fmt(expFilterCat) + ' ×'"></span>
+  <span :if="expDateFrom" class="chip" :onclick="e => { expDateFrom = ''; expPage = 1 }" :text="'From ' + expDateFrom + ' ×'"></span>
+  <span :if="expDateTo" class="chip" :onclick="e => { expDateTo = ''; expPage = 1 }" :text="'To ' + expDateTo + ' ×'"></span>
+  <button class="btn-link" style="font-size:var(--f-sm);color:var(--c-text-dim)"
+    :onclick="e => { expFilterCat = ''; expDateFrom = ''; expDateTo = ''; expPage = 1 }">Clear all</button>
+</div>
+
+<!-- Filter modal -->
+<div class="modal-overlay" :if="showFilter" :onclick="e => { if (e.target === e.currentTarget) showFilter = false }">
+  <div class="modal" style="max-width:28rem">
+    <div class="modal-header">
+      <h2>Filters</h2>
+      <button class="modal-close" :onclick="showFilter = false">&times;</button>
+    </div>
+    <div class="modal-body" style="display: flex; flex-direction: column; gap: var(--s-md);">
+      <div class="field">
+        <label>Category</label>
+        <select :value="expFilterCat" :onchange="e => { expFilterCat = e.target.value; expPage = 1 }">
+          <option value="">All categories</option>
+          <option :each="c in expCats" :value="c" :text="fmt(c)"></option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Date range</label>
+        <div style="display:flex;gap:var(--s-sm);align-items:center">
+          <input type="date" :value="expDateFrom" :onchange="e => { expDateFrom = e.target.value; expPage = 1 }" style="flex:1">
+          <span class="dim">—</span>
+          <input type="date" :value="expDateTo" :onchange="e => { expDateTo = e.target.value; expPage = 1 }" style="flex:1">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:var(--s-md)">
+        <button class="btn btn-outline btn-sm" :if="expFilterCat || expDateFrom || expDateTo"
+          :onclick="e => { expFilterCat = ''; expDateFrom = ''; expDateTo = ''; expPage = 1 }">Clear all</button>
+        <span :if="!expFilterCat && !expDateFrom && !expDateTo"></span>
+        <button class="btn btn-primary btn-sm"
+          :onclick="showFilter = false"
+          :text="'Show ' + expFiltered.length + ' results'"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Expenses table -->
+<div class="card">
+  <div :if="loadErr" class="login-error" :text="loadErr" style="margin:var(--s-md)"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Paid to</th>
+          <th>Category</th>
+          <th>Description</th>
+          <th style="text-align:right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr :each="x in expPaged" class="row-link" :onclick="editExpense(x)">
+          <td :text="x.expense_date?.slice(0,10) || '—'"></td>
+          <td :text="x.paid_to"></td>
+          <td><span class="badge" :text="fmt(x.category)"></span></td>
+          <td class="dim" :text="x.description || '—'"></td>
+          <td style="text-align:right" class="stat-err" :text="'−$' + fmtAmt(x.amount)"></td>
+        </tr>
+        <tr :if="!expFiltered.length && !loading">
+          <td colspan="5" class="dim" style="text-align:center; padding:var(--s-lg)">No expenses found</td>
+        </tr>
+        <tr :if="loading">
+          <td colspan="5" class="dim" style="text-align:center; padding:var(--s-lg)">Loading…</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div :if="expTotalPages > 1" style="display:flex; justify-content:space-between; align-items:center; padding:var(--s-sm) var(--s-md); border-top:1px solid var(--c-border)">
+    <span class="dim" style="font-size:var(--f-sm)" :text="expFiltered.length + ' expenses'"></span>
+    <div style="display:flex; gap:var(--s-xs)">
+      <button class="btn btn-outline btn-sm" :onclick="expPage = Math.max(1, expPage - 1)" :class="{dim: expPage === 1}">←</button>
+      <span style="padding:var(--s-xs) var(--s-sm); font-size:var(--f-sm)" :text="expPage + ' / ' + expTotalPages"></span>
+      <button class="btn btn-outline btn-sm" :onclick="expPage = Math.min(expTotalPages, expPage + 1)" :class="{dim: expPage === expTotalPages}">→</button>
+    </div>
+  </div>
+</div>

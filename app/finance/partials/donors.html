@@ -1,0 +1,47 @@
+<!-- Filter bar -->
+<div class="filter-bar">
+  <input class="filter-search" type="search" placeholder="Search donor…"
+    :value="donorSearch" :oninput.debounce-150="e => { donorSearch = e.target.value; donorPage = 1 }">
+
+  <button class="btn btn-outline btn-sm" :onclick="exportCSV()">
+    <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</button>
+</div>
+
+<!-- Donors table -->
+<div class="card">
+  <div :if="loadErr" class="login-error" :text="loadErr" style="margin:var(--s-md)"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Donor</th>
+          <th style="text-align:right">Donations</th>
+          <th style="text-align:right">Total</th>
+          <th>Last Donation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr :each="d in donorPaged">
+          <td :text="d.name"></td>
+          <td style="text-align:right" :text="d.count"></td>
+          <td style="text-align:right" class="stat-ok" :text="'$' + fmtAmt(d.total)"></td>
+          <td class="dim" :text="d.lastDate"></td>
+        </tr>
+        <tr :if="!donorFiltered.length && !loading">
+          <td colspan="4" class="dim" style="text-align:center; padding:var(--s-lg)">No donors found</td>
+        </tr>
+        <tr :if="loading">
+          <td colspan="4" class="dim" style="text-align:center; padding:var(--s-lg)">Loading…</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div :if="donorTotalPages > 1" style="display:flex; justify-content:space-between; align-items:center; padding:var(--s-sm) var(--s-md); border-top:1px solid var(--c-border)">
+    <span class="dim" style="font-size:var(--f-sm)" :text="donorFiltered.length + ' donors'"></span>
+    <div style="display:flex; gap:var(--s-xs)">
+      <button class="btn btn-outline btn-sm" :onclick="donorPage = Math.max(1, donorPage - 1)" :class="{dim: donorPage === 1}">←</button>
+      <span style="padding:var(--s-xs) var(--s-sm); font-size:var(--f-sm)" :text="donorPage + ' / ' + donorTotalPages"></span>
+      <button class="btn btn-outline btn-sm" :onclick="donorPage = Math.min(donorTotalPages, donorPage + 1)" :class="{dim: donorPage === donorTotalPages}">→</button>
+    </div>
+  </div>
+</div>

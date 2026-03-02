@@ -1,0 +1,322 @@
+---
+---
+<div class="page-header" style="display:flex; align-items:baseline; justify-content:space-between">
+  <div>
+    <h1>Finance</h1>
+  </div>
+  <div style="display:flex; align-items:center; gap:var(--s-md)">
+    <select class="year-select" :onchange="e => { year = +e.target.value; loadAll() }">
+      <option :each="y in years" :value="y" :text="y" :selected="y === year"></option>
+    </select>
+  </div>
+</div>
+
+<!-- Stat cards as tabs -->
+<div class="card-tab-group">
+  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'expenses'}"
+    :onclick="e => { switchTab('expenses'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
+    <div class="stat-label stat-err">Expenses</div>
+    <div class="stat-value" :text="'$' + fmtAmt(expTotal)"></div>
+    <div class="stat-sub dim" :text="expenses.length + ' entries'"></div>
+  </div>
+  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'donations'}"
+    :onclick="e => { switchTab('donations'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
+    <div class="stat-label stat-ok">Donations</div>
+    <div class="stat-value" :text="'$' + fmtAmt(donTotal)"></div>
+    <div class="stat-sub dim" :text="donations.length + ' entries'"></div>
+  </div>
+  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'donors'}"
+    :onclick="e => { switchTab('donors'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
+    <div class="stat-label">Donors</div>
+    <div class="stat-value" :text="donors.length"></div>
+    <div class="stat-sub dim" :text="donors.filter(d => d.count > 1).length + ' recurring'"></div>
+  </div>
+</div>
+
+<!-- Tab content loaded via partials -->
+<div :html="tabHTML"></div>
+
+<script type="module">
+  import { init, DON_CATS, EXP_CATS, DON_METHODS, fmtCat, fmtAmt, rawAmt, toCents, dlCSV, setErr } from '../../lib/app.js'
+  import { api } from '../../lib/api.js'
+
+  const now = new Date()
+  const today = now.toISOString().slice(0, 10)
+  const curYear = now.getFullYear()
+  const years = Array.from({ length: 3 }, (_, i) => curYear - i)
+  const perPage = 20
+  const tabCache = {}
+
+  const emptyDonForm = () => ({ amount: '', method: 'cash', category: 'general', date_received: today, note: '' })
+  const emptyExpForm = () => ({ paid_to: '', amount: '', category: 'utilities', expense_date: today, description: '' })
+
+  const DON_FIELDS = {
+    Amount: { id: 'amount', label: 'amount' },
+    Method: { id: 'method', label: 'method' },
+    Category: { id: 'cat', label: 'category' },
+    DateReceived: { id: 'date', label: 'date' },
+    Note: { id: 'note', label: 'note' },
+  }
+  const EXP_FIELDS = {
+    PaidTo: { id: 'vendor', label: 'paid to' },
+    Amount: { id: 'amount', label: 'amount' },
+    Category: { id: 'cat', label: 'category' },
+    ExpenseDate: { id: 'date', label: 'date' },
+    Description: { id: 'desc', label: 'description' },
+  }
+
+  const s = init({
+    year: curYear,
+    years,
+    activeTab: 'expenses',
+    tabHTML: '',
+    editId: null,
+    showAdd: false,
+    showFilter: false,
+    loading: false,
+    adding: false,
+    extracting: false,
+    receiptPreview: '',
+    loadErr: null,
+    addErr: null,
+
+    donations: [],
+    expenses: [],
+    memberNames: {},
+    donForm: emptyDonForm(),
+    expForm: emptyExpForm(),
+    donCats: DON_CATS,
+    expCats: EXP_CATS,
+    donMethods: DON_METHODS,
+    fmt: fmtCat,
+    fmtAmt,
+
+    get donTotal() { return this.donations.reduce((s, d) => s + (d.amount || 0), 0) },
+    get expTotal() { return this.expenses.reduce((s, x) => s + (x.amount || 0), 0) },
+
+    get donors() {
+      const map = {}
+      for (const d of this.donations) {
+        const key = d.client_id || 0
+        if (!map[key]) map[key] = { id: key, name: this.memberNames[key] || 'Anonymous', count: 0, total: 0, lastDate: '' }
+        map[key].count++
+        map[key].total += d.amount || 0
+        const dt = d.date_received?.slice(0, 10) || ''
+        if (dt > map[key].lastDate) map[key].lastDate = dt
+      }
+      return Object.values(map).sort((a, b) => b.total - a.total)
+    },
+
+    expSearch: '', expFilterCat: '', expDateFrom: '', expDateTo: '', expPage: 1,
+    donSearch: '', donFilterCat: '', donDateFrom: '', donDateTo: '', donPage: 1,
+    donorSearch: '', donorPage: 1,
+
+    get expFiltered() {
+      const q = this.expSearch.toLowerCase()
+      return this.expenses.filter(r => {
+        const dt = r.expense_date?.slice(0, 10) || ''
+        if (this.expFilterCat && r.category !== this.expFilterCat) return false
+        if (this.expDateFrom && dt < this.expDateFrom) return false
+        if (this.expDateTo && dt > this.expDateTo) return false
+        if (!q) return true
+        return [r.paid_to, r.description].filter(Boolean).join(' ').toLowerCase().includes(q)
+      })
+    },
+    get expTotalPages() { return Math.max(1, Math.ceil(this.expFiltered.length / perPage)) },
+    get expPaged() { return this.expFiltered.slice((this.expPage - 1) * perPage, this.expPage * perPage) },
+
+    get donFiltered() {
+      const q = this.donSearch.toLowerCase()
+      return this.donations.filter(r => {
+        const dt = r.date_received?.slice(0, 10) || ''
+        if (this.donFilterCat && r.category !== this.donFilterCat) return false
+        if (this.donDateFrom && dt < this.donDateFrom) return false
+        if (this.donDateTo && dt > this.donDateTo) return false
+        if (!q) return true
+        return [r.note, r.method].filter(Boolean).join(' ').toLowerCase().includes(q)
+      })
+    },
+    get donTotalPages() { return Math.max(1, Math.ceil(this.donFiltered.length / perPage)) },
+    get donPaged() { return this.donFiltered.slice((this.donPage - 1) * perPage, this.donPage * perPage) },
+
+    get donorFiltered() {
+      const q = this.donorSearch.toLowerCase()
+      return q ? this.donors.filter(d => d.name.toLowerCase().includes(q)) : this.donors
+    },
+    get donorTotalPages() { return Math.max(1, Math.ceil(this.donorFiltered.length / perPage)) },
+    get donorPaged() { return this.donorFiltered.slice((this.donorPage - 1) * perPage, this.donorPage * perPage) },
+
+    switchTab,
+
+    openAdd() {
+      s.editId = null
+      s.addErr = null
+      s.receiptPreview = ''
+      s.extracting = false
+      s.donForm = emptyDonForm()
+      s.expForm = emptyExpForm()
+      s.showAdd = true
+    },
+
+    async scanFile(file) {
+      if (!file) return
+      s.extracting = true
+      s.addErr = null
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader()
+        reader.onload = () => { s.receiptPreview = reader.result }
+        reader.readAsDataURL(file)
+      }
+      try {
+        const res = await api.extractDoc(file)
+        const d = res.extracted_data || {}
+        s.expForm = {
+          paid_to: d.vendor || s.expForm.paid_to,
+          amount: d.amount || s.expForm.amount,
+          category: d.category || s.expForm.category,
+          expense_date: d.date || s.expForm.expense_date,
+          description: d.description || s.expForm.description,
+        }
+      } catch (e) { s.addErr = e.message }
+      finally { s.extracting = false }
+    },
+
+    editDonation(d) {
+      s.editId = d.id
+      s.addErr = null
+      s.donForm = { amount: rawAmt(d.amount), method: d.method || 'cash', category: d.category || 'general', date_received: (d.date_received || '').slice(0, 10), note: d.note || '' }
+      s.showAdd = true
+    },
+
+    editExpense(x) {
+      s.editId = x.id
+      s.addErr = null
+      s.expForm = { paid_to: x.paid_to || '', amount: rawAmt(x.amount), category: x.category || 'utilities', expense_date: (x.expense_date || '').slice(0, 10), description: x.description || '' }
+      s.showAdd = true
+    },
+
+    async saveDonation() {
+      s.addErr = null
+      s.adding = true
+      try {
+        const data = {
+          amount: toCents(s.donForm.amount),
+          method: s.donForm.method,
+          category: s.donForm.category,
+          date_received: s.donForm.date_received,
+          note: s.donForm.note,
+        }
+        if (s.editId) await api.updateDonation(s.editId, data)
+        else await api.createDonation(data)
+        s.donForm = emptyDonForm()
+        s.editId = null
+        s.showAdd = false
+        loadAll()
+      } catch (e) { s.addErr = setErr(e.message, 'don', DON_FIELDS) }
+      finally { s.adding = false }
+    },
+
+    async saveExpense() {
+      s.addErr = null
+      s.adding = true
+      try {
+        const data = {
+          amount: toCents(s.expForm.amount),
+          type: 'direct',
+          paid_to: s.expForm.paid_to,
+          description: s.expForm.description,
+          category: s.expForm.category,
+          currency: 'CAD',
+          expense_date: s.expForm.expense_date,
+        }
+        if (s.editId) await api.updateExpense(s.editId, data)
+        else await api.createExpense(data)
+        s.expForm = emptyExpForm()
+        s.editId = null
+        s.showAdd = false
+        loadAll()
+      } catch (e) { s.addErr = setErr(e.message, 'exp', EXP_FIELDS) }
+      finally { s.adding = false }
+    },
+
+    async delDonation() {
+      if (!confirm('Delete this donation?')) return
+      s.adding = true
+      try {
+        await api.deleteDonation(s.editId)
+        s.editId = null
+        s.showAdd = false
+        loadAll()
+      } catch (e) { s.addErr = e.message }
+      finally { s.adding = false }
+    },
+
+    async delExpense() {
+      if (!confirm('Delete this expense?')) return
+      s.adding = true
+      try {
+        await api.deleteExpense(s.editId)
+        s.editId = null
+        s.showAdd = false
+        loadAll()
+      } catch (e) { s.addErr = e.message }
+      finally { s.adding = false }
+    },
+
+    exportCSV() {
+      if (this.activeTab === 'donors') {
+        const rows = [['Donor', 'Donations', 'Total', 'Last Donation']]
+        for (const d of this.donorFiltered) rows.push([d.name, d.count, rawAmt(d.total), d.lastDate])
+        dlCSV(rows, 'donors.csv')
+      } else if (this.activeTab === 'donations') {
+        const rows = [['Date', 'Method', 'Category', 'Amount', 'Note']]
+        for (const d of this.donFiltered) rows.push([d.date_received?.slice(0, 10), d.method, d.category, rawAmt(d.amount), d.note || ''])
+        dlCSV(rows, 'donations.csv')
+      } else {
+        const rows = [['Date', 'Paid To', 'Category', 'Amount', 'Description']]
+        for (const x of this.expFiltered) rows.push([x.expense_date?.slice(0, 10), x.paid_to, x.category, rawAmt(x.amount), x.description || ''])
+        dlCSV(rows, 'expenses.csv')
+      }
+    },
+
+    loadAll,
+  })
+
+  async function switchTab(tab) {
+    s.activeTab = tab
+    s.showAdd = false
+    s.showFilter = false
+    if (!tabCache[tab]) {
+      const res = await fetch(`partials/${tab}.html`)
+      tabCache[tab] = await res.text()
+    }
+    s.tabHTML = tabCache[tab]
+  }
+
+  async function loadAll() {
+    s.loading = true
+    s.loadErr = null
+    try {
+      const [don, exp, mem] = await Promise.all([
+        api.getDonations({ limit: 200, dateFrom: `${s.year}-01-01`, dateTo: `${s.year}-12-31` }),
+        api.getExpenses({ limit: 200, dateFrom: `${s.year}-01-01`, dateTo: `${s.year}-12-31` }),
+        api.getMembers({ limit: 200 }),
+      ])
+      s.donations = don.items || []
+      s.expenses = exp.items || []
+      const names = {}
+      for (const c of mem.items || []) {
+        const d = typeof c.client === 'string' ? JSON.parse(c.client) : c.client
+        names[c.id] = [d.first_name, d.last_name].filter(Boolean).join(' ') || d.email || 'Unknown'
+      }
+      s.memberNames = names
+    } catch (e) {
+      s.loadErr = e.message || 'Failed to load finance data'
+    } finally {
+      s.loading = false
+    }
+  }
+
+  loadAll()
+  switchTab('expenses')
+</script>

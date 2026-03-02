@@ -239,20 +239,26 @@
               <option :each="r in sysRoles" :value="r.id" :text="r.name" :selected="r.id === userDetail.role_id"></option>
             </select>
           </div>
+          <div :if="pendingRoleId" style="flex-basis:100%; display:flex; gap:var(--s-xs); align-items:center">
+            <input type="password" placeholder="Set password for this role" :value="rolePassword"
+              :oninput="e => rolePassword = e.target.value"
+              style="font-size:var(--f-sm); padding:var(--s-xs) var(--s-sm); width:14rem">
+            <button class="btn btn-primary btn-sm" :onclick="confirmRolePassword()">Set</button>
+            <button class="btn btn-outline btn-sm" :onclick="pendingRoleId = null">Cancel</button>
+            <span :if="rolePasswordErr" class="login-error" style="font-size:var(--f-xs)" :text="rolePasswordErr"></span>
+          </div>
           <div>
             <div class="stat-label">Last Login</div>
             <div :text="userDetail.last_login?.slice(0, 10) || 'Never'"></div>
           </div>
-          <div :if="userDetail.device">
-            <div class="stat-label">Trusted Device</div>
-            <div style="display:flex; align-items:center; gap:var(--s-sm)">
-              <span :text="userDetail.device?.label || userDetail.device?.device_id?.slice(0, 8) + '…'"></span>
-              <button class="btn-link" style="color:var(--c-err); font-size:var(--f-sm)" :onclick="revokeDevice()" :class="{dim: revoking}">Revoke</button>
+          <div :if="userDetail.id">
+            <div class="stat-label">Trusted Devices</div>
+            <div :if="!userDetail.devices?.length" class="dim">None</div>
+            <div :each="d in userDetail.devices || []" style="display:flex; align-items:center; gap:var(--s-sm); font-size:var(--f-sm)">
+              <span :text="d.label || d.device_id?.slice(0, 8) + '…'"></span>
+              <span class="dim" :text="'(' + d.device_id?.slice(0, 8) + '…)'"></span>
             </div>
-          </div>
-          <div :if="!userDetail.device && userDetail.id">
-            <div class="stat-label">Trusted Device</div>
-            <div class="dim">None</div>
+            <button :if="userDetail.devices?.length" class="btn-link" style="color:var(--c-err); font-size:var(--f-sm); margin-top:var(--s-xs)" :onclick="revokeDevice()" :class="{dim: revoking}">Revoke all</button>
           </div>
         </div>
 
@@ -375,6 +381,9 @@
     saving: false,
     inviting: false,
     revoking: false,
+    pendingRoleId: null,
+    rolePassword: '',
+    rolePasswordErr: null,
     loadErr: null,
     formErr: null,
     search: '',
@@ -421,6 +430,9 @@
       s.showDetail = false
       s.detail = {}
       s.userDetail = {}
+      s.pendingRoleId = null
+      s.rolePassword = ''
+      s.rolePasswordErr = null
     },
 
     editFromDetail() {
@@ -476,10 +488,32 @@
     },
 
     async changeRole(roleId) {
+      s.rolePassword = ''
+      s.rolePasswordErr = null
+      s.pendingRoleId = null
       try {
         await api.updateUser(s.userDetail.id, { role_id: roleId })
         s.userDetail = { ...s.userDetail, role_id: roleId }
-      } catch (e) { alert(e.message || 'Failed to change role') }
+      } catch (e) {
+        if (e.message === 'Password required for this role') {
+          s.pendingRoleId = roleId
+          return
+        }
+        alert(e.message || 'Failed to change role')
+      }
+    },
+
+    async confirmRolePassword() {
+      if (!s.rolePassword) return
+      s.rolePasswordErr = null
+      try {
+        await api.updateUser(s.userDetail.id, { role_id: s.pendingRoleId, password: s.rolePassword })
+        s.userDetail = { ...s.userDetail, role_id: s.pendingRoleId }
+        s.pendingRoleId = null
+        s.rolePassword = ''
+      } catch (e) {
+        s.rolePasswordErr = e.message || 'Failed to change role'
+      }
     },
 
     async togglePerm(permId, enabled) {
@@ -495,7 +529,7 @@
       s.revoking = true
       try {
         await api.revokeDevice(s.userDetail.id)
-        s.userDetail = { ...s.userDetail, device: null }
+        s.userDetail = { ...s.userDetail, devices: [] }
       } catch (e) { alert(e.message || 'Failed to revoke') }
       finally { s.revoking = false }
     },

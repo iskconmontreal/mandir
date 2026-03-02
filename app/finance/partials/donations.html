@@ -1,0 +1,149 @@
+<!-- Donation modal (add/edit) -->
+<div class="modal-overlay" :if="showAdd" :onclick="e => { if (e.target === e.currentTarget) showAdd = false }">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 :text="editId ? 'Edit Donation' : 'Add Donation'"></h2>
+      <button class="modal-close" :onclick="showAdd = false">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form :onsubmit.prevent="saveDonation">
+        <div class="form-row">
+          <div class="field">
+            <label for="don-amount">Amount ($)</label>
+            <input id="don-amount" type="number" :value="donForm.amount" step="0.01" min="0.01" placeholder="0.00" required>
+          </div>
+          <div class="field">
+            <label for="don-method">Method</label>
+            <select id="don-method" :value="donForm.method">
+              <option :each="m in donMethods" :value="m" :text="fmt(m)"></option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="don-cat">Category</label>
+            <select id="don-cat" :value="donForm.category">
+              <option :each="c in donCats" :value="c" :text="fmt(c)"></option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="don-date">Date</label>
+            <input id="don-date" type="date" :value="donForm.date_received" required>
+          </div>
+        </div>
+        <div class="field">
+          <label for="don-note">Note</label>
+          <input id="don-note" type="text" :value="donForm.note" placeholder="Optional note…">
+        </div>
+
+        <div class="login-error" :if="addErr" :text="addErr" style="margin:var(--s-sm) 0"></div>
+
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); margin-top:var(--s-lg)">
+          <button :if="editId" type="button" class="btn btn-danger btn-sm" style="margin-right:auto" :class="{dim: adding}" :onclick="delDonation()">Delete</button>
+          <button type="button" class="btn btn-outline" :onclick="showAdd = false">Cancel</button>
+          <button type="submit" class="btn btn-primary" :class="{dim: adding}" :text="adding ? 'Saving…' : editId ? 'Update' : 'Save Donation'"></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <button class="btn btn-primary btn-sm" :onclick="openAdd()">+ Donation</button>
+
+  <input class="filter-search" type="search" placeholder="Search note…"
+    :value="donSearch" :oninput.debounce-150="e => { donSearch = e.target.value; donPage = 1 }">
+
+  <button class="btn btn-outline btn-sm" :onclick="showFilter = true"
+    :style="{color: donFilterCat || donDateFrom || donDateTo ? 'var(--c-accent)' : '', borderColor: donFilterCat || donDateFrom || donDateTo ? 'var(--c-accent)' : ''}">
+    <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>Filter</button>
+
+  <button class="btn btn-outline btn-sm" :onclick="exportCSV()">
+    <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</button>
+</div>
+
+<!-- Active filter chips -->
+<div :if="donFilterCat || donDateFrom || donDateTo" class="filter-chips">
+  <span :if="donFilterCat" class="chip" :onclick="e => { donFilterCat = ''; donPage = 1 }" :text="fmt(donFilterCat) + ' ×'"></span>
+  <span :if="donDateFrom" class="chip" :onclick="e => { donDateFrom = ''; donPage = 1 }" :text="'From ' + donDateFrom + ' ×'"></span>
+  <span :if="donDateTo" class="chip" :onclick="e => { donDateTo = ''; donPage = 1 }" :text="'To ' + donDateTo + ' ×'"></span>
+  <button class="btn-link" style="font-size:var(--f-sm);color:var(--c-text-dim)"
+    :onclick="e => { donFilterCat = ''; donDateFrom = ''; donDateTo = ''; donPage = 1 }">Clear all</button>
+</div>
+
+<!-- Filter modal -->
+<div class="modal-overlay" :if="showFilter" :onclick="e => { if (e.target === e.currentTarget) showFilter = false }">
+  <div class="modal" style="max-width:28rem">
+    <div class="modal-header">
+      <h2>Filters</h2>
+      <button class="modal-close" :onclick="showFilter = false">&times;</button>
+    </div>
+    <div class="modal-body" style="display: flex; flex-direction: column; gap: var(--s-md);">
+      <div class="field">
+        <label>Category</label>
+        <select :value="donFilterCat" :onchange="e => { donFilterCat = e.target.value; donPage = 1 }">
+          <option value="">All categories</option>
+          <option :each="c in donCats" :value="c" :text="fmt(c)"></option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Date range</label>
+        <div style="display:flex;gap:var(--s-sm);align-items:center">
+          <input type="date" :value="donDateFrom" :onchange="e => { donDateFrom = e.target.value; donPage = 1 }" style="flex:1">
+          <span class="dim">—</span>
+          <input type="date" :value="donDateTo" :onchange="e => { donDateTo = e.target.value; donPage = 1 }" style="flex:1">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:var(--s-md)">
+        <button class="btn btn-outline btn-sm" :if="donFilterCat || donDateFrom || donDateTo"
+          :onclick="e => { donFilterCat = ''; donDateFrom = ''; donDateTo = ''; donPage = 1 }">Clear all</button>
+        <span :if="!donFilterCat && !donDateFrom && !donDateTo"></span>
+        <button class="btn btn-primary btn-sm"
+          :onclick="showFilter = false"
+          :text="'Show ' + donFiltered.length + ' results'"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Donations table -->
+<div class="card">
+  <div :if="loadErr" class="login-error" :text="loadErr" style="margin:var(--s-md)"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Method</th>
+          <th>Category</th>
+          <th>Note</th>
+          <th style="text-align:right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr :each="d in donPaged" class="row-link" :onclick="editDonation(d)">
+          <td :text="d.date_received?.slice(0,10) || '—'"></td>
+          <td :text="fmt(d.method)"></td>
+          <td><span class="badge" :text="fmt(d.category)"></span></td>
+          <td class="dim" :text="d.note || '—'"></td>
+          <td style="text-align:right" class="stat-ok" :text="'+$' + fmtAmt(d.amount)"></td>
+        </tr>
+        <tr :if="!donFiltered.length && !loading">
+          <td colspan="5" class="dim" style="text-align:center; padding:var(--s-lg)">No donations found</td>
+        </tr>
+        <tr :if="loading">
+          <td colspan="5" class="dim" style="text-align:center; padding:var(--s-lg)">Loading…</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div :if="donTotalPages > 1" style="display:flex; justify-content:space-between; align-items:center; padding:var(--s-sm) var(--s-md); border-top:1px solid var(--c-border)">
+    <span class="dim" style="font-size:var(--f-sm)" :text="donFiltered.length + ' donations'"></span>
+    <div style="display:flex; gap:var(--s-xs)">
+      <button class="btn btn-outline btn-sm" :onclick="donPage = Math.max(1, donPage - 1)" :class="{dim: donPage === 1}">←</button>
+      <span style="padding:var(--s-xs) var(--s-sm); font-size:var(--f-sm)" :text="donPage + ' / ' + donTotalPages"></span>
+      <button class="btn btn-outline btn-sm" :onclick="donPage = Math.min(donTotalPages, donPage + 1)" :class="{dim: donPage === donTotalPages}">→</button>
+    </div>
+  </div>
+</div>

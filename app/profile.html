@@ -31,22 +31,28 @@
 </div>
 
 <div class="card">
-  <h3 style="margin-bottom:var(--s-md)">Trusted Device</h3>
-  <div style="display:flex; align-items:center; justify-content:space-between; gap:var(--s-md)">
+  <h3 style="margin-bottom:var(--s-md)">Trusted Devices</h3>
+  <div :if="!devices.length" class="dim" style="font-size:var(--f-sm)">No trusted devices</div>
+  <div :each="d in devices" style="display:flex; align-items:center; justify-content:space-between; gap:var(--s-md); padding:var(--s-sm) 0; border-bottom:1px solid var(--c-border)">
     <div>
-      <div :text="deviceLabel" style="font-size:var(--f-sm)"></div>
-      <div class="dim" style="font-size:var(--f-sm)" :text="'ID: ' + deviceId.slice(0, 8) + '…'"></div>
+      <div style="font-size:var(--f-sm)">
+        <span :text="d.label || 'Unknown'"></span>
+        <span :if="d.device_id === currentDeviceId" class="badge" style="margin-left:var(--s-xs)">This device</span>
+      </div>
+      <div class="dim" style="font-size:var(--f-sm)" :text="'ID: ' + d.device_id.slice(0, 8) + '…'"></div>
     </div>
+    <button class="btn-link" style="color:var(--c-err); font-size:var(--f-sm); white-space:nowrap" :onclick="revokeDevice(d.id)">Revoke</button>
   </div>
 </div>
 
 <script type="module">
   import { init, auth, fmtCat } from '../lib/app.js'
+  import { api } from '../lib/api.js'
 
   const u = auth.user
   const meta = u?.meta || {}
 
-  init({
+  const s = init({
     fullName: [meta.first_name, meta.last_name].filter(Boolean).join(' ') || u?.email?.split('@')[0] || '—',
     roleName: (() => {
       try {
@@ -60,7 +66,16 @@
       const [scope, action] = key.split(':')
       return fmtCat(scope) + ' — ' + action
     },
-    deviceLabel: auth.deviceLabel,
-    deviceId: auth.deviceId,
+    devices: [],
+    currentDeviceId: auth.deviceId,
+    async revokeDevice(id) {
+      if (!confirm('Revoke this device? It will require OTP on next login.')) return
+      try {
+        await api.revokeMyDevice(id)
+        s.devices = s.devices.filter(d => d.id !== id)
+      } catch (e) { alert(e.message || 'Failed to revoke') }
+    },
   })
+
+  api.getMyDevices().then(d => s.devices = d).catch(() => {})
 </script>
