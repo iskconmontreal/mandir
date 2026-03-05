@@ -5,33 +5,54 @@ What users do. Not UI specs, not infrastructure.
 
 ### 1. Expenses
 
-**1.a Direct Payment** — pay vendor/bill directly
-1. Member or treasurer creates expense → type: direct
-2. Attaches invoice, fills vendor/amount/due date/category
-3. Submits → approval flow based on amount
-4. Treasurer pays vendor, attaches payment proof, marks paid
-5. Confirmed in bank reconciliation → closed
+Statuses: submitted → approved → paid | rejected.
+No "type" field. Backend stores status, amount, audit trail. Claim/request/log distinction is UX only.
 
-**1.b Advance** — money needed before purchase, reconcile after
-1. Member creates expense → type: advance
-2. Fills purpose, estimated amount, category
-3. Submits → 2 approvals required (always, regardless of amount)
-4. Treasurer disburses, attaches payment proof, marks paid
-5. Member purchases, uploads receipt(s) as attachments, enters actual amount
-6. Difference settled (member returns overage or receives shortfall)
-7. Closed
+**Editing rules:**
+- Reporter can edit until paid. Editing an approved expense resets status to submitted.
+- Treasurer can edit any expense until paid.
+- Admin can edit any expense at any time.
+
+**Approval rules (configurable in backend config):**
+- Under threshold (default $100): auto-approved on submit.
+- Over threshold: requires N approvals (default 2). Approval count shown in UI near Approve button.
+- Threshold and required approval count are backend config values.
+
+**1.a Claim** — member already spent own money
+1. Member clicks "+ Expense" from home or finance page
+2. Scans/uploads receipt(s) — OCR pre-fills amount, date, vendor
+3. Fills title, category, description
+4. Submits → status: submitted (auto-approved if under threshold)
+5. If over threshold: approvers approve (count shown in UI) → status: approved
+6. Treasurer reimburses member → status: paid
+
+**1.b Request** — member needs funds before purchase
+1. Same form, member indicates request in title (e.g. "Kitchen supplies (request)")
+2. Fills estimated amount, category, description
+3. Same approval flow as claim
+4. Treasurer gives funds → status: paid
+5. If actual amount differs, reporter or treasurer edits expense (resets to submitted if was approved)
+
+**1.c Log** — treasurer records existing transaction
+1. Treasurer clicks "+ Expense"
+2. Fills vendor, amount, category, bank ref, date
+3. Saves directly at status: paid, auto-approved by treasurer
+4. If amount over threshold: notification sent to approvers (informational, not blocking)
+
+**Rejection**: Approver rejects with a note → status: rejected. Member creates new expense if needed.
 
 
 ### 2. Donations
 
-**2.a Donation** — cash/cheque/e-transfer/card, one-time
-1. Treasurer creates donation
-2. Selects or creates donor, fills amount/method/category/date/note
-2.1 If donor doesn't exist - it is created in place.
+**2.a Add Donation** — cash/cheque/e-transfer/card, one-time
+1. Authorized user clicks "+ Donation" from home or finance page
+2. Scans receipt or fills manually: donor, amount, method, category, date
+2.1 If donor not in system — created in place
 3. Save. Running totals update.
+4. If donor requests tax receipt → issue from donation detail (see 3.a)
 
 **2.b In-Kind Donation** — goods not cash
-1. Treasurer creates donation → method: in-kind
+1. Method set to "in-kind" in donation form
 2. Fills donor, description, fair market value, category
 3. If FMV > $1,000: uploads independent appraisal (CRA requirement)
 4. Receipt issued for FMV amount
@@ -39,13 +60,14 @@ What users do. Not UI specs, not infrastructure.
 
 ### 3. Compliance
 
-**3.a Tax Receipts** — annual, per donor, CRA-compliant
-1. Treasurer selects fiscal year
-2. System generates one receipt per donor: receipt_no, eligible amount, dates
-3. CRA fields filled from org settings (charity name, address, reg no, statement)
-4. Treasurer reviews, generates PDFs, emails to donors
+**3.a Tax Receipt** — per donation or annual, CRA-compliant
+1. From donation detail or donor profile: "Issue Receipt"
+2. System generates: receipt_no, eligible amount, org details (charity name, address, reg no, CRA statement)
+3. Treasurer reviews, generates PDF
+4. Can email to donor or print
 5. Copies retained minimum 2 years
 6. In-kind: FMV + description shown separately. Advantage amounts deducted.
+7. Annual batch: treasurer selects fiscal year → one receipt per donor for all eligible donations
 
 **3.b GST/HST Rebate** — 50% back on GST paid
 1. System totals GST/HST from expenses for selected period
@@ -87,6 +109,19 @@ What users do. Not UI specs, not infrastructure.
 
 **6.a Year-End Close**
 1. Treasurer selects year to close
-2. System checks: all expenses closed/rejected, all donations receipted, bank reconciled
+2. System checks: all expenses paid/rejected, all donations receipted
 3. Gaps shown as checklist
 4. Once clean: year locked (read-only), new year active
+
+
+### 7. Home Page (Happy Paths)
+
+Two primary actions, prominent on home page for everyone:
+
+**+ Expense** → opens expense form
+- Any member can submit
+- Treasurer saves directly at status: paid
+
+**+ Donation** → opens donation form
+- Authorized users (treasurer, admin)
+- Scan receipt or fill manually

@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="{{ '/css/layout.css' | relative_url }}">
 </head>
 <body>
-  <div class="progress"
+  <div class="progress loading"
       :scope="{loading: true}"
       :class="{loading, done: !loading}"
       :onload.window="loading = false"></div>
@@ -26,21 +26,25 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           Finance
         </a>
-        <a :if="can('clients:view')" class="nav-item" :class="{active: active('members')}" href="{{ '/app/members/' | relative_url }}">
+        <a :if="can('members:view')" class="nav-item" :class="{active: active('members')}" href="{{ '/app/members/' | relative_url }}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-          Members
+          Community
         </a>
       </nav>
 
       <div class="topbar-user" style="position:relative">
         <button class="user-trigger" :onclick="userMenu = !userMenu" :onclick.outside="userMenu = false">
-          <span :text="[user?.meta?.first_name, user?.meta?.last_name].filter(Boolean).join(' ') || user?.email?.split('@')[0] || 'User'"></span>
+          <span :text="user?.meta?.spiritual_name || user?.meta?.name || user?.email?.split('@')[0] || 'User'"></span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div class="user-menu" :if="userMenu">
           <a href="{{ '/app/profile.html' | relative_url }}" class="user-menu-item">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             Profile
+          </a>
+          <a :if="can('roles:update')" href="{{ '/app/admin/roles/' | relative_url }}" class="user-menu-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M6 20v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M17 8h4M19 6v4"/></svg>
+            Roles
           </a>
           <a href="#" class="user-menu-item user-menu-danger" :onclick.prevent="logout">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>

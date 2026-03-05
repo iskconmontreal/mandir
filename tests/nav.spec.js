@@ -10,7 +10,7 @@ test.describe('navigation (admin)', () => {
   test('finance nav item visible and active on overview', async ({ page }) => {
     await page.goto('/app/')
     await expect(page.locator('.nav-item').filter({ hasText: 'Finance' })).toBeVisible()
-    await expect(page.locator('.nav-item').filter({ hasText: 'Members' })).toBeVisible()
+    await expect(page.locator('.nav-item').filter({ hasText: 'Community' })).toBeVisible()
   })
 
   test('user menu opens and contains profile + sign out', async ({ page }) => {
@@ -37,7 +37,7 @@ test.describe('navigation (viewer)', () => {
     await page.goto('/app/')
     await page.locator('.topbar').waitFor()
     await expect(page.locator('.nav-item').filter({ hasText: 'Finance' })).toHaveCount(0)
-    await expect(page.locator('.nav-item').filter({ hasText: 'Members' })).toHaveCount(0)
+    await expect(page.locator('.nav-item').filter({ hasText: 'Community' })).toHaveCount(0)
   })
 
   test('overview hides org sections for viewer', async ({ page }) => {
@@ -45,7 +45,7 @@ test.describe('navigation (viewer)', () => {
     await page.locator('.topbar').waitFor()
     const cards = page.locator('.card h3')
     await expect(cards.filter({ hasText: 'Finance' })).toHaveCount(0)
-    await expect(cards.filter({ hasText: 'Members' })).toHaveCount(0)
+    await expect(cards.filter({ hasText: 'Community' })).toHaveCount(0)
   })
 
   test('finance page redirects viewer to overview', async ({ page }) => {

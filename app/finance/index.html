@@ -12,65 +12,44 @@
   </div>
 </div>
 
-<div :if="truncated" class="truncation-warn">Only showing the first 1,000 records — contact admin to export full data.</div>
-
 <!-- Stat cards as tabs -->
 <div class="card-tab-group">
   <div class="card-tab" :class="{['card-tab-active']: activeTab === 'expenses'}"
     :onclick="e => { switchTab('expenses'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
     <div class="stat-label">Expenses</div>
     <div class="stat-value"><span :text="'$' + fmtAmt(expMonth)"></span></div>
-    <div class="stat-sub dim"><span :text="trend(expMonth, expPrevMonth, true).num"></span><span :text="trend(expMonth, expPrevMonth, true).label"></span></div>
+    <div class="stat-sub dim"><svg :if="trend(expMonth, expPrevMonth, true).dir" class="trend-arrow" :class="trend(expMonth, expPrevMonth, true).cls" viewBox="0 0 12 12"><path :d="trend(expMonth, expPrevMonth, true).dir === 'up' ? 'M2 10L10 2M10 2H4M10 2v6' : 'M2 2l8 8M10 10H4M10 10V4'" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span :text="trend(expMonth, expPrevMonth, true).num"></span><span :text="trend(expMonth, expPrevMonth, true).label"></span></div>
   </div>
   <div class="card-tab" :class="{['card-tab-active']: activeTab === 'donations'}"
     :onclick="e => { switchTab('donations'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
     <div class="stat-label">Donations</div>
     <div class="stat-value"><span :text="'$' + fmtAmt(donMonth)"></span></div>
-    <div class="stat-sub dim"><span :text="trend(donMonth, donPrevMonth).num"></span><span :text="trend(donMonth, donPrevMonth).label"></span></div>
+    <div class="stat-sub dim"><svg :if="trend(donMonth, donPrevMonth).dir" class="trend-arrow" :class="trend(donMonth, donPrevMonth).cls" viewBox="0 0 12 12"><path :d="trend(donMonth, donPrevMonth).dir === 'up' ? 'M2 10L10 2M10 2H4M10 2v6' : 'M2 2l8 8M10 10H4M10 10V4'" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span :text="trend(donMonth, donPrevMonth).num"></span><span :text="trend(donMonth, donPrevMonth).label"></span></div>
   </div>
   <div class="card-tab" :class="{['card-tab-active']: activeTab === 'donors'}"
     :onclick="e => { switchTab('donors'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
     <div class="stat-label">Donors</div>
     <div class="stat-value"><span :text="donorsMonth"></span></div>
-    <div class="stat-sub dim"><span :text="trendDiff(donorsMonth, donorsPrevMonth).num"></span><span :text="trendDiff(donorsMonth, donorsPrevMonth).label"></span></div>
+    <div class="stat-sub dim"><svg :if="trendDiff(donorsMonth, donorsPrevMonth).dir" class="trend-arrow" :class="trendDiff(donorsMonth, donorsPrevMonth).cls" viewBox="0 0 12 12"><path :d="trendDiff(donorsMonth, donorsPrevMonth).dir === 'up' ? 'M2 10L10 2M10 2H4M10 2v6' : 'M2 2l8 8M10 10H4M10 10V4'" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span :text="trendDiff(donorsMonth, donorsPrevMonth).num"></span><span :text="trendDiff(donorsMonth, donorsPrevMonth).label"></span></div>
   </div>
 </div>
 
 <!-- ===== EXPENSES TAB ===== -->
-<section :class="{'hidden': activeTab !== 'expenses'}" :scope="{showFilter: false}">
+<section :class="{'hidden': activeTab !== 'expenses'}" :scope="{showFilter: false, showExport: false}">
 
   <div class="filter-bar">
     <button class="btn btn-primary btn-sm" :onclick="openAdd()">+ Expense</button>
-    <input class="filter-search" type="search" placeholder="Search paid to or description…"
+    <input class="filter-search" type="search" placeholder="Search expense, vendor, submitter…"
       :value="expSearch" :oninput.debounce-150="e => { expSearch = e.target.value; expPage = 1 }">
-    <button class="btn btn-outline btn-sm" :onclick="showFilter = true"
-      :style="{color: expFilterCat || expFilterStatus || expDateFrom || expDateTo ? 'var(--c-accent)' : '', borderColor: expFilterCat || expFilterStatus || expDateFrom || expDateTo ? 'var(--c-accent)' : ''}">
-      <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>Filter</button>
-    <button class="btn btn-outline btn-sm" :onclick="exportCSV()">
-      <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</button>
-  </div>
-
-  <div :if="expFilterCat || expFilterStatus || expDateFrom || expDateTo" class="filter-chips">
-    <span :if="expFilterStatus" class="chip" :onclick="e => { expFilterStatus = ''; expPage = 1 }" :text="fmt(expFilterStatus) + ' ×'"></span>
-    <span :if="expFilterCat" class="chip" :onclick="e => { expFilterCat = ''; expPage = 1 }" :text="fmt(expFilterCat) + ' ×'"></span>
-    <span :if="expDateFrom" class="chip" :onclick="e => { expDateFrom = ''; expPage = 1 }" :text="'From ' + expDateFrom + ' ×'"></span>
-    <span :if="expDateTo" class="chip" :onclick="e => { expDateTo = ''; expPage = 1 }" :text="'To ' + expDateTo + ' ×'"></span>
-    <button class="btn-link" style="font-size:var(--f-sm);color:var(--c-text-dim)"
-      :onclick="e => { expFilterCat = ''; expFilterStatus = ''; expDateFrom = ''; expDateTo = ''; expPage = 1 }">Clear all</button>
-  </div>
-
-  <div class="modal-overlay" :if="showFilter" :onkeydown.esc.document="showFilter = false" :onclick="e => { if (e.target === e.currentTarget) showFilter = false }">
-    <div class="modal" style="max-width:28rem">
-      <div class="modal-header">
-        <h2>Filters</h2>
-        <button class="modal-close" :onclick="showFilter = false">&times;</button>
-      </div>
-      <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--s-md)">
+    <div style="position:relative" :onclick.outside="showFilter = false">
+      <button class="btn btn-md btn-filter" :onclick="showFilter = !showFilter"
+        :style="{color: expFilterCat || expFilterStatus || expDateFrom || expDateTo ? 'var(--c-accent)' : ''}">Filter</button>
+      <div :if="showFilter" class="filter-dropdown">
         <div class="field">
           <label>Status</label>
           <select :value="expFilterStatus" :onchange="e => { expFilterStatus = e.target.value; expPage = 1 }">
             <option value="">All statuses</option>
-            <option :each="st in expStatuses" :value="st" :text="fmt(st)"></option>
+            <option :each="st in expStatuses" :value="st" :text="fmtStatus(st)"></option>
           </select>
         </div>
         <div class="field">
@@ -88,8 +67,8 @@
             <input type="date" :value="expDateTo" :onchange="e => { expDateTo = e.target.value; expPage = 1 }" style="flex:1">
           </div>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:var(--s-md)">
-          <button class="btn btn-outline btn-sm" :if="expFilterCat || expFilterStatus || expDateFrom || expDateTo"
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">
+          <button class="btn-link" :if="expFilterCat || expFilterStatus || expDateFrom || expDateTo"
             :onclick="e => { expFilterCat = ''; expFilterStatus = ''; expDateFrom = ''; expDateTo = ''; expPage = 1 }">Clear all</button>
           <span :if="!expFilterCat && !expFilterStatus && !expDateFrom && !expDateTo"></span>
           <button class="btn btn-primary btn-sm" :onclick="showFilter = false"
@@ -97,79 +76,172 @@
         </div>
       </div>
     </div>
+    <div style="position:relative">
+      <button class="btn btn-md btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export</button>
+      <div :if="showExport" class="quick-add" style="right:0;left:auto">
+        <a class="quick-add-item" :onclick="exportCSV(); showExport = false">CSV</a>
+        <a class="quick-add-item" :onclick="printTable(); showExport = false">Print / PDF</a>
+      </div>
+    </div>
+    <div class="seg-group">
+      <span class="seg" :class="{'seg-active': expView === 'list'}" :onclick="expView = 'list'" title="List view" style="display:flex;align-items:center">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="1.5" width="3" height="3" rx=".5"/><line x1="6.5" y1="3" x2="15" y2="3"/><rect x="1" y="6.5" width="3" height="3" rx=".5"/><line x1="6.5" y1="8" x2="15" y2="8"/><rect x="1" y="11.5" width="3" height="3" rx=".5"/><line x1="6.5" y1="13" x2="15" y2="13"/></svg>
+      </span>
+      <span class="seg" :class="{'seg-active': expView === 'table'}" :onclick="expView = 'table'" title="Table view" style="display:flex;align-items:center">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+      </span>
+    </div>
   </div>
 
-  <div class="card">
+  <div :if="expFilterCat || expFilterStatus || expDateFrom || expDateTo" class="filter-chips">
+    <span :if="expFilterStatus" class="chip" :onclick="e => { expFilterStatus = ''; expPage = 1 }" :text="fmtStatus(expFilterStatus) + ' ×'"></span>
+    <span :if="expFilterCat" class="chip" :onclick="e => { expFilterCat = ''; expPage = 1 }" :text="fmt(expFilterCat) + ' ×'"></span>
+    <span :if="expDateFrom" class="chip" :onclick="e => { expDateFrom = ''; expPage = 1 }" :text="'From ' + expDateFrom + ' ×'"></span>
+    <span :if="expDateTo" class="chip" :onclick="e => { expDateTo = ''; expPage = 1 }" :text="'To ' + expDateTo + ' ×'"></span>
+    <button class="btn-link" style="font-size:var(--f-sm);color:var(--c-text-dim)"
+      :onclick="e => { expFilterCat = ''; expFilterStatus = ''; expDateFrom = ''; expDateTo = ''; expPage = 1 }">Clear all</button>
+  </div>
+
+  <!-- Table view -->
+  <div class="card" :if="expView === 'table'">
     <div :if="loadErr" class="login-error" :text="loadErr" style="margin:var(--s-md)"></div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Date</th><th>Status</th><th>Paid to</th><th>Category</th><th style="text-align:right">Amount</th></tr>
+          <tr>
+            <th :each="c in expCols" class="th-sort th-drag" :class="_sortCls('exp', c.key)"
+              :onclick="_toggleSort('exp', c.key)" :text="c.label"
+              :style="c.right ? 'text-align:right' : ''"
+              draggable="true"
+              :ondragstart="e => { _dragCol = c.key; e.dataTransfer.effectAllowed = 'move' }"
+              :ondragover.prevent="e => e.currentTarget.classList.add('drag-over')"
+              :ondragleave="e => e.currentTarget.classList.remove('drag-over')"
+              :ondrop="e => { e.currentTarget.classList.remove('drag-over'); _reorderExpCol(c.key) }"></th>
+            <th :if="can('expenses:approve')" style="width:5.5rem"></th>
+          </tr>
         </thead>
         <tbody>
           <tr :each="x in expPaged" class="row-link" :onclick="editExpense(x)">
-            <td :text="x.expense_date?.slice(0,10) || '—'"></td>
-            <td><span class="badge" :class="'badge-' + (x.status || 'draft')" :text="fmt(x.status || 'draft')"></span></td>
-            <td :text="x.paid_to"></td>
-            <td><span class="badge" :text="fmt(x.category)"></span></td>
-            <td style="text-align:right" class="stat-err" :text="'−$' + fmtAmt(x.amount)"></td>
+            <td :each="c in expCols" :html="_expCell(x, c.key)" :style="c.right ? 'text-align:right' : ''"></td>
+            <td :if="can('expenses:approve')" class="quick-actions" :onclick.stop="">
+              <button :if="x.status === 'submitted'" class="btn-quick btn-quick-approve" :class="{'btn-loading': _quickLoading[x.id]}" :onclick="quickApprove(x)">Approve</button>
+              <button :if="x.status === 'approved'" class="btn-quick btn-quick-pay" :class="{'btn-loading': _quickLoading[x.id]}" :onclick="quickPay(x)">Done</button>
+            </td>
           </tr>
           <tr :if="!expenses.length && !loading">
-            <td colspan="5" style="text-align:center;padding:var(--s-xl)">
+            <td colspan="6" style="text-align:center;padding:var(--s-xl)">
               <div class="dim" style="margin-bottom:var(--s-sm)">No expenses yet</div>
-              <button class="btn btn-primary btn-sm" :onclick="openAdd()">+ Add first expense</button>
             </td>
           </tr>
           <tr :if="expenses.length && !expFiltered.length && !loading">
-            <td colspan="5" class="dim" style="text-align:center;padding:var(--s-lg)">No expenses match filters</td>
+            <td colspan="6" class="dim" style="text-align:center;padding:var(--s-lg)">No expenses match filters</td>
           </tr>
           <tr :if="loading">
-            <td colspan="5" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</td>
+            <td colspan="6" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</td>
           </tr>
         </tbody>
       </table>
     </div>
-    <div :if="expTotalPages > 1" style="display:flex;justify-content:space-between;align-items:center;padding:var(--s-sm) var(--s-md);border-top:1px solid var(--c-border)">
-      <span class="dim" style="font-size:var(--f-sm)" :text="expFiltered.length + ' expenses'"></span>
-      <div style="display:flex;gap:var(--s-xs)">
-        <button class="btn btn-outline btn-sm" :onclick="expPage = Math.max(1, expPage - 1)" :class="{dim: expPage === 1}">←</button>
-        <span style="padding:var(--s-xs) var(--s-sm);font-size:var(--f-sm)" :text="expPage + ' / ' + expTotalPages"></span>
-        <button class="btn btn-outline btn-sm" :onclick="expPage = Math.min(expTotalPages, expPage + 1)" :class="{dim: expPage === expTotalPages}">→</button>
+    <div :if="expHasMore" class="scroll-sentinel" :ref="el => observe(el, () => expPage++)">
+      <span class="load-spinner"></span>
+    </div>
+  </div>
+
+  <!-- List view -->
+  <div :if="expView === 'list'">
+    <div :if="loadErr" class="login-error" :text="loadErr" style="margin-bottom:var(--s-sm)"></div>
+    <div :if="loading" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</div>
+    <div :if="!loading && !expenses.length" class="dim" style="text-align:center;padding:var(--s-xl)">No expenses yet</div>
+    <div :if="!loading && expenses.length && !expFiltered.length" class="dim" style="text-align:center;padding:var(--s-lg)">No expenses match filters</div>
+    <div :each="g in expGrouped">
+      <div class="exp-group-header">
+        <span :text="fmtMonth(g.key)"></span>
+        <span class="exp-group-count" :text="g.items.length"></span>
+        <span class="exp-group-total" :text="'$' + fmtAmt(g.total)"></span>
       </div>
+      <div class="exp-list">
+        <div :each="x in g.items">
+          <div class="exp-card" :class="{open: expExpandId === x.id}" :onclick="toggleExpand(x.id)">
+            <div class="exp-card-status" :class="'status-' + (x.status || 'submitted')" :html="statusIcon(x.status || 'submitted')"></div>
+            <div class="exp-card-left">
+              <div class="exp-card-desc">
+                <strong :text="x.member_id ? (memberNames[x.member_id] || '—') : (x.paid_to || '—')"></strong>
+                <span class="dim" :text="' claimed for '"></span>
+                <span :text="fmt(x.category)"></span>
+                <span class="dim" :if="x.member_id && x.paid_to" :text="' · ' + x.paid_to"></span>
+              </div>
+              <div class="exp-card-meta" :text="expMeta(x)"></div>
+            </div>
+            <div class="exp-card-right">
+              <div class="exp-card-amount" :text="'$' + fmtAmt(x.amount)"></div>
+              <div class="exp-card-hover-row">
+                <span class="exp-card-date" :text="fmtDate(x.expense_date)"></span>
+                <span class="exp-card-actions" :onclick.stop="">
+                  <button :if="can('expenses:approve') && x.status === 'submitted'" class="btn btn-xs" :class="{'btn-loading': _quickLoading[x.id]}" :onclick="quickApprove(x)">Approve</button>
+                  <button :if="can('expenses:approve') && x.status === 'approved'" class="btn btn-xs" :class="{'btn-loading': _quickLoading[x.id]}" :onclick="quickPay(x)">Pay</button>
+                  <button class="btn btn-xs" :onclick="editExpense(x)">Edit</button>
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="exp-detail-panel" :class="{open: expExpandId === x.id}">
+            <div class="exp-detail-inner">
+              <div class="exp-detail-fields">
+                <div>
+                  <div class="stat-label">ID</div>
+                  <div class="mono" :text="x.expense_no || ('#' + x.id)"></div>
+                </div>
+                <div>
+                  <div class="stat-label">Date</div>
+                  <div :text="x.expense_date?.slice(0,10) || '—'"></div>
+                </div>
+                <div>
+                  <div class="stat-label">Paid to</div>
+                  <div :text="x.paid_to || '—'"></div>
+                </div>
+                <div :if="x.member_id">
+                  <div class="stat-label">Submitted by</div>
+                  <div :text="memberNames[x.member_id] || '—'"></div>
+                </div>
+              </div>
+              <div :if="x.description" class="dim" style="font-size:var(--f-sm)" :text="x.description"></div>
+              <div :if="expInlineLoading[x.id]" class="dim" style="font-size:var(--f-sm)">Loading…</div>
+              <div :if="!expInlineLoading[x.id] && expInlineHistory[x.id]" class="history-list">
+                <div :if="!expInlineHistory[x.id].length" class="dim" style="font-size:var(--f-sm)">No history yet</div>
+                <div class="history-item" :each="h in (expInlineHistory[x.id] || [])">
+                  <span class="badge" :class="'badge-' + eventBadge(h)" :text="eventLabel(h)"></span>
+                  <span class="dim" :if="eventDetail(h)" :text="eventDetail(h)"></span>
+                  <span class="history-date" :text="timeAgo(h.created_at)"></span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:var(--s-sm)">
+                <button :if="can('expenses:approve') && x.status === 'submitted'" class="btn btn-primary btn-sm" :class="{'btn-loading': _quickLoading[x.id]}" :onclick.stop="quickApprove(x)">Approve</button>
+                <button :if="can('expenses:approve') && x.status === 'approved'" class="btn btn-primary btn-sm" :class="{'btn-loading': _quickLoading[x.id]}" :onclick.stop="quickPay(x)">Mark paid</button>
+                <button :if="x.status === 'submitted'" class="btn btn-outline btn-sm" :onclick.stop="editExpense(x)">Edit</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div :if="expHasMore" class="scroll-sentinel" :ref="el => observe(el, () => expPage++)">
+      <span class="load-spinner"></span>
     </div>
   </div>
 
 </section>
 
 <!-- ===== DONATIONS TAB ===== -->
-<section :class="{'hidden': activeTab !== 'donations'}" :scope="{showFilter: false}">
+<section :class="{'hidden': activeTab !== 'donations'}" :scope="{showFilter: false, showExport: false}">
 
   <div class="filter-bar">
     <button class="btn btn-primary btn-sm" :onclick="openAdd()">+ Donation</button>
     <input class="filter-search" type="search" placeholder="Search donor or note…"
       :value="donSearch" :oninput.debounce-150="e => { donSearch = e.target.value; donPage = 1 }">
-    <button class="btn btn-outline btn-sm" :onclick="showFilter = true"
-      :style="{color: donFilterCat || donDateFrom || donDateTo ? 'var(--c-accent)' : '', borderColor: donFilterCat || donDateFrom || donDateTo ? 'var(--c-accent)' : ''}">
-      <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>Filter</button>
-    <button class="btn btn-outline btn-sm" :onclick="exportCSV()">
-      <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</button>
-  </div>
-
-  <div :if="donFilterCat || donDateFrom || donDateTo" class="filter-chips">
-    <span :if="donFilterCat" class="chip" :onclick="e => { donFilterCat = ''; donPage = 1 }" :text="fmt(donFilterCat) + ' ×'"></span>
-    <span :if="donDateFrom" class="chip" :onclick="e => { donDateFrom = ''; donPage = 1 }" :text="'From ' + donDateFrom + ' ×'"></span>
-    <span :if="donDateTo" class="chip" :onclick="e => { donDateTo = ''; donPage = 1 }" :text="'To ' + donDateTo + ' ×'"></span>
-    <button class="btn-link" style="font-size:var(--f-sm);color:var(--c-text-dim)"
-      :onclick="e => { donFilterCat = ''; donDateFrom = ''; donDateTo = ''; donPage = 1 }">Clear all</button>
-  </div>
-
-  <div class="modal-overlay" :if="showFilter" :onkeydown.esc.document="showFilter = false" :onclick="e => { if (e.target === e.currentTarget) showFilter = false }">
-    <div class="modal" style="max-width:28rem">
-      <div class="modal-header">
-        <h2>Filters</h2>
-        <button class="modal-close" :onclick="showFilter = false">&times;</button>
-      </div>
-      <div class="modal-body" style="display:flex;flex-direction:column;gap:var(--s-md)">
+    <div style="position:relative" :onclick.outside="showFilter = false">
+      <button class="btn btn-md btn-filter" :onclick="showFilter = !showFilter"
+        :style="{color: donFilterCat || donDateFrom || donDateTo ? 'var(--c-accent)' : ''}">Filter</button>
+      <div :if="showFilter" class="filter-dropdown">
         <div class="field">
           <label>Category</label>
           <select :value="donFilterCat" :onchange="e => { donFilterCat = e.target.value; donPage = 1 }">
@@ -185,8 +257,8 @@
             <input type="date" :value="donDateTo" :onchange="e => { donDateTo = e.target.value; donPage = 1 }" style="flex:1">
           </div>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:var(--s-md)">
-          <button class="btn btn-outline btn-sm" :if="donFilterCat || donDateFrom || donDateTo"
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">
+          <button class="btn-link" :if="donFilterCat || donDateFrom || donDateTo"
             :onclick="e => { donFilterCat = ''; donDateFrom = ''; donDateTo = ''; donPage = 1 }">Clear all</button>
           <span :if="!donFilterCat && !donDateFrom && !donDateTo"></span>
           <button class="btn btn-primary btn-sm" :onclick="showFilter = false"
@@ -194,6 +266,21 @@
         </div>
       </div>
     </div>
+    <div style="position:relative">
+      <button class="btn btn-md btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export</button>
+      <div :if="showExport" class="quick-add" style="right:0;left:auto">
+        <a class="quick-add-item" :onclick="exportCSV(); showExport = false">CSV</a>
+        <a class="quick-add-item" :onclick="printTable(); showExport = false">Print / PDF</a>
+      </div>
+    </div>
+  </div>
+
+  <div :if="donFilterCat || donDateFrom || donDateTo" class="filter-chips">
+    <span :if="donFilterCat" class="chip" :onclick="e => { donFilterCat = ''; donPage = 1 }" :text="fmt(donFilterCat) + ' ×'"></span>
+    <span :if="donDateFrom" class="chip" :onclick="e => { donDateFrom = ''; donPage = 1 }" :text="'From ' + donDateFrom + ' ×'"></span>
+    <span :if="donDateTo" class="chip" :onclick="e => { donDateTo = ''; donPage = 1 }" :text="'To ' + donDateTo + ' ×'"></span>
+    <button class="btn-link" style="font-size:var(--f-sm);color:var(--c-text-dim)"
+      :onclick="e => { donFilterCat = ''; donDateFrom = ''; donDateTo = ''; donPage = 1 }">Clear all</button>
   </div>
 
   <div class="card">
@@ -201,15 +288,22 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Date</th><th>Donor</th><th>Method</th><th>Category</th><th>Note</th><th style="text-align:right">Amount</th></tr>
+          <tr>
+            <th class="th-sort" :class="_sortCls('don', 'date_received')" :onclick="_toggleSort('don', 'date_received')">Date</th>
+            <th>Donor</th>
+            <th class="th-sort" :class="_sortCls('don', 'method')" :onclick="_toggleSort('don', 'method')">Method</th>
+            <th class="th-sort" :class="_sortCls('don', 'category')" :onclick="_toggleSort('don', 'category')">Category</th>
+            <th>Note</th>
+            <th class="th-sort" :class="_sortCls('don', 'amount')" :onclick="_toggleSort('don', 'amount')" style="text-align:right">Amount</th>
+          </tr>
         </thead>
         <tbody>
           <tr :each="d in donPaged" class="row-link" :onclick="editDonation(d)">
-            <td :text="d.date_received?.slice(0,10) || '—'"></td>
-            <td :text="d.client_id ? (memberNames[d.client_id] || '—') : 'Anonymous'"></td>
-            <td :text="fmt(d.method)"></td>
+            <td :text="fmtDate(d.date_received)"></td>
+            <td :html="hl(d.client_id ? (memberNames[d.client_id] || '—') : 'Anonymous', donSearch)"></td>
+            <td :html="hl(fmt(d.method), donSearch)"></td>
             <td><span class="badge" :text="fmt(d.category)"></span></td>
-            <td class="dim" :text="d.note || '—'"></td>
+            <td class="dim" :html="hl(d.note || '—', donSearch)"></td>
             <td style="text-align:right" class="stat-ok" :text="'+$' + fmtAmt(d.amount)"></td>
           </tr>
           <tr :if="!donations.length && !loading">
@@ -227,26 +321,26 @@
         </tbody>
       </table>
     </div>
-    <div :if="donTotalPages > 1" style="display:flex;justify-content:space-between;align-items:center;padding:var(--s-sm) var(--s-md);border-top:1px solid var(--c-border)">
-      <span class="dim" style="font-size:var(--f-sm)" :text="donFiltered.length + ' donations'"></span>
-      <div style="display:flex;gap:var(--s-xs)">
-        <button class="btn btn-outline btn-sm" :onclick="donPage = Math.max(1, donPage - 1)" :class="{dim: donPage === 1}">←</button>
-        <span style="padding:var(--s-xs) var(--s-sm);font-size:var(--f-sm)" :text="donPage + ' / ' + donTotalPages"></span>
-        <button class="btn btn-outline btn-sm" :onclick="donPage = Math.min(donTotalPages, donPage + 1)" :class="{dim: donPage === donTotalPages}">→</button>
-      </div>
+    <div :if="donHasMore" class="scroll-sentinel" :ref="el => observe(el, () => donPage++)">
+      <span class="load-spinner"></span>
     </div>
   </div>
 
 </section>
 
 <!-- ===== DONORS TAB ===== -->
-<section :class="{'hidden': activeTab !== 'donors'}">
+<section :class="{'hidden': activeTab !== 'donors'}" :scope="{showExport: false}">
 
   <div class="filter-bar">
     <input class="filter-search" type="search" placeholder="Search donor…"
       :value="donorSearch" :oninput.debounce-150="e => { donorSearch = e.target.value; donorPage = 1 }">
-    <button class="btn btn-outline btn-sm" :onclick="exportCSV()">
-      <svg style="width:.875rem;height:.875rem;vertical-align:-2px;margin-right:var(--s-xs)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</button>
+    <div style="position:relative">
+      <button class="btn btn-md btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export</button>
+      <div :if="showExport" class="quick-add" style="right:0;left:auto">
+        <a class="quick-add-item" :onclick="exportCSV(); showExport = false">CSV</a>
+        <a class="quick-add-item" :onclick="printTable(); showExport = false">Print / PDF</a>
+      </div>
+    </div>
   </div>
 
   <div class="card">
@@ -254,14 +348,19 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Donor</th><th style="text-align:right">Donations</th><th style="text-align:right">Total</th><th>Last Donation</th></tr>
+          <tr>
+            <th class="th-sort" :class="_sortCls('donor', 'name')" :onclick="_toggleSort('donor', 'name')">Donor</th>
+            <th class="th-sort" :class="_sortCls('donor', 'count')" :onclick="_toggleSort('donor', 'count')" style="text-align:right">Donations</th>
+            <th class="th-sort" :class="_sortCls('donor', 'total')" :onclick="_toggleSort('donor', 'total')" style="text-align:right">Total</th>
+            <th class="th-sort" :class="_sortCls('donor', 'lastDate')" :onclick="_toggleSort('donor', 'lastDate')">Last Donation</th>
+          </tr>
         </thead>
         <tbody>
           <tr :each="d in donorPaged">
-            <td :text="d.name"></td>
+            <td :html="hl(d.name, donorSearch)"></td>
             <td style="text-align:right" :text="d.count"></td>
             <td style="text-align:right" class="stat-ok" :text="'$' + fmtAmt(d.total)"></td>
-            <td class="dim" :text="d.lastDate"></td>
+            <td class="dim" :text="fmtDate(d.lastDate)"></td>
           </tr>
           <tr :if="!donorFiltered.length && !loading">
             <td colspan="4" class="dim" style="text-align:center;padding:var(--s-lg)">
@@ -274,13 +373,8 @@
         </tbody>
       </table>
     </div>
-    <div :if="donorTotalPages > 1" style="display:flex;justify-content:space-between;align-items:center;padding:var(--s-sm) var(--s-md);border-top:1px solid var(--c-border)">
-      <span class="dim" style="font-size:var(--f-sm)" :text="donorFiltered.length + ' donors'"></span>
-      <div style="display:flex;gap:var(--s-xs)">
-        <button class="btn btn-outline btn-sm" :onclick="donorPage = Math.max(1, donorPage - 1)" :class="{dim: donorPage === 1}">←</button>
-        <span style="padding:var(--s-xs) var(--s-sm);font-size:var(--f-sm)" :text="donorPage + ' / ' + donorTotalPages"></span>
-        <button class="btn btn-outline btn-sm" :onclick="donorPage = Math.min(donorTotalPages, donorPage + 1)" :class="{dim: donorPage === donorTotalPages}">→</button>
-      </div>
+    <div :if="donorHasMore" class="scroll-sentinel" :ref="el => observe(el, () => donorPage++)">
+      <span class="load-spinner"></span>
     </div>
   </div>
 
@@ -291,18 +385,18 @@
 <div :html="donFormHTML"></div>
 
 <script type="module">
-  import { init, fmtCat, fmtAmt, rawAmt, toCents, toast, auth } from '../../lib/app.js'
-  import { api } from '../../lib/api.js'
+  import { init, fmtCat, fmtAmt, rawAmt, toCents, toast, auth, hl } from '../../lib/app.js'
+  import { api, BASE } from '../../lib/api.js'
 
-  const DON_CATS = ['general', 'sunday_feast', 'book_distribution', 'deity_worship', 'building_fund', 'annadana', 'festival', 'other']
-  const EXP_CATS = ['utilities', 'kitchen', 'deity', 'maintenance', 'office', 'rent', 'insurance', 'travel', 'salary', 'events', 'professional', 'other']
+  const DON_CATS = ['general', 'sunday_feast', 'book_distribution', 'deity_worship', 'building_fund', 'annadana', 'festival', 'events', 'other']
+  const EXP_CATS = ['admin', 'bank_charges', 'deity', 'equipment', 'events', 'insurance', 'kitchen', 'maintenance', 'office', 'professional', 'rent', 'salary', 'software', 'travel', 'utilities', 'other']
   const DON_METHODS = ['cash', 'cheque', 'e-transfer', 'card', 'in-kind']
-  const EXP_STATUSES = { draft: 'var(--c-text-dim)', submitted: 'var(--c-accent)', returned: 'var(--c-warn)', rejected: 'var(--c-err)', approved: 'var(--c-ok)', paid: 'var(--c-accent)', closed: 'var(--c-text-dim)' }
+  const EXP_STATUSES = { submitted: 'var(--c-accent)', approved: 'var(--c-ok)', paid: 'var(--c-accent)', rejected: 'var(--c-err)' }
   const DON_FIELDS = { Amount: { id: 'amount', label: 'amount' }, Method: { id: 'method', label: 'method' }, Category: { id: 'cat', label: 'category' }, DateReceived: { id: 'date', label: 'date' }, Note: { id: 'note', label: 'note' } }
   const EXP_FIELDS = { PaidTo: { id: 'vendor', label: 'paid to' }, Amount: { id: 'amount', label: 'amount' }, Category: { id: 'cat', label: 'category' }, ExpenseDate: { id: 'date', label: 'date' }, Description: { id: 'desc', label: 'description' } }
 
   if (!auth.can('donations:view') && !auth.can('expenses:view')) {
-    location.replace('/app/')
+    location.replace(new URL('../', location.href).href)
     throw new Error('redirecting')
   }
 
@@ -312,6 +406,30 @@
   const years = Array.from({ length: 3 }, (_, i) => curYear - i)
   const monthLabel = now.toLocaleString('default', { month: 'short' })
   const perPage = 20
+  function observe(el, cb) {
+    if (!el) return
+    let visible = false
+    const io = new IntersectionObserver(entries => { visible = entries[0].isIntersecting; if (visible) cb() }, { rootMargin: '200px' })
+    io.observe(el)
+    const timer = setInterval(() => { if (visible) cb() }, 800)
+    return () => { io.disconnect(); clearInterval(timer) }
+  }
+
+  const STATUS_ICONS = {
+    submitted: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3.5l2.5 1.5"/></svg>',
+    approved: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+    rejected: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+    paid: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+  }
+  function statusIcon(s) { return STATUS_ICONS[s] || '' }
+  const STATUS_LABELS = { submitted: 'Pending', approved: 'Approved', paid: 'Paid', rejected: 'Rejected' }
+  function fmtStatus(s) { return STATUS_LABELS[s] || fmtCat(s) }
+  const STATUS_ORDER = { submitted: 0, approved: 1, paid: 2, rejected: 3 }
+  function fmtDate(d) {
+    if (!d) return '—'
+    const dt = new Date(d)
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
 
   function dlCSV(rows, name) {
     const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
@@ -336,18 +454,22 @@
     return 'Required: ' + names.join(', ')
   }
 
-  const emptyDonForm = () => ({ amount: '', method: 'cash', category: 'general', date_received: today, note: '', client_id: null })
-  const emptyExpForm = () => ({ type: 'direct', paid_to: '', amount: '', category: 'utilities', expense_date: today, description: '', client_id: null })
-
-  let donReceiptFile = null
+  const emptyDonForm = () => ({ amount: '', method: 'cash', category: 'general', date_received: today, note: '', member_id: null, receipt: null })
+  const emptyExpForm = () => ({ paid_to: '', amount: '', category: 'utilities', expense_date: today, description: '', member_id: null })
 
   function resetForm() {
+    document.querySelectorAll('.field-err').forEach(el => el.classList.remove('field-err'))
     s.editId = null; s.addErr = null; s.detailExp = null
-    s.receiptPreview = ''; s.receiptName = ''; s.receipts = []; s.extracting = false; donReceiptFile = null
+    s.receiptPreview = ''; s.receiptName = ''; s.receipts = []; s.extracting = false
     s.memberQuery = ''; s.memberHits = []; s.vendorHits = []
     s.donHistory = []; s.actionNote = ''; s.actionRef = ''; s.actionAmt = ''
-    s.delConfirm = false; s.donForm = emptyDonForm(); s.expForm = emptyExpForm()
+    s.delConfirm = false; s.deleting = false
+    s.donForm = emptyDonForm(); s.expForm = emptyExpForm()
+    _syncedAmt = ''; _syncedDesc = ''
   }
+
+  let pendingExtracts = 0
+  let _syncedAmt = '', _syncedDesc = ''
 
   function syncExpReceipts() {
     let total = 0, descs = []
@@ -356,8 +478,14 @@
       if (r.data.amount) total += parseFloat(r.data.amount)
       if (r.data.description) descs.push(r.data.description)
     }
-    if (total) s.expForm.amount = total.toFixed(2)
-    if (descs.length) s.expForm.description = descs.join(';\n')
+    const newAmt = total ? total.toFixed(2) : ''
+    if (newAmt && (s.expForm.amount === _syncedAmt || !s.expForm.amount)) {
+      s.expForm.amount = newAmt; _syncedAmt = newAmt
+    }
+    const newDesc = descs.join(';\n')
+    if (newDesc && (s.expForm.description === _syncedDesc || !s.expForm.description)) {
+      s.expForm.description = newDesc; _syncedDesc = newDesc
+    }
     const first = s.receipts.find(r => r.data)?.data
     if (!first) return
     if (!s.expForm.paid_to && first.vendor) s.expForm.paid_to = first.vendor
@@ -365,52 +493,220 @@
     if (s.expForm.expense_date === today && first.date) s.expForm.expense_date = first.date
   }
 
+  const AMT_KEYS = new Set(['amount', 'tax_amount', 'eligible_amount'])
+  const META_KEYS = new Set(['id', 'created_at', 'updated_at', 'updated_by', 'attachments', 'submitter_name', 'due_date', 'currency', 'expense_no', 'member_id', 'paid_by', 'count', 'status', 'approval'])
+
+  function parseDiff(d) {
+    if (!d) return null
+    if (typeof d === 'string') { try { return JSON.parse(d) } catch { return null } }
+    return d
+  }
+
+  function fmtFieldVal(k, v) {
+    if (v == null || v === '') return '—'
+    if (AMT_KEYS.has(k)) return '$' + fmtAmt(v)
+    return fmtCat(String(v))
+  }
+
+  function eventBadge(h) {
+    if (h.action !== 'update') return h.action
+    const d = parseDiff(h.diff)
+    if (!d) return 'update'
+    if (d.status) return d.status
+    if (d.approval) return d.approval === 'approve' ? 'approved' : d.approval
+    return 'update'
+  }
+
+  function eventLabel(h) {
+    if (h.action === 'create') return 'Created'
+    if (h.action === 'archive' || h.action === 'delete') return 'Deleted'
+    if (h.action !== 'update') return fmtCat(h.action)
+    const d = parseDiff(h.diff)
+    if (!d) return 'Updated'
+    if (d.approval) return 'Approved' + (d.count ? ` (${d.count})` : '')
+    if (d.status) return fmtStatus(d.status)
+    return 'Updated'
+  }
+
+  function eventDetail(h) {
+    if (!h.diff || h.action === 'create' || h.action === 'archive' || h.action === 'delete') return ''
+    const d = parseDiff(h.diff)
+    if (!d) return ''
+    const parts = []
+    for (const [k, v] of Object.entries(d)) {
+      if (META_KEYS.has(k)) continue
+      if (v && typeof v === 'object' && 'old' in v && 'new' in v) {
+        parts.push(fmtCat(k) + ' ' + fmtFieldVal(k, v.old) + ' → ' + fmtFieldVal(k, v.new))
+      } else if (k === 'note' && v) {
+        parts.push(v)
+      } else if (AMT_KEYS.has(k)) {
+        parts.push(fmtCat(k) + ' $' + fmtAmt(v))
+      } else if (k === 'bank_ref' && v) {
+        parts.push('Ref ' + v)
+      }
+    }
+    return parts.join(' · ')
+  }
+
+  const ACTIVITY_ICONS = {
+    create: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v6M5 8h6"/></svg>',
+    approved: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+    rejected: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+    reject: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+    paid: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+    submitted: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3.5l2.5 1.5"/></svg>',
+    update: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/></svg>',
+    delete: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5v8h6v-8"/></svg>',
+  }
+  function activityIcon(badge) { return ACTIVITY_ICONS[badge] || ACTIVITY_ICONS.update }
+
   const s = init({
     year: curYear, years, monthLabel,
     activeTab: location.hash.slice(1) || 'expenses',
     expFormHTML: '', donFormHTML: '',
-    editId: null, showAdd: false,
-    loading: false, adding: false, extracting: false, actioning: false,
+    editId: null, showAdd: false, filePickerOpen: false,
+    loading: false, adding: false, deleting: false, extracting: false, actioning: false,
     receiptPreview: '', receiptName: '', receipts: [], lightboxSrc: '',
-    loadErr: null, addErr: null, truncated: false, delConfirm: false,
+    loadErr: null, addErr: null, delConfirm: false,
 
-    donations: [], expenses: [], memberNames: {},
+    donations: [], expenses: [], memberNames: {}, userNames: {},
+    expTotal: 0, donTotal: 0, expLoadingMore: false, donLoadingMore: false,
     donForm: emptyDonForm(), expForm: emptyExpForm(),
     donCats: DON_CATS, expCats: EXP_CATS, donMethods: DON_METHODS,
     expStatuses: Object.keys(EXP_STATUSES),
-    fmt: fmtCat, fmtAmt,
+    fmt: fmtCat, fmtAmt, fmtDate, fmtStatus, hl, eventBadge, eventLabel, eventDetail, observe, statusIcon, activityIcon,
+    timeAgo(dt) {
+      if (!dt) return ''
+      const m = Math.floor((Date.now() - new Date(dt).getTime()) / 60000)
+      if (m < 60) return m + 'm'
+      const h = Math.floor(m / 60)
+      if (h < 24) return h + 'h'
+      const d = Math.floor(h / 24)
+      return d < 7 ? d + 'd' : Math.floor(d / 7) + 'w'
+    },
+    expMeta(x) {
+      const hist = this.expInlineHistory[x.id]
+      if (hist?.length) {
+        const h = hist[0]
+        const who = this.userNames[h.user_id] || ''
+        return eventLabel(h) + (who ? ' by ' + who : '') + ' \u2022 ' + this.timeAgo(h.created_at)
+      }
+      return fmtStatus(x.status || 'submitted') + ' \u2022 ' + this.timeAgo(x.updated_at || x.created_at)
+    },
+    toggleExpand(id) {
+      if (this.expExpandId === id) { this.expExpandId = null; return }
+      this.expExpandId = id
+      if (!this.expInlineHistory[id]) loadExpInlineHistory(id)
+    },
 
+    apiBase: BASE,
     memberHits: [], memberQuery: '', vendorHits: [],
     detailExp: null, expApprovals: [], expHistory: [], donHistory: [],
     actionNote: '', actionRef: '', actionAmt: '',
-    get expEditable() { return !this.detailExp || this.detailExp.status === 'draft' || this.detailExp.status === 'returned' },
+    get expEditable() {
+      if (!this.detailExp) return true
+      if (this.detailExp.status !== 'submitted') return false
+      return !this.can('expenses:approve')
+    },
+    get expAttachments() { return this.detailExp?.attachments || [] },
+    get expTimeline() {
+      const entries = []
+      for (const a of this.expApprovals) {
+        entries.push({
+          badge: a.action === 'approve' ? 'approved' : a.action,
+          label: a.action === 'approve' ? 'Approved' : a.action === 'reject' ? 'Rejected' : fmtCat(a.action),
+          actor: this.memberNames[a.approved_by] || '',
+          detail: a.note || '',
+          date: a.created_at,
+        })
+      }
+      for (const h of this.expHistory) {
+        const d = parseDiff(h.diff)
+        if (d?.approval) continue
+        entries.push({
+          badge: eventBadge(h),
+          label: eventLabel(h),
+          actor: this.userNames[h.user_id] || '',
+          detail: eventDetail(h),
+          date: h.created_at,
+        })
+      }
+      entries.sort((a, b) => new Date(b.date) - new Date(a.date))
+      return entries
+    },
 
-    get curMonth() { return String(this.year) + '-' + String(now.getMonth() + 1).padStart(2, '0') },
-    get prevMonth() { const d = new Date(this.year, now.getMonth() - 1, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') },
+    get curMonth() { return String(this.year) + '-' + String(new Date().getMonth() + 1).padStart(2, '0') },
+    get prevMonth() { const d = new Date(this.year, new Date().getMonth() - 1, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') },
     get expMonth()      { return this.expenses.filter(x => (x.expense_date || '').slice(0, 7) === this.curMonth).reduce((s, x) => s + (x.amount || 0), 0) },
     get expPrevMonth()  { return this.expenses.filter(x => (x.expense_date || '').slice(0, 7) === this.prevMonth).reduce((s, x) => s + (x.amount || 0), 0) },
     get donMonth()      { return this.donations.filter(d => (d.date_received || '').slice(0, 7) === this.curMonth).reduce((s, d) => s + (d.amount || 0), 0) },
     get donPrevMonth()  { return this.donations.filter(d => (d.date_received || '').slice(0, 7) === this.prevMonth).reduce((s, d) => s + (d.amount || 0), 0) },
-    get donorsMonth()   { const ids = new Set(); this.donations.filter(d => (d.date_received || '').slice(0, 7) === this.curMonth).forEach(d => ids.add(d.client_id || 0)); return ids.size },
-    get donorsPrevMonth(){ const ids = new Set(); this.donations.filter(d => (d.date_received || '').slice(0, 7) === this.prevMonth).forEach(d => ids.add(d.client_id || 0)); return ids.size },
+    get donorsMonth()   { const ids = new Set(); this.donations.filter(d => (d.date_received || '').slice(0, 7) === this.curMonth).forEach(d => ids.add(d.member_id || 0)); return ids.size },
+    get donorsPrevMonth(){ const ids = new Set(); this.donations.filter(d => (d.date_received || '').slice(0, 7) === this.prevMonth).forEach(d => ids.add(d.member_id || 0)); return ids.size },
     get net() { return this.donMonth - this.expMonth },
 
     trend(cur, prev, invert) {
-      if (!cur && !prev) return { cls: '', num: '', label: 'No data yet' }
-      if (!prev) return { cls: '', num: '', label: 'New this month' }
+      if (!cur && !prev) return { cls: '', dir: '', num: '', label: 'No data yet' }
+      if (!prev) return { cls: '', dir: '', num: '', label: 'New this month' }
       const pct = Math.round((cur - prev) / prev * 100)
-      if (pct === 0) return { cls: '', num: '', label: 'Same as last month' }
+      if (pct === 0) return { cls: '', dir: '', num: '', label: 'Same as last month' }
       const cls = (pct > 0) !== !!invert ? 'stat-ok' : 'stat-err'
-      return { cls, num: (pct > 0 ? '+' : '') + pct + '%', label: ' from last month' }
+      return { cls, dir: pct > 0 ? 'up' : 'down', num: (pct > 0 ? '+' : '') + pct + '%', label: ' from last month' }
     },
     trendDiff(cur, prev) {
-      if (!cur && !prev) return { cls: '', num: '', label: 'No data yet' }
+      if (!cur && !prev) return { cls: '', dir: '', num: '', label: 'No data yet' }
       const d = cur - prev
-      if (d === 0) return { cls: '', num: '', label: 'Same as last month' }
-      return { cls: d > 0 ? 'stat-ok' : 'stat-err', num: (d > 0 ? '+' : '') + d, label: ' from last month' }
+      if (d === 0) return { cls: '', dir: '', num: '', label: 'Same as last month' }
+      return { cls: d > 0 ? 'stat-ok' : 'stat-err', dir: d > 0 ? 'up' : 'down', num: (d > 0 ? '+' : '') + d, label: ' from last month' }
     },
 
     expSearch: '', expFilterCat: '', expFilterStatus: '', expDateFrom: '', expDateTo: '', expPage: 1,
+    expView: 'list', expExpandId: null, expInlineHistory: {}, expInlineLoading: {},
+    expSortBy: 'expense_date', expSortDir: 'desc',
+    expCols: [
+      { key: 'expense_date', label: 'Date' },
+      { key: 'status', label: 'Status' },
+      { key: 'paid_to', label: 'Paid to' },
+      { key: 'category', label: 'Category' },
+      { key: 'amount', label: 'Amount', right: true },
+    ],
+    _dragCol: null,
+    _reorderExpCol(target) {
+      const cols = [...this.expCols]
+      const from = cols.findIndex(c => c.key === this._dragCol)
+      const to = cols.findIndex(c => c.key === target)
+      if (from < 0 || to < 0 || from === to) return
+      const [col] = cols.splice(from, 1)
+      cols.splice(to, 0, col)
+      this.expCols = cols
+    },
+    _expCell(x, key) {
+      const q = this.expSearch
+      switch (key) {
+        case 'expense_date': return fmtDate(x.expense_date)
+        case 'status': { const st = x.status || 'submitted'; return '<span class="status-icon status-' + st + '">' + statusIcon(st) + ' ' + fmtStatus(st) + '</span>' }
+        case 'paid_to': return hl(x.paid_to || '', q)
+        case 'category': return '<span class="badge">' + hl(fmtCat(x.category), q) + '</span>'
+        case '_submitter': return '<span class="dim">' + hl(this.memberNames[x.member_id] || '—', q) + '</span>'
+        case 'amount': return '$' + fmtAmt(x.amount)
+        default: return ''
+      }
+    },
+
+    _doSort(arr, key, dir, resolve) {
+      if (!key) return arr
+      const d = dir === 'desc' ? -1 : 1
+      return [...arr].sort((a, b) => {
+        let va = resolve ? resolve(a) : a[key] ?? '', vb = resolve ? resolve(b) : b[key] ?? ''
+        if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * d
+        return String(va).localeCompare(String(vb)) * d
+      })
+    },
+    _toggleSort(prefix, col) {
+      if (this[prefix + 'SortBy'] === col) this[prefix + 'SortDir'] = this[prefix + 'SortDir'] === 'asc' ? 'desc' : 'asc'
+      else { this[prefix + 'SortBy'] = col; this[prefix + 'SortDir'] = 'asc' }
+    },
+    _sortCls(prefix, col) { return this[prefix + 'SortBy'] === col ? (this[prefix + 'SortDir'] === 'asc' ? 'th-sort-asc' : 'th-sort-desc') : '' },
     get expFiltered() {
       const q = this.expSearch.toLowerCase()
       return this.expenses.filter(r => {
@@ -419,13 +715,37 @@
         if (this.expFilterCat && r.category !== this.expFilterCat) return false
         if (this.expDateFrom && dt < this.expDateFrom) return false
         if (this.expDateTo && dt > this.expDateTo) return false
-        return !q || [r.paid_to, r.description].filter(Boolean).join(' ').toLowerCase().includes(q)
+        return !q || [r.paid_to, r.description, r.expense_no, String(r.id || ''), r.expense_date?.slice(0, 10), r.member_id ? this.memberNames[r.member_id] : '', fmtCat(r.category)].filter(Boolean).join(' ').toLowerCase().includes(q)
       })
     },
-    get expTotalPages() { return Math.max(1, Math.ceil(this.expFiltered.length / perPage)) },
-    get expPaged() { return this.expFiltered.slice((this.expPage - 1) * perPage, this.expPage * perPage) },
+    get expGrouped() {
+      const map = {}
+      for (const x of this.expFiltered) {
+        const d = x.expense_date?.slice(0, 7) || 'unknown'
+        if (!map[d]) map[d] = { key: d, items: [], total: 0 }
+        map[d].items.push(x)
+        map[d].total += x.amount || 0
+      }
+      const groups = Object.values(map).sort((a, b) => b.key.localeCompare(a.key))
+      for (const g of groups) g.items.sort((a, b) => (b.expense_date || '') > (a.expense_date || '') ? 1 : -1)
+      return groups
+    },
+    fmtMonth(key) {
+      if (key === 'unknown') return 'No date'
+      const [y, m] = key.split('-')
+      return new Date(+y, +m - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+    },
+    get expHasMore() { return this.expPage * perPage < this.expFiltered.length || this.expenses.length < this.expTotal },
+    get expPaged() {
+      const k = this.expSortBy
+      const resolve = k === '_submitter' ? r => this.memberNames[r.member_id] || ''
+        : k === 'status' ? r => STATUS_ORDER[r.status] ?? 9
+        : null
+      const arr = k ? this._doSort(this.expFiltered, k, this.expSortDir, resolve) : [...this.expFiltered].sort((a, b) => (b.expense_date||'') > (a.expense_date||'') ? 1 : -1)
+      return arr.slice(0, this.expPage * perPage)
+    },
 
-    donSearch: '', donFilterCat: '', donDateFrom: '', donDateTo: '', donPage: 1,
+    donSearch: '', donFilterCat: '', donDateFrom: '', donDateTo: '', donPage: 1, donSortBy: '', donSortDir: 'asc',
     get donFiltered() {
       const q = this.donSearch.toLowerCase()
       return this.donations.filter(r => {
@@ -433,17 +753,20 @@
         if (this.donFilterCat && r.category !== this.donFilterCat) return false
         if (this.donDateFrom && dt < this.donDateFrom) return false
         if (this.donDateTo && dt > this.donDateTo) return false
-        return !q || [r.note, r.method, r.client_id ? this.memberNames[r.client_id] : ''].filter(Boolean).join(' ').toLowerCase().includes(q)
+        return !q || [r.note, r.method, r.member_id ? this.memberNames[r.member_id] : ''].filter(Boolean).join(' ').toLowerCase().includes(q)
       })
     },
-    get donTotalPages() { return Math.max(1, Math.ceil(this.donFiltered.length / perPage)) },
-    get donPaged() { return this.donFiltered.slice((this.donPage - 1) * perPage, this.donPage * perPage) },
+    get donHasMore() { return this.donPage * perPage < this.donFiltered.length || this.donations.length < this.donTotal },
+    get donPaged() {
+      const arr = this.donSortBy ? this._doSort(this.donFiltered, this.donSortBy, this.donSortDir) : this.donFiltered
+      return arr.slice(0, this.donPage * perPage)
+    },
 
-    donorSearch: '', donorPage: 1,
+    donorSearch: '', donorPage: 1, donorSortBy: 'total', donorSortDir: 'desc',
     get donors() {
       const map = {}
       for (const d of this.donations) {
-        const key = d.client_id || 0
+        const key = d.member_id || 0
         if (!map[key]) map[key] = { id: key, name: this.memberNames[key] || 'Anonymous', count: 0, total: 0, lastDate: '' }
         map[key].count++
         map[key].total += d.amount || 0
@@ -453,8 +776,11 @@
       return Object.values(map).sort((a, b) => b.total - a.total)
     },
     get donorFiltered() { const q = this.donorSearch.toLowerCase(); return q ? this.donors.filter(d => d.name.toLowerCase().includes(q)) : this.donors },
-    get donorTotalPages() { return Math.max(1, Math.ceil(this.donorFiltered.length / perPage)) },
-    get donorPaged() { return this.donorFiltered.slice((this.donorPage - 1) * perPage, this.donorPage * perPage) },
+    get donorHasMore() { return this.donorPage * perPage < this.donorFiltered.length },
+    get donorPaged() {
+      const arr = this.donorSortBy ? this._doSort(this.donorFiltered, this.donorSortBy, this.donorSortDir) : this.donorFiltered
+      return arr.slice(0, this.donorPage * perPage)
+    },
 
     switchTab(tab) {
       s.activeTab = tab
@@ -462,7 +788,7 @@
       if (location.hash.slice(1) !== tab) history.pushState(null, '', '#' + tab)
     },
 
-    openAdd() { if (s.editId || s.detailExp) resetForm(); s.showAdd = true },
+    openAdd() { resetForm(); s.showAdd = true },
     cancelAdd() { resetForm(); s.showAdd = false },
 
     filterDonors(q) {
@@ -482,10 +808,10 @@
       const seen = new Set()
       s.vendorHits = s.expenses.map(x => x.paid_to).filter(v => v && !seen.has(v) && (seen.add(v), v.toLowerCase().includes(q.toLowerCase()))).slice(0, 5)
     },
-    selectExpMember(m) { s.expForm.client_id = m.id; s.expForm.paid_to = m.name; s.memberQuery = m.name; s.memberHits = [] },
-    clearExpMember()   { s.expForm.client_id = null; s.expForm.paid_to = ''; s.memberQuery = ''; s.memberHits = [] },
-    selectDonor(m)     { s.donForm.client_id = m.id; s.memberQuery = m.name; s.memberHits = [] },
-    clearDonor()       { s.donForm.client_id = null; s.memberQuery = ''; s.memberHits = [] },
+    selectExpMember(m) { s.expForm.member_id = m.id; s.expForm.paid_to = m.name; s.memberQuery = m.name; s.memberHits = [] },
+    clearExpMember()   { s.expForm.member_id = null; s.expForm.paid_to = ''; s.memberQuery = ''; s.memberHits = [] },
+    selectDonor(m)     { s.donForm.member_id = m.id; s.memberQuery = m.name; s.memberHits = [] },
+    clearDonor()       { s.donForm.member_id = null; s.memberQuery = ''; s.memberHits = [] },
 
     async scanFile(file) {
       if (!file) return
@@ -498,34 +824,45 @@
       try {
         const res = await api.extractDoc(file)
         const d = res.extracted_data || {}
-        donReceiptFile = res.file_info || null
-        s.donForm = { ...s.donForm, amount: d.amount || s.donForm.amount, method: d.method || s.donForm.method, category: d.category || s.donForm.category, date_received: d.date || s.donForm.date_received, note: d.description || s.donForm.note }
+        if (d.amount) s.donForm.amount = d.amount
+        if (d.method) s.donForm.method = d.method
+        if (d.category) s.donForm.category = d.category
+        if (d.date) s.donForm.date_received = d.date
+        if (d.description) s.donForm.note = d.description
+        s.donForm.receipt = res.file_info || null
       } catch (e) { s.addErr = e.message }
       finally { s.extracting = false }
     },
 
     async addReceipts(fileList) {
       if (!fileList?.length) return
-      s.addErr = null
-      const files = [...fileList]
+      const fingerprints = new Set(s.receipts.map(r => r.name + ':' + r.size))
+      const files = [...fileList].filter(f => !fingerprints.has(f.name + ':' + f.size))
+      if (!files.length) { s.addErr = 'Receipt already added'; return }
+      s.addErr = null; pendingExtracts++; s.extracting = true
       const startIdx = s.receipts.length
-      s.receipts.push(...files.map(f => ({ name: f.name, preview: '', data: null, extracting: true, err: null })))
-      await Promise.all(files.map(async (file, i) => {
-        const r = s.receipts[startIdx + i]
-        if (file.type.startsWith('image/')) r.preview = await new Promise(ok => { const rd = new FileReader(); rd.onload = () => ok(rd.result); rd.readAsDataURL(file) })
-        try { const res = await api.extractDoc(file); r.data = res.extracted_data || {}; r.fileInfo = res.file_info || null }
-        catch (e) { r.err = e.message; s.addErr = e.message }
-        r.extracting = false
-        syncExpReceipts()
-      }))
+      s.receipts.push(...files.map(f => ({ name: f.name, size: f.size, preview: '', data: null, extracting: true, err: null })))
+      try {
+        await Promise.all(files.map(async (file, i) => {
+          const r = s.receipts[startIdx + i]
+          if (file.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => { r.preview = rd.result }; rd.readAsDataURL(file) }
+          try { const res = await api.extractDoc(file); r.data = res.extracted_data || {}; r.fileInfo = res.file_info || null }
+          catch (e) { r.err = e.message; s.addErr = e.message }
+          r.extracting = false
+          syncExpReceipts()
+        }))
+      } finally {
+        pendingExtracts--
+        s.extracting = false
+      }
     },
 
     removeReceipt(r) { const i = s.receipts.indexOf(r); if (i >= 0) s.receipts.splice(i, 1); syncExpReceipts() },
 
     editDonation(d) {
       s.editId = d.id; s.addErr = null; s.detailExp = null; s.donHistory = []
-      s.donForm = { amount: rawAmt(d.amount), method: d.method || 'cash', category: d.category || 'general', date_received: (d.date_received || '').slice(0, 10), note: d.note || '', client_id: d.client_id || null }
-      s.memberQuery = d.client_id ? (s.memberNames[d.client_id] || '') : ''
+      s.donForm = { amount: rawAmt(d.amount), method: d.method || 'cash', category: d.category || 'general', date_received: (d.date_received || '').slice(0, 10), note: d.note || '', member_id: d.member_id || null, receipt: null }
+      s.memberQuery = d.member_id ? (s.memberNames[d.member_id] || '') : ''
       s.memberHits = []; s.showAdd = true
       api.getAuditLogs({ entity_type: 'donation', entity_id: d.id, limit: 20, sortBy: 'created_at', sortDesc: 'true' })
         .then(r => { s.donHistory = r.items || [] }).catch(() => {})
@@ -533,60 +870,75 @@
 
     editExpense(x) {
       s.editId = x.id; s.addErr = null; s.actionNote = ''; s.actionRef = ''; s.actionAmt = ''; s.detailExp = x
-      if (x.status === 'draft' || x.status === 'returned') {
-        s.expForm = { type: x.type || 'direct', client_id: x.client_id || null, paid_to: x.paid_to || '', amount: rawAmt(x.amount), category: x.category || 'utilities', expense_date: (x.expense_date || '').slice(0, 10), description: x.description || '' }
-        s.memberQuery = x.client_id ? (s.memberNames[x.client_id] || x.paid_to || '') : ''
+      if (x.status === 'submitted' && !s.can('expenses:approve')) {
+        s.expForm = { member_id: x.member_id || null, paid_to: x.paid_to || '', amount: rawAmt(x.amount), category: x.category || 'utilities', expense_date: (x.expense_date || '').slice(0, 10), description: x.description || '' }
+        s.memberQuery = x.member_id ? (s.memberNames[x.member_id] || x.paid_to || '') : ''
         s.memberHits = []
       } else loadExpenseDetail(x.id)
       s.showAdd = true
     },
 
-    async submitExp()    { await expAction(() => api.submitExpense(s.editId), 'Expense submitted') },
     async approveExp()   { await expAction(() => api.approveExpense(s.editId, s.actionNote), 'Expense approved') },
-    async returnExp()    { if (!s.actionNote.trim()) { s.addErr = 'Note is required'; return }; await expAction(() => api.returnExpense(s.editId, s.actionNote), 'Expense returned') },
     async rejectExp()    { if (!s.actionNote.trim()) { s.addErr = 'Note is required'; return }; await expAction(() => api.rejectExpense(s.editId, s.actionNote), 'Expense rejected') },
     async payExp()       { await expAction(() => api.payExpense(s.editId, s.actionRef), 'Expense marked as paid') },
-    async reconcileExp() { if (!s.actionAmt) { s.addErr = 'Actual amount is required'; return }; await expAction(() => api.reconcileExpense(s.editId, toCents(s.actionAmt)), 'Expense reconciled') },
-    async closeExp()     { await expAction(() => api.closeExpense(s.editId, s.actionRef), 'Expense closed') },
+
+    _quickLoading: {},
+    async quickApprove(x) {
+      if (s._quickLoading[x.id]) return
+      s._quickLoading = { ...s._quickLoading, [x.id]: true }
+      try { await api.approveExpense(x.id, ''); x.status = 'approved'; s.expenses = [...s.expenses]; toast('Approved', 'success') }
+      catch (e) { toast(e.message) }
+      finally { const l = { ...s._quickLoading }; delete l[x.id]; s._quickLoading = l }
+    },
+    async quickPay(x) {
+      if (s._quickLoading[x.id]) return
+      s._quickLoading = { ...s._quickLoading, [x.id]: true }
+      try { await api.payExpense(x.id, ''); x.status = 'paid'; s.expenses = [...s.expenses]; toast('Marked paid', 'success') }
+      catch (e) { toast(e.message) }
+      finally { const l = { ...s._quickLoading }; delete l[x.id]; s._quickLoading = l }
+    },
 
     async saveDonation() {
       if (s.extracting) { s.addErr = 'Please wait for receipt processing to complete.'; return }
       s.addErr = null; s.adding = true
       try {
-        const donFiles = donReceiptFile && !s.editId ? [{ tmp_name: donReceiptFile.file_name, original_name: donReceiptFile.original_name, mime_type: donReceiptFile.mime_type, file_size: donReceiptFile.file_size }] : undefined
-        const data = { amount: toCents(s.donForm.amount), method: s.donForm.method, category: s.donForm.category, date_received: s.donForm.date_received, note: s.donForm.note, client_id: s.donForm.client_id || undefined, files: donFiles }
+        const f = s.donForm.receipt
+        const donFiles = f && !s.editId ? [{ tmp_name: f.file_name, original_name: f.original_name, mime_type: f.mime_type, file_size: f.file_size }] : undefined
+        const data = { amount: toCents(s.donForm.amount), method: s.donForm.method, category: s.donForm.category, date_received: s.donForm.date_received, note: s.donForm.note, member_id: s.donForm.member_id || undefined, files: donFiles }
         if (s.editId) await api.updateDonation(s.editId, data); else await api.createDonation(data)
         toast(s.editId ? 'Donation updated' : 'Donation saved', 'success')
+        document.querySelectorAll('.field-err').forEach(el => el.classList.remove('field-err'))
         s.donForm = emptyDonForm(); s.editId = null; s.showAdd = false; loadAll()
       } catch (e) { s.addErr = setErr(e.message, 'don', DON_FIELDS) }
       finally { s.adding = false }
     },
 
     async saveExpense() {
-      if (s.receipts.some(r => r.extracting)) { s.addErr = 'Please wait for receipt processing to complete.'; return }
+      if (pendingExtracts > 0) { s.addErr = 'Please wait for receipt processing to complete.'; return }
       s.addErr = null; s.adding = true
       try {
         const files = s.receipts.filter(r => r.fileInfo).map(r => ({ tmp_name: r.fileInfo.file_name, original_name: r.fileInfo.original_name, mime_type: r.fileInfo.mime_type, file_size: r.fileInfo.file_size }))
-        const data = { amount: toCents(s.expForm.amount), type: s.expForm.type, paid_to: s.expForm.paid_to, description: s.expForm.description, category: s.expForm.category, currency: 'CAD', expense_date: s.expForm.expense_date, client_id: s.expForm.type !== 'direct' ? s.expForm.client_id : undefined, files: !s.editId && files.length ? files : undefined }
+        const data = { amount: toCents(s.expForm.amount), paid_to: s.expForm.paid_to, description: s.expForm.description, category: s.expForm.category, currency: 'CAD', expense_date: s.expForm.expense_date, member_id: s.expForm.member_id || undefined, files: !s.editId && files.length ? files : undefined }
         if (s.editId) await api.updateExpense(s.editId, data); else await api.createExpense(data)
         toast(s.editId ? 'Expense updated' : 'Expense saved', 'success')
+        document.querySelectorAll('.field-err').forEach(el => el.classList.remove('field-err'))
         s.expForm = emptyExpForm(); s.editId = null; s.showAdd = false; loadAll()
       } catch (e) { s.addErr = setErr(e.message, 'exp', EXP_FIELDS) }
       finally { s.adding = false }
     },
 
     async delDonation() {
-      s.adding = true
+      s.deleting = true
       try { await api.deleteDonation(s.editId); resetForm(); s.showAdd = false; loadAll() }
       catch (e) { s.addErr = e.message }
-      finally { s.adding = false }
+      finally { s.deleting = false }
     },
 
     async delExpense() {
-      s.adding = true
+      s.deleting = true
       try { await api.deleteExpense(s.editId); resetForm(); s.showAdd = false; loadAll() }
       catch (e) { s.addErr = e.message }
-      finally { s.adding = false }
+      finally { s.deleting = false }
     },
 
     exportCSV() {
@@ -596,13 +948,28 @@
         dlCSV(rows, 'donors.csv')
       } else if (this.activeTab === 'donations') {
         const rows = [['Date', 'Donor', 'Method', 'Category', 'Amount', 'Note']]
-        for (const d of this.donFiltered) rows.push([d.date_received?.slice(0, 10), d.client_id ? (this.memberNames[d.client_id] || '') : 'Anonymous', d.method, d.category, rawAmt(d.amount), d.note || ''])
+        for (const d of this.donFiltered) rows.push([d.date_received?.slice(0, 10), d.member_id ? (this.memberNames[d.member_id] || '') : 'Anonymous', d.method, d.category, rawAmt(d.amount), d.note || ''])
         dlCSV(rows, 'donations.csv')
       } else {
-        const rows = [['Date', 'Status', 'Type', 'Paid To', 'Category', 'Amount', 'Description']]
-        for (const x of this.expFiltered) rows.push([x.expense_date?.slice(0, 10), x.status || 'draft', x.type || 'direct', x.paid_to, x.category, rawAmt(x.amount), x.description || ''])
+        const rows = [['Date', 'Status', 'Paid To', 'Category', 'Amount', 'Description']]
+        for (const x of this.expFiltered) rows.push([x.expense_date?.slice(0, 10), x.status || 'submitted', x.paid_to, x.category, rawAmt(x.amount), x.description || ''])
         dlCSV(rows, 'expenses.csv')
       }
+    },
+
+    printTable() {
+      const section = document.querySelector('section:not(.hidden)')
+      const table = section?.querySelector('table')
+      if (!table) return
+      const w = window.open('', '_blank')
+      w.document.write('<html><head><title>' + fmtCat(this.activeTab) + '</title>')
+      w.document.write('<style>body{font-family:system-ui,sans-serif;padding:2rem}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px 12px;text-align:left;border-bottom:1px solid #ddd}th{font-weight:600;border-bottom:2px solid #999}h1{font-size:1.5rem;margin-bottom:1rem}@media print{body{padding:0}}</style>')
+      w.document.write('</head><body>')
+      w.document.write('<h1>' + fmtCat(this.activeTab) + ' — ' + this.year + '</h1>')
+      w.document.write(table.outerHTML)
+      w.document.write('</body></html>')
+      w.document.close()
+      w.print()
     },
 
     loadAll,
@@ -615,36 +982,71 @@
     finally { s.actioning = false }
   }
 
+  async function loadExpInlineHistory(id) {
+    s.expInlineLoading = { ...s.expInlineLoading, [id]: true }
+    try {
+      const r = await api.getAuditLogs({ entity_type: 'expense', entity_id: id, limit: 20, sortBy: 'created_at', sortDesc: 'true' })
+      s.expInlineHistory = { ...s.expInlineHistory, [id]: r.items || [] }
+    } catch { s.expInlineHistory = { ...s.expInlineHistory, [id]: [] } }
+    finally {
+      const l = { ...s.expInlineLoading }; delete l[id]; s.expInlineLoading = l
+    }
+  }
+
   async function loadExpenseDetail(id) {
     s.expApprovals = []; s.expHistory = []
-    const [approvals, history] = await Promise.all([
+    const [exp, approvals, history] = await Promise.all([
+      api.getExpense(id).catch(() => null),
       api.getExpenseApprovals(id).catch(() => ({ items: [] })),
       api.getAuditLogs({ entity_type: 'expense', entity_id: id, limit: 20, sortBy: 'created_at', sortDesc: 'true' }).catch(() => ({ items: [] })),
     ])
+    if (exp) s.detailExp = exp
     s.expApprovals = approvals.items || approvals || []
     s.expHistory = history.items || []
   }
 
+  const BATCH = 200
+
+  async function loadRemaining(fn, params, key, totalKey, loadingKey) {
+    let page = 2
+    s[loadingKey] = true
+    try {
+      while (s[key].length < s[totalKey]) {
+        const r = await fn({ ...params, limit: BATCH, page })
+        s[key] = [...s[key], ...(r.items || [])]
+        page++
+      }
+    } catch {} finally { s[loadingKey] = false }
+  }
+
   async function loadAll() {
     s.loading = true; s.loadErr = null
+    s.expPage = 1; s.donPage = 1; s.donorPage = 1
+    const dateP = { dateFrom: `${s.year}-01-01`, dateTo: `${s.year}-12-31` }
     try {
       const [don, exp, mem] = await Promise.all([
-        api.getDonations({ limit: 1000, dateFrom: `${s.year}-01-01`, dateTo: `${s.year}-12-31` }),
-        api.getExpenses({ limit: 1000, dateFrom: `${s.year}-01-01`, dateTo: `${s.year}-12-31` }),
+        api.getDonations({ ...dateP, limit: BATCH, page: 1 }),
+        api.getExpenses({ ...dateP, limit: BATCH, page: 1 }),
         api.getMembers({ limit: 500 }),
       ])
       s.donations = don.items || []
       s.expenses = exp.items || []
-      s.truncated = (don.total > s.donations.length) || (exp.total > s.expenses.length)
-      const names = {}
+      s.donTotal = don.total ?? s.donations.length
+      s.expTotal = exp.total ?? s.expenses.length
+      const names = {}, unames = {}
       for (const c of mem.items || []) {
-        const d = typeof c.client === 'string' ? JSON.parse(c.client) : c.client
-        names[c.id] = [d.first_name, d.last_name].filter(Boolean).join(' ') || d.email || 'Unknown'
+        const d = typeof c.data === 'string' ? JSON.parse(c.data) : c.data
+        const nm = d.spiritual_name || d.name || d.email || 'Unknown'
+        names[c.id] = nm
+        if (c.user_id) unames[c.user_id] = nm
       }
       s.memberNames = names
+      s.userNames = unames
     } catch (e) {
       s.loadErr = e.message || 'Failed to load finance data'
     } finally { s.loading = false }
+    loadRemaining(api.getDonations, dateP, 'donations', 'donTotal', 'donLoadingMore')
+    loadRemaining(api.getExpenses, dateP, 'expenses', 'expTotal', 'expLoadingMore')
   }
 
   window.addEventListener('hashchange', () => {

@@ -14,18 +14,18 @@
     <div class="login-page">
 
       <!-- Left: branding panel -->
-      <div class="login-brand" :scope="brand">
+      <div class="login-brand">
         <a href="index.html" class="login-brand-logo">
           <img src="assets/iskcon-montreal.svg" alt="ISKCON Montreal" width="108" height="108" style="filter: brightness(0) invert(1)">
         </a>
-        <div class="login-brand-text" :scope="{ quote: quotes[Math.floor(Math.random() * quotes.length)], fading: false }"
-          :class="{fading: fading}"
-          :onclick="fading=true"
-          :onclick.delay-150="fading=false; quote = quotes.filter(q => q !== quote)[Math.floor(Math.random() * (quotes.length - 1))]"
-          style="cursor: pointer;">
+        <div class="login-brand-text">
           <p>— Śrīla Prabhupāda:</p>
-          <h2 :text="quote.text"></h2>
-          <p style="opacity:.6; margin-top:var(--s-sm); font-size:var(--f-sm)" :text="quote.source"></p>
+          <div class="quotes-carousel">
+            <figure class="quote" :each="(q, i) in quotes" :class="{active: i === qi}">
+              <blockquote :text="q.text"></blockquote>
+              <figcaption><a :href="q.url" :text="q.source" target="_blank" rel="noopener"></a></figcaption>
+            </figure>
+          </div>
         </div>
       </div>
 
@@ -33,8 +33,7 @@
       <div class="login-form-panel">
         <div class="login-form-wrap" :scope="state">
 
-          <button :if="step !== 'email'" type="button" class="btn-link login-back"
-            :onclick="step = 'email'; password = ''; otp = ''; err = null; offline = null">
+          <button :if="step !== 'email'" type="button" class="btn-link login-back" :onclick="goBack">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
             Back
           </button>
@@ -68,6 +67,11 @@
               <input id="otp" class="otp-input" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" :value="otp" required autofocus autocomplete="one-time-code">
             </div>
             <button type="submit" class="btn btn-primary btn-block" :class="{'btn-loading': loading}">Verify</button>
+            <div class="otp-meta">
+              <span :text="'Expires in ' + expiry"></span>
+              <button :if="countdown > 0" type="button" class="btn-link" disabled :text="'Resend in ' + countdown + 's'"></button>
+              <button :if="countdown <= 0" type="button" class="btn-link" :onclick="resend" :class="{'btn-loading': resending}">Resend code</button>
+            </div>
           </form>
 
           <div :if="step === 'email'">
@@ -103,68 +107,46 @@
       // Capture token from OAuth redirect
       auth.capture()
 
+      const notice = new URLSearchParams(location.search).get('msg')
+      if (notice) {
+        history.replaceState(null, '', location.pathname)
+        const el = document.createElement('div')
+        el.className = 'login-toast'
+        el.textContent = notice
+        document.body.appendChild(el)
+        requestAnimationFrame(() => el.classList.add('in'))
+        setTimeout(() => { el.classList.remove('in'); el.addEventListener('transitionend', () => el.remove()) }, 4000)
+      }
+
       let loginStarted = false
+      let otpInterval = null
+
+      const welcomeQuotes = [
+        { text: "If one offers Me with love and devotion a leaf, a flower, a fruit or water, I will accept it.", source: "Bhagavad-gītā As It Is 9.26", url: "https://vedabase.io/en/library/bg/9/26/" },
+        { text: "In this endeavor there is no loss or diminution, and a little advancement on this path can protect one from the most dangerous type of fear.", source: "Bhagavad-gītā As It Is 2.40", url: "https://vedabase.io/en/library/bg/2/40/" },
+        { text: "The cooperation is possible to be made either by life, wealth, intelligence or words.", source: "Letter to Mathura Prasad — Vrindavan, 23 May 1964", url: "https://vedabase.io/en/library/letters/letter-to-mathura-prasad/" },
+        { text: "This process is very easy and can be attempted even by the poorest of the poor, without any kind of qualification.", source: "Bhagavad-gītā As It Is 9.26, Purport", url: "https://vedabase.io/en/library/bg/9/26/" },
+        { text: "A sādhu engages in the highest philanthropic activities for the benediction of all living entities.", source: "Śrīmad-Bhāgavatam 3.25.21, Purport", url: "https://vedabase.io/en/library/sb/3/25/21/" },
+        { text: "For one who sees Me everywhere and sees everything in Me, I am never lost, nor is he ever lost to Me.", source: "Bhagavad-gītā As It Is 6.30", url: "https://vedabase.io/en/library/bg/6/30/" },
+      ]
+
+      const managerQuotes = [
+        { text: "That is the art of management: to draw out spontaneous loving spirit of sacrificing some energy for Krishna.", source: "Letter to Karandhara — Bombay, 22 December 1972", url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133206" },
+        { text: "Do not centralize anything. Each temple must remain independent and self-sufficient.", source: "Letter to Karandhara — Bombay, 22 December 1972", url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133205" },
+        { text: "Krishna Consciousness Movement is for training men to be independently thoughtful and competent… not for making bureaucracy.", source: "Letter to Karandhara — Bombay, 22 December 1972", url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133205" },
+        { text: "Once there is bureaucracy the whole thing will be spoiled.", source: "Letter to Karandhara — Bombay, 22 December 1972", url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133205" },
+        { text: "There must be always individual striving and work and responsibility.", source: "Letter to Karandhara — Bombay, 22 December 1972", url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133205" },
+        { text: "Our leaders shall be careful not to kill the spirit of enthusiastic service, which is individual and spontaneous and voluntary.", source: "Letter to Karandhara — Bombay, 22 December 1972", url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133207" },
+        { text: "Accounts must be kept, things must be in order and lawfully done.", source: "Letter to Karandhara — Bombay, 22 December 1972", url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133205" },
+        { text: "We are world-wide organization… Now that requires proper accounts in all our temples.", source: "Letter to Karandhara — Bombay, 3 December 1972", url: "https://prabhupadabooks.com/letters/bombay/december/03/1972/karandhara" },
+        { text: "Record of expenditures must be there, that is standard procedure.", source: "Letter to Gurudasa & Yamuna — Bombay, 19 December 1972", url: "https://vanisource.org/wiki/721219_-_Letter_to_Gurudasa_and_Yamuna_written_from_Bombay" },
+        { text: "Each center should be responsible for its own management.", source: "Letter to Karandhara — Bombay, 22 December 1972", url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133206" },
+        { text: "This movement is meant for training men to become reliable and responsible.", source: "Letter to Karandhara — Bombay, 22 December 1972", url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133206" },
+      ]
 
       const state = sprae(document.body, {
-        quotes: [
-          {
-            text: "That is the art of management: to draw out spontaneous loving spirit of sacrificing some energy for Krishna.",
-            source: "Letter to Karandhara — Bombay, 22 December 1972",
-            url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133206"
-          },
-
-          {
-            text: "Do not centralize anything. Each temple must remain independent and self-sufficient.",
-            source: "Letter to Karandhara — Bombay, 22 December 1972",
-            url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133205"
-          },
-
-          {
-            text: "Krishna Consciousness Movement is for training men to be independently thoughtful and competent… not for making bureaucracy.",
-            source: "Letter to Karandhara — Bombay, 22 December 1972",
-            url: "https://vedabase.io/en/library/letters/letter-to-karandhara-54/#bb133205"
-          },
-
-          {
-            text: "Once there is bureaucracy the whole thing will be spoiled.",
-            source: "Letter to Karandhara — Bombay, 22 December 1972"
-          },
-
-          {
-            text: "There must be always individual striving and work and responsibility.",
-            source: "Letter to Karandhara — Bombay, 22 December 1972"
-          },
-
-          {
-            text: "Our leaders shall be careful not to kill the spirit of enthusiastic service, which is individual and spontaneous and voluntary.",
-            source: "Letter to Karandhara — Bombay, 22 December 1972"
-          },
-
-          {
-            text: "Accounts must be kept, things must be in order and lawfully done.",
-            source: "Letter to Karandhara — Bombay, 22 December 1972"
-          },
-
-          {
-            text: "We are world-wide organization… Now that requires proper accounts in all our temples.",
-            source: "Letter to Karandhara — Bombay, 3 December 1972"
-          },
-
-          {
-            text: "Record of expenditures must be there, that is standard procedure.",
-            source: "Letter to Gurudasa & Yamuna — Bombay, 19 December 1972"
-          },
-
-          {
-            text: "Each center should be responsible for its own management.",
-            source: "Letter to Karandhara — Bombay, 22 December 1972"
-          },
-
-          {
-            text: "This movement is meant for training men to become reliable and responsible.",
-            source: "Letter to Karandhara — Bombay, 22 December 1972"
-          }
-        ],
+        quotes: welcomeQuotes,
+        qi: Math.floor(Math.random() * welcomeQuotes.length),
 
         step: 'email',
         email: '',
@@ -173,6 +155,51 @@
         loading: false,
         err: null,
         offline: null,
+        countdown: 0,
+        expiry: '',
+        resending: false,
+
+        goBack() {
+          clearInterval(otpInterval)
+          state.step = 'email'
+          state.password = ''
+          state.otp = ''
+          state.loading = false
+          state.err = null
+          state.offline = null
+          state.quotes = welcomeQuotes
+          state.qi = 0
+        },
+
+        startOtpTimer() {
+          const sent = Date.now()
+          clearInterval(otpInterval)
+          state.countdown = 30
+          state.expiry = '10:00'
+          otpInterval = setInterval(() => {
+            const elapsed = Date.now() - sent
+            state.countdown = Math.max(0, Math.ceil((30000 - elapsed) / 1000))
+            const left = Math.max(0, Math.ceil((600000 - elapsed) / 1000))
+            state.expiry = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
+            if (left <= 0) {
+              clearInterval(otpInterval)
+              state.err = 'Code expired. Please request a new one.'
+            }
+          }, 1000)
+        },
+
+        async resend() {
+          state.resending = true
+          state.err = null
+          try {
+            await api.login(state.email, state.password, auth.deviceId, auth.deviceLabel)
+            state.startOtpTimer()
+          } catch (e) {
+            state.err = e.message || 'Could not resend code'
+          } finally {
+            state.resending = false
+          }
+        },
 
         async submit() {
           loginStarted = true
@@ -180,12 +207,16 @@
           state.loading = true
           try {
             const res = await api.login(state.email, '', auth.deviceId, auth.deviceLabel)
+            state.loading = false
             if (res.step === 'password_required') {
               state.step = 'password'
+              state.quotes = managerQuotes
+              state.qi = 0
             } else if (res.step === 'otp_required') {
               state.step = 'otp'
+              state.startOtpTimer()
             } else if (res.token) {
-              auth.save(res.token, res.user)
+              auth.save(res.token, res.user, res.refresh_token)
               window.location.href = 'app/index.html'
             }
           } catch (e) {
@@ -200,10 +231,12 @@
           state.loading = true
           try {
             const res = await api.login(state.email, state.password, auth.deviceId, auth.deviceLabel)
+            state.loading = false
             if (res.step === 'otp_required') {
               state.step = 'otp'
+              state.startOtpTimer()
             } else {
-              auth.save(res.token, res.user)
+              auth.save(res.token, res.user, res.refresh_token)
               window.location.href = 'app/index.html'
             }
           } catch (e) {
@@ -217,8 +250,8 @@
           state.err = null
           state.loading = true
           try {
-            const { token, user } = await api.verifyOtp(state.email, state.otp, auth.deviceId, auth.deviceLabel)
-            auth.save(token, user)
+            const res = await api.verifyOtp(state.email, state.otp, auth.deviceId, auth.deviceLabel)
+            auth.save(res.token, res.user, res.refresh_token)
             window.location.href = 'app/index.html'
           } catch (e) {
             state.err = e.message || 'Verification failed'
@@ -236,6 +269,10 @@
           }
         }
       })
+
+      setInterval(() => {
+        state.qi = (state.qi + 1) % state.quotes.length
+      }, 5000)
 
       fetch(`${BASE}/api/health`).then(r => r.json()).then(d => {
         if (d.status !== 'ok' && !loginStarted) state.offline = 'Server is experiencing issues. Please try again later.'

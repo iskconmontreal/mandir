@@ -5,17 +5,17 @@ const mk = perms => 'header.' + btoa(JSON.stringify({ permissions: perms })) + '
 export const API = 'https://api.iskconmontreal.ca'
 
 export const TOKENS = {
-  admin:     mk(['users:view', 'users:create', 'clients:view', 'clients:create', 'donations:view', 'donations:create', 'expenses:view', 'expenses:create', 'expenses:approve']),
-  treasurer: mk(['donations:view', 'donations:create', 'expenses:view', 'expenses:create', 'expenses:approve', 'clients:view']),
-  member:    mk(['expenses:view', 'expenses:create', 'clients:view']),
+  admin:     mk(['users:view', 'users:create', 'members:view', 'members:create', 'members:manage', 'donations:view', 'donations:create', 'expenses:view', 'expenses:create', 'expenses:approve']),
+  treasurer: mk(['donations:view', 'donations:create', 'expenses:view', 'expenses:create', 'expenses:approve', 'members:view']),
+  member:    mk(['expenses:view', 'expenses:create', 'members:view']),
   viewer:    mk([]),
 }
 
 export const USERS = {
-  admin:     { name: 'Bhakti Devi',   email: 'admin@test.local',     meta: { first_name: 'Bhakti',   last_name: 'Devi' } },
-  treasurer: { name: 'Bhaktin Maria', email: 'treasurer@test.local', meta: { first_name: 'Bhaktin',  last_name: 'Maria' } },
-  member:    { name: 'Prabhu Das',    email: 'member@test.local',    meta: { first_name: 'Prabhu',   last_name: 'Das' } },
-  viewer:    { name: 'Guest',         email: 'guest@test.local',     meta: { first_name: 'Guest',    last_name: '' } },
+  admin:     { name: 'Bhakti Devi',   email: 'admin@test.local',     meta: { name: 'Bhakti Devi' } },
+  treasurer: { name: 'Bhaktin Maria', email: 'treasurer@test.local', meta: { name: 'Bhaktin Maria' } },
+  member:    { name: 'Prabhu Das',    email: 'member@test.local',    meta: { name: 'Prabhu Das' } },
+  viewer:    { name: 'Guest',         email: 'guest@test.local',     meta: { name: 'Guest' } },
 }
 
 export function loginAs(page, role = 'treasurer') {

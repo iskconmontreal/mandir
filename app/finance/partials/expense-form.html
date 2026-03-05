@@ -1,11 +1,11 @@
 <!-- Expense modal (add/edit/detail) -->
-<div class="modal-overlay" :if="showAdd && activeTab === 'expenses'" :onkeydown.esc.document="showAdd = false" :onclick="e => { if (e.target === e.currentTarget) showAdd = false }">
+<div class="modal-overlay" :if="showAdd && activeTab === 'expenses'" :onkeydown.esc.document="e => { if (lightboxSrc || filePickerOpen) return; showAdd = false }" :onclick="e => { if (e.target === e.currentTarget) showAdd = false }">
   <div class="modal">
     <div class="modal-header">
       <h2 :if="!detailExp" :text="editId ? 'Edit Expense' : 'Add Expense'"></h2>
       <h2 :if="detailExp" style="display:flex;align-items:center;gap:var(--s-sm)">
         <span :text="detailExp?.expense_no || 'Expense'"></span>
-        <span class="badge" :class="'badge-' + detailExp?.status" :text="fmt(detailExp?.status)"></span>
+        <span class="badge" :class="'badge-' + detailExp?.status" :text="fmtStatus(detailExp?.status)"></span>
       </h2>
       <button class="modal-close" :onclick="showAdd = false">&times;</button>
     </div>
@@ -15,10 +15,6 @@
       <div :if="detailExp && !expEditable" style="display:flex;flex-direction:column;gap:var(--s-md)">
         <div class="detail-grid">
           <div class="detail-field">
-            <div class="stat-label">Type</div>
-            <div :text="fmt(detailExp?.type || 'direct')"></div>
-          </div>
-          <div class="detail-field">
             <div class="stat-label">Amount</div>
             <div :text="'$' + fmtAmt(detailExp?.amount)"></div>
           </div>
@@ -26,13 +22,9 @@
             <div class="stat-label">Tax</div>
             <div :text="'$' + fmtAmt(detailExp?.tax_amount)"></div>
           </div>
-          <div class="detail-field" :if="detailExp?.actual_amount && detailExp?.actual_amount !== detailExp?.amount">
-            <div class="stat-label">Actual Amount</div>
-            <div :text="'$' + fmtAmt(detailExp?.actual_amount)"></div>
-          </div>
           <div class="detail-field">
             <div class="stat-label">Paid to</div>
-            <div :text="detailExp?.client_id ? (memberNames[detailExp?.client_id] || detailExp?.paid_to) : detailExp?.paid_to"></div>
+            <div :text="detailExp?.member_id ? (memberNames[detailExp?.member_id] || detailExp?.paid_to) : detailExp?.paid_to"></div>
           </div>
           <div class="detail-field">
             <div class="stat-label">Category</div>
@@ -46,37 +38,48 @@
             <div class="stat-label">Bank Ref</div>
             <div :text="detailExp?.bank_ref"></div>
           </div>
+          <div class="detail-field" :if="detailExp?.member_id">
+            <div class="stat-label">Submitted by</div>
+            <div :text="memberNames[detailExp?.member_id] || '—'"></div>
+          </div>
         </div>
         <div :if="detailExp?.description">
           <div class="stat-label">Description</div>
           <div :text="detailExp?.description"></div>
         </div>
 
-        <!-- Approval chain -->
-        <div :if="expApprovals.length">
-          <div class="stat-label" style="margin-bottom:var(--s-sm)">Approvals</div>
-          <div class="history-list">
-            <div class="history-item" :each="a in expApprovals">
-              <span class="badge" :class="'badge-' + a.action" :text="fmt(a.action)"></span>
-              <span :text="memberNames[a.approved_by] || 'User #' + a.approved_by"></span>
-              <span :if="a.note" class="dim" :text="'— ' + a.note"></span>
-              <span class="history-date" :text="a.created_at?.slice(0,10) || ''"></span>
+        <div :if="expAttachments.length">
+          <div class="stat-label" style="margin-bottom:var(--s-sm)">Receipts</div>
+          <div class="receipt-strip" style="flex-wrap:wrap;cursor:default">
+            <div :each="a in expAttachments" class="receipt-thumb"
+              :onclick="a.mime_type?.startsWith('image/') ? (lightboxSrc = apiBase + '/' + a.file_path) : window.open(apiBase + '/' + a.file_path, '_blank')">
+              <img :if="a.mime_type?.startsWith('image/')" :src="apiBase + '/' + a.file_path" :alt="a.original_name">
+              <div :if="!a.mime_type?.startsWith('image/')" class="receipt-placeholder" :text="a.original_name?.split('.').pop()?.toUpperCase() || 'FILE'"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity timeline -->
+        <div :if="expTimeline.length">
+          <div class="stat-label" style="margin-bottom:var(--s-sm)">Activity</div>
+          <div class="activity-feed">
+            <div class="activity-item" :each="e in expTimeline">
+              <div class="activity-icon" :class="'activity-icon-' + e.badge" :html="activityIcon(e.badge)"></div>
+              <div class="activity-body">
+                <span :if="e.actor" class="activity-actor" :text="e.actor + ' '"></span>
+                <span :text="e.actor ? e.label.toLowerCase() : e.label"></span>
+                <span :if="e.detail" class="dim" :text="' · ' + e.detail"></span>
+              </div>
+              <span class="activity-date" :text="timeAgo(e.date)"></span>
             </div>
           </div>
         </div>
 
         <!-- Workflow actions -->
-        <div class="login-error" :if="addErr" :text="addErr"></div>
-
         <div :if="detailExp?.status === 'submitted' && can('expenses:approve')" class="action-section">
           <div class="field">
             <label>Note</label>
             <textarea rows="2" :value="actionNote" :oninput="e => actionNote = e.target.value" placeholder="Optional note for approval…"></textarea>
-          </div>
-          <div class="action-row">
-            <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="approveExp()">Approve</button>
-            <button class="btn btn-outline btn-sm" :class="{'btn-loading': actioning}" :onclick="returnExp()">Return</button>
-            <button class="btn btn-danger btn-sm" :class="{'btn-loading': actioning}" :onclick="rejectExp()">Reject</button>
           </div>
         </div>
 
@@ -85,55 +88,25 @@
             <label>Bank Reference</label>
             <input type="text" :value="actionRef" :oninput="e => actionRef = e.target.value" placeholder="e-Transfer ref, cheque #…">
           </div>
-          <div class="action-row">
-            <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="payExp()">Mark Paid</button>
-          </div>
         </div>
 
-        <div :if="detailExp?.status === 'paid' && detailExp?.type === 'advance'" class="action-section">
-          <div class="field">
-            <label>Actual Amount ($)</label>
-            <input type="number" step="0.01" min="0.01" :value="actionAmt" :oninput="e => actionAmt = e.target.value" placeholder="0.00">
-          </div>
-          <div class="action-row">
-            <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="reconcileExp()">Reconcile</button>
-          </div>
-        </div>
+        <div class="login-error" :if="addErr" :text="addErr"></div>
 
-        <div :if="detailExp?.status === 'paid' && can('expenses:approve')" class="action-section">
-          <div class="field">
-            <label>Bank Reference</label>
-            <input type="text" :value="actionRef" :oninput="e => actionRef = e.target.value" placeholder="e-Transfer ref, cheque #…">
-          </div>
-          <div class="action-row">
-            <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="closeExp()">Close</button>
-          </div>
-        </div>
-
-        <!-- History -->
-        <div :if="expHistory.length">
-          <div class="stat-label" style="margin-bottom:var(--s-sm)">History</div>
-          <div class="history-list">
-            <div class="history-item" :each="h in expHistory">
-              <span class="badge" :class="'badge-' + (h.action || '').split('_')[0]" :text="fmt(h.action)"></span>
-              <span class="dim" :if="h.diff" :text="typeof h.diff === 'string' ? h.diff : Object.keys(h.diff).join(', ')"></span>
-              <span class="history-date" :text="h.created_at?.slice(0,10) || ''"></span>
-            </div>
-          </div>
-        </div>
-
-        <div style="display:flex; justify-content:flex-end">
-          <button class="btn btn-outline" :onclick="showAdd = false">Close</button>
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); align-items:center">
+          <button :if="detailExp?.status === 'submitted' && can('expenses:approve')" class="btn btn-danger btn-sm" :class="{'btn-loading': actioning}" :onclick="rejectExp()" style="margin-right:auto">Reject</button>
+          <button :if="detailExp?.status === 'submitted' && can('expenses:approve')" class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="approveExp()">Approve</button>
+          <button :if="detailExp?.status === 'approved' && can('expenses:approve')" class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="payExp()">Done</button>
+          <button class="btn btn-outline btn-sm" :onclick="showAdd = false">Close</button>
         </div>
       </div>
 
-      <!-- ===== EDIT MODE (draft/returned/new) ===== -->
+      <!-- ===== EDIT MODE (submitted/new) ===== -->
       <div :if="!detailExp || expEditable" style="display:flex;flex-direction:column;gap:var(--s-md)">
         <div :if="!editId" class="receipt-strip"
           :ondragover="e => e.preventDefault()"
           :ondrop="e => { e.preventDefault(); addReceipts(e.dataTransfer.files) }">
           <div :if="!receipts.length" style="flex:1;text-align:center;cursor:pointer"
-            :onclick="document.getElementById('receipt-input').click()">
+            :onclick="() => { filePickerOpen = true; document.getElementById('receipt-input').click() }">
             <div class="scan-icon">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                 <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>
@@ -147,47 +120,38 @@
             :onclick="e => { if (!e.target.closest('.receipt-remove') && r.preview) lightboxSrc = r.preview }">
             <img :if="r.preview" :src="r.preview">
             <div :if="!r.preview" class="receipt-placeholder" :text="r.name?.split('.').pop()?.toUpperCase() || 'FILE'"></div>
-            <div :if="r.data?.amount" class="receipt-amount" :text="'$' + r.data.amount"></div>
+            <div class="receipt-amount" :if="r.extracting || r.data?.amount" :text="r.extracting ? 'Scanning…' : '$' + r.data.amount"></div>
             <div :if="r.extracting" class="receipt-spinner"></div>
             <button type="button" class="receipt-remove" :onclick="removeReceipt(r)">&times;</button>
           </div>
           <div :if="receipts.length" class="receipt-add"
-            :onclick="document.getElementById('receipt-input').click()">+</div>
+            :onclick="() => { filePickerOpen = true; document.getElementById('receipt-input').click() }">+</div>
         </div>
         <input id="receipt-input" type="file" accept="image/*,.pdf" multiple style="display:none"
-          :onchange="e => { addReceipts(e.target.files); e.target.value = '' }">
+          :oncancel="() => filePickerOpen = false"
+          :onchange="e => { filePickerOpen = false; addReceipts(e.target.files); e.target.value = '' }">
 
-        <div :if="!editId" class="tab-row exp-type-tabs">
-          <div class="tab" :class="{'tab-active': expForm.type === 'direct'}"
-            :onclick="() => { expForm.type = 'direct'; clearExpMember() }">Direct</div>
-          <div class="tab" :class="{'tab-active': expForm.type === 'reimbursement'}"
-            :onclick="() => expForm.type = 'reimbursement'">Reimbursement</div>
-          <div class="tab" :class="{'tab-active': expForm.type === 'advance'}"
-            :onclick="() => expForm.type = 'advance'">Advance</div>
+        <div :if="editId && expAttachments.length">
+          <div class="stat-label" style="margin-bottom:var(--s-sm)">Receipts</div>
+          <div class="receipt-strip" style="flex-wrap:wrap;cursor:default">
+            <div :each="a in expAttachments" class="receipt-thumb"
+              :onclick="a.mime_type?.startsWith('image/') ? (lightboxSrc = apiBase + '/' + a.file_path) : window.open(apiBase + '/' + a.file_path, '_blank')">
+              <img :if="a.mime_type?.startsWith('image/')" :src="apiBase + '/' + a.file_path" :alt="a.original_name">
+              <div :if="!a.mime_type?.startsWith('image/')" class="receipt-placeholder" :text="a.original_name?.split('.').pop()?.toUpperCase() || 'FILE'"></div>
+            </div>
+          </div>
         </div>
-        <div :if="editId" class="dim" style="font-size:var(--f-sm)" :text="fmt(expForm.type)"></div>
 
         <form :onsubmit.prevent="saveExpense" style="display:flex;flex-direction:column;gap:var(--s-md)">
           <div class="form-row">
-            <div :if="expForm.type === 'direct'" class="field autocomplete">
+            <div class="field autocomplete">
               <label for="exp-vendor">Paid to</label>
               <input id="exp-vendor" type="text" :value="expForm.paid_to"
                 :oninput="e => filterVendors(e.target.value)"
                 :onblur="e => { vendorHits = [] }"
-                placeholder="Vendor, store…" required>
+                placeholder="Vendor, store, person…" required>
               <div :if="vendorHits.length" class="autocomplete-list">
                 <div class="autocomplete-item" :each="v in vendorHits" :onmousedown.prevent="() => { expForm.paid_to = v; vendorHits = [] }" :text="v"></div>
-              </div>
-            </div>
-            <div :if="expForm.type !== 'direct'" class="field autocomplete">
-              <label>Member</label>
-              <input type="text" :value="memberQuery"
-                :oninput="e => filterMembers(e.target.value)"
-                :onfocus="e => filterMembers(e.target.value)"
-                :onblur="e => { memberHits = [] }"
-                placeholder="Search member…" required>
-              <div :if="memberHits.length" class="autocomplete-list">
-                <div class="autocomplete-item" :each="m in memberHits" :onmousedown.prevent="() => selectExpMember(m)" :text="m.name"></div>
               </div>
             </div>
             <div class="field">
@@ -215,12 +179,11 @@
           <div class="login-error" :if="addErr" :text="addErr"></div>
 
           <div style="display:flex; justify-content:flex-end; gap:var(--s-sm)">
-            <button :if="editId && (!detailExp || detailExp?.status === 'draft') && !delConfirm" type="button" class="btn btn-danger btn-sm" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
+            <button :if="editId && detailExp?.status === 'submitted' && !delConfirm" type="button" class="btn btn-danger btn-sm" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
             <span :if="delConfirm" class="dim" style="font-size:var(--f-sm); margin-right:auto; align-self:center">Delete permanently?</span>
-            <button :if="delConfirm" type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': adding}" :onclick="delExpense()">Yes</button>
+            <button :if="delConfirm" type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': deleting}" :onclick="delExpense()">Yes</button>
             <button :if="delConfirm" type="button" class="btn btn-outline btn-sm" :onclick="delConfirm = false">No</button>
-            <button :if="editId && detailExp && (detailExp?.status === 'draft' || detailExp?.status === 'returned') && !delConfirm" type="button" class="btn btn-outline btn-sm" :class="{'btn-loading': actioning}" :onclick="submitExp()">Submit for Approval</button>
-            <button :if="!delConfirm" type="button" class="btn btn-outline" :onclick="cancelAdd()">Cancel</button>
+            <button :if="!editId && !delConfirm" type="button" class="btn btn-outline" :onclick="cancelAdd()">Cancel</button>
             <button :if="!delConfirm" type="submit" class="btn btn-primary" :class="{'btn-loading': adding}" :text="editId ? 'Update' : 'Save Expense'"></button>
           </div>
         </form>

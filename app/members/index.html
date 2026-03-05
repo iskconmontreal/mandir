@@ -1,8 +1,17 @@
 ---
 ---
 <div class="page-header">
-  <h1>Members</h1>
+  <h1>Community</h1>
 </div>
+
+<div class="pill-tabs">
+  <button class="pill-tab" :class="{'pill-tab-active': activeTab === 'members'}" :onclick="activeTab = 'members'">Members</button>
+  <button class="pill-tab" :class="{'pill-tab-active': activeTab === 'events'}" :onclick="activeTab = 'events'">Events</button>
+  <button class="pill-tab" :class="{'pill-tab-active': activeTab === 'content'}" :onclick="activeTab = 'content'">Content</button>
+</div>
+
+<!-- ===== MEMBERS TAB ===== -->
+<section :class="{'hidden': activeTab !== 'members'}">
 
 <!-- Modals loaded via partials -->
 <div :html="editHTML"></div>
@@ -13,7 +22,7 @@
   <button class="btn btn-primary btn-sm" :onclick="openAdd()">+ Member</button>
   <input class="filter-search" type="search" placeholder="Search name, email or phone…"
     :value="search" :oninput.debounce-150="e => { search = e.target.value; page = 1; load() }">
-  <select :onchange="e => { filterRole = e.target.value; load() }" style="width:auto">
+  <select :value="filterRole" :onchange="e => { filterRole = e.target.value; page = 1; load() }" style="width:auto">
     <option value="">All roles</option>
     <option :each="r in roles" :value="r" :text="r"></option>
   </select>
@@ -27,22 +36,22 @@
     <table>
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Phone</th>
-          <th>Role</th>
-          <th>Joined</th>
+          <th class="th-sort" :class="sortCls('data.name')" :onclick="sort('data.name')">Name</th>
+          <th class="th-sort" :class="sortCls('data.email')" :onclick="sort('data.email')">Email</th>
+          <th class="th-sort" :class="sortCls('data.phone')" :onclick="sort('data.phone')">Phone</th>
+          <th class="th-sort" :class="sortCls('data.role')" :onclick="sort('data.role')">Role</th>
+          <th class="th-sort" :class="sortCls('created_at')" :onclick="sort('created_at')">Joined</th>
         </tr>
       </thead>
       <tbody>
         <tr :each="m in members" :class="{'dim': m.status}" style="cursor:pointer" :onclick="openDetail(m)">
           <td>
-            <span :text="m.first_name + ' ' + m.last_name"></span>
+            <span :html="hl(m.spiritual_name || m.name || '—', search)"></span>
             <span :if="m.status" class="badge" style="margin-left:var(--s-xs); font-size:var(--f-xs)" :text="m.status"></span>
             <span :if="m._user_id" class="badge" style="margin-left:var(--s-xs); font-size:var(--f-xs); background:rgba(107,92,231,.1); color:var(--c-accent)">User</span>
           </td>
-          <td :text="m.email || '—'"></td>
-          <td :text="m.phone || '—'"></td>
+          <td :html="hl(m.email || '—', search)"></td>
+          <td :html="hl(m.phone || '—', search)"></td>
           <td><span class="badge" :text="m.role || '—'"></span></td>
           <td class="dim" :text="m.joined || '—'"></td>
         </tr>
@@ -62,12 +71,28 @@
   </div>
 </div>
 
-<script type="module">
-  import { init, ROLES, SERVICES, auth, fmtCat, toast } from '../../lib/app.js'
-  import { api } from '../../lib/api.js'
+</section>
 
-  if (!auth.can('clients:view')) {
-    location.replace('/app/')
+<!-- ===== EVENTS TAB ===== -->
+<section :class="{'hidden': activeTab !== 'events'}">
+  <div class="card" style="padding:var(--s-xl); text-align:center">
+    <div class="dim">Events coming soon</div>
+  </div>
+</section>
+
+<!-- ===== CONTENT TAB ===== -->
+<section :class="{'hidden': activeTab !== 'content'}">
+  <div class="card" style="padding:var(--s-xl); text-align:center">
+    <div class="dim">Content coming soon</div>
+  </div>
+</section>
+
+<script type="module">
+  import { init, ROLES, SERVICES, auth, fmtCat, toast, hl } from '../../lib/app.js'
+  import { api, BASE } from '../../lib/api.js'
+
+  if (!auth.can('members:view')) {
+    location.replace(new URL('../', location.href).href)
     throw new Error('redirecting')
   }
 
@@ -76,9 +101,9 @@
   const modalCache = {}
 
   const emptyForm = () => ({
-    first_name: '', last_name: '', email: '', phone: '', role: 'Devotee', joined: today,
+    name: '', spiritual_name: '', email: '', phone: '', role: 'Devotee', joined: today,
     address: '', notes: '', status: '',
-    initiated_name: '', diksa_guru: '', guiding_devotee: '', services: [],
+    diksa_guru: '', guiding_devotee: '', services: [],
     rounds: '', rounds_years: '', four_regs_years: '',
     kc_years: '', temple: '', dob: '', gender: '', nationality: '', occupation: '',
     marriage_status: '', spouse: '', children: '',
@@ -86,7 +111,7 @@
   })
 
   function toMember(c) {
-    const d = typeof c.client === 'string' ? JSON.parse(c.client) : c.client
+    const d = typeof c.data === 'string' ? JSON.parse(c.data) : c.data
     const services = Array.isArray(d.services) ? d.services
       : (d.services ? d.services.split(',').map(s => s.trim()).filter(Boolean) : [])
     return { _id: c.id, _public: c.public_id, _user_id: c.user_id, ...d, services }
@@ -101,6 +126,7 @@
   }
 
   const s = init({
+    activeTab: 'members',
     editHTML: '',
     detailHTML: '',
     showEdit: false,
@@ -113,7 +139,7 @@
     members: [],
     total: 0,
     roles: ROLES,
-    SERVICES,
+    SERVICES, hl,
 
     toggleService(sv) {
       const svcs = [...(s.form.services || [])]
@@ -133,6 +159,14 @@
     search: '',
     filterRole: '',
     page: 1,
+    sortBy: '', sortDir: 'asc',
+
+    sort(col) {
+      if (this.sortBy === col) this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc'
+      else { this.sortBy = col; this.sortDir = 'asc' }
+      this.page = 1; load()
+    },
+    sortCls(col) { return this.sortBy === col ? (this.sortDir === 'asc' ? 'th-sort-asc' : 'th-sort-desc') : '' },
 
     get totalPages() { return Math.max(1, Math.ceil(this.total / perPage)) },
 
@@ -157,6 +191,7 @@
       s.detail = m
       s.userDetail = {}
       s.showDetail = true
+      loadPhoto(m._public)
       if (m._user_id && auth.can('users:view')) {
         try { s.userDetail = await api.getUser(m._user_id) }
         catch {}
@@ -176,6 +211,8 @@
       s.pendingRoleId = null
       s.rolePassword = ''
       s.rolePasswordErr = null
+      if (s.photoSrc?.startsWith('blob:')) URL.revokeObjectURL(s.photoSrc)
+      s.photoSrc = null
     },
 
     editFromDetail() {
@@ -184,6 +221,8 @@
       s.editing = m
       s.form = { ...m }
       s.formErr = null
+      s.photoErr = null
+      s.photoFile = null
       s.showEdit = true
     },
 
@@ -192,10 +231,13 @@
       s.editing = null
       s.form = emptyForm()
       s.formErr = null
+      s.photoFile = null
+      s.photoErr = null
     },
 
     async saveMember() {
       s.formErr = null
+      s.photoErr = null
       s.saving = true
       const data = { ...s.form }
       delete data._id
@@ -204,6 +246,15 @@
       try {
         if (s.editing) {
           await api.updateMember(s.editing._id, data)
+          if (s.photoFile) {
+            try {
+              await api.uploadMemberPhoto(s.editing._id, s.photoFile)
+              s.photoFile = null
+              await loadPhoto(s.editing._public)
+            } catch (e) {
+              s.photoErr = e.message || 'Photo upload failed'
+            }
+          }
           const updated = { ...s.editing, ...data }
           s.closeEdit()
           s.openDetail(updated)
@@ -219,6 +270,9 @@
       }
     },
 
+    photoSrc: null,
+    photoFile: null,
+    photoErr: null,
     inviteConfirm: false,
 
     async inviteMember() {
@@ -279,13 +333,27 @@
     load,
   })
 
+  async function loadPhoto(publicId) {
+    if (s.photoSrc?.startsWith('blob:')) URL.revokeObjectURL(s.photoSrc)
+    s.photoSrc = null
+    if (!publicId) return
+    try {
+      const res = await fetch(`${BASE}/uploads/community/members/${publicId}.webp`, {
+        headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {},
+      })
+      if (!res.ok) return
+      s.photoSrc = URL.createObjectURL(await res.blob())
+    } catch {}
+  }
+
   async function load() {
     s.loading = true
     s.loadErr = null
     try {
       const params = { page: s.page, itemsPerPage: perPage }
       if (s.search) params.search = s.search
-      if (s.filterRole) params['client.role'] = s.filterRole
+      if (s.filterRole) params['data.role'] = s.filterRole
+      if (s.sortBy) { params.sortBy = s.sortBy; params.sortDesc = s.sortDir === 'desc' }
       const res = await api.getMembers(params)
       s.members = (res.items || []).map(toMember)
       s.total = res.total || 0
@@ -301,4 +369,7 @@
     s.detailHTML = d
   }).catch(e => { s.loadErr = e.message || 'Failed to load page templates' })
   load()
+  api.getRoles().then(res => {
+    if (res.roles?.length) s.roles = res.roles.map(r => r.name)
+  }).catch(() => {})
 </script>

@@ -13,7 +13,7 @@ test.describe('overview page (admin)', () => {
   })
 
   test('renders members pulse card', async ({ page }) => {
-    await expect(page.locator('h3').filter({ hasText: 'Members' })).toBeVisible()
+    await expect(page.locator('h3').filter({ hasText: 'Community' })).toBeVisible()
   })
 
   test('renders quick links for finance and members', async ({ page }) => {

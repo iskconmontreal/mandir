@@ -9,12 +9,12 @@
       <form :onsubmit.prevent="saveMember">
         <div class="form-row">
           <div class="field">
-            <label for="m-first">First Name</label>
-            <input id="m-first" type="text" :value="form.first_name" placeholder="Legal first name" required>
+            <label for="m-name">Name</label>
+            <input id="m-name" type="text" :value="form.name" placeholder="Full name" required>
           </div>
           <div class="field">
-            <label for="m-last">Last Name</label>
-            <input id="m-last" type="text" :value="form.last_name" placeholder="Family name" required>
+            <label for="m-spiritual">Spiritual Name</label>
+            <input id="m-spiritual" type="text" :value="form.spiritual_name" placeholder="Initiated name (optional)">
           </div>
         </div>
         <div class="form-row">
@@ -102,10 +102,6 @@
           <div style="gap:var(--s-md); display:flex; flex-direction:column">
             <div class="form-row">
               <div class="field">
-                <label for="m-initiated">Initiated Name</label>
-                <input id="m-initiated" type="text" :value="form.initiated_name" placeholder="Spiritual name">
-              </div>
-              <div class="field">
                 <label for="m-guru">Diksa Guru</label>
                 <input id="m-guru" type="text" :value="form.diksa_guru" placeholder="Initiating spiritual master">
               </div>
@@ -164,6 +160,18 @@
         <div class="field" :if="editing" style="margin-bottom:var(--s-md)">
           <label for="m-status">Status</label>
           <input id="m-status" type="text" :value="form.status" placeholder="Leave blank if active. E.g. Moved away, Passed away…">
+        </div>
+
+        <div class="field" :if="editing" style="margin-bottom:var(--s-md)">
+          <label>Photo</label>
+          <div style="display:flex; align-items:center; gap:var(--s-md)">
+            <img :if="photoSrc" :src="photoSrc" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--c-border);flex-shrink:0">
+            <div :if="!photoSrc" style="width:52px;height:52px;border-radius:50%;background:var(--c-accent);display:flex;align-items:center;justify-content:center;color:white;font-size:1.2rem;font-weight:600;flex-shrink:0" :text="(form.name?.[0]||'').toUpperCase()"></div>
+            <div style="flex:1; min-width:0">
+              <input type="file" accept="image/jpeg,image/png,image/webp" :onchange="e => photoFile = e.target.files[0]" style="font-size:var(--f-sm); width:100%">
+              <div :if="photoErr" class="login-error" style="font-size:var(--f-xs); margin-top:var(--s-xs)" :text="photoErr"></div>
+            </div>
+          </div>
         </div>
 
         <div class="login-error" :if="formErr" :text="formErr" style="margin-bottom:var(--s-sm)"></div>

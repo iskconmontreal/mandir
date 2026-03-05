@@ -2,8 +2,10 @@
 
 Mobile-first. 10 screens total.
 
-Core principle: **editable until finalized**. No separate "returned" or
-"reconcile" screens. One expense form, one expense list (filtered by context).
+Core principle: **editable until finalized**. No separate screens.
+One expense form, one expense list (filtered by context).
+Statuses: submitted → approved → paid | rejected.
+No type field. Claim/request/log is UX framing only.
 
 
 ### App Shell
@@ -49,26 +51,20 @@ Tabs visible per role:
 │  ┌─────────────────────────┐    │ ← approver
 │  │ ▸ To Approve          3 │    │   (expenses: submitted,
 │  └─────────────────────────┘    │    needs my approval)
-│  ┌─────────────────────────┐    │ ← treasurer
-│  │ ▸ Overdue Pledges     2 │    │
-│  └─────────────────────────┘    │
-│  ┌─────────────────────────┐    │ ← member
-│  │ ▸ Returned            1 │    │   (my expenses: returned)
-│  └─────────────────────────┘    │
 │                                 │
-│  ┌─────────────────────────┐    │ ← member
-│  │      + New Expense      │    │
-│  └─────────────────────────┘    │
+│  ┌───────────┬─────────────┐    │ ← everyone
+│  │+ Expense  │ + Donation   │    │
+│  └───────────┴─────────────┘    │
 │                                 │
 │  Recent                         │
 │  ┌─────────────────────────┐    │
-│  │ Nani Gopal  Reimb  $47  │    │
+│  │ Nani Gopal    $47       │    │
 │  │ 10 min ago      approved│    │
 │  ├─────────────────────────┤    │
-│  │ Hari Das    Advance $300│    │
-│  │ 1 hr ago       awaiting │    │
+│  │ Hari Das       $300     │    │
+│  │ 1 hr ago      submitted│    │
 │  ├─────────────────────────┤    │
-│  │ Hydro-Qc   Direct  $180 │    │
+│  │ Hydro-Qc      $180     │    │
 │  │ Yesterday        paid   │    │
 │  └─────────────────────────┘    │
 │                                 │
@@ -110,7 +106,7 @@ Tabs visible per role:
 
 ### 4. Expense List (one list, context-filtered)
 
-Tapping dashboard cards ("To Pay", "To Approve", "Returned")
+Tapping dashboard cards ("To Pay", "To Approve")
 lands here with a pre-set filter. User can change filter.
 
 ```
@@ -124,27 +120,22 @@ lands here with a pre-set filter. User can change filter.
 │                                 │
 │  ┌─────────────────────────┐    │
 │  │ E-0044  Nani Gopal      │    │
-│  │ Reimb · $230 · Prasadam │    │
+│  │ $230 · Prasadam         │    │
 │  │ submitted · 0/2 approved│    │
 │  │                         │    │
-│  │ [Approve]  [Return ↩]   │    │  ← approver sees actions
+│  │ [Approve]  [Reject]     │    │  ← approver sees actions
 │  └─────────────────────────┘    │
 │  ┌─────────────────────────┐    │
 │  │ E-0042  Nani Gopal      │    │
-│  │ Reimb · $47 · Prasadam  │    │
+│  │ $47 · Prasadam          │    │
 │  │ approved                │    │
 │  │                         │    │
 │  │ [Mark Paid ✓]           │    │  ← treasurer sees action
 │  └─────────────────────────┘    │
 │  ┌─────────────────────────┐    │
-│  │ E-0038  Hari Das        │    │
-│  │ Advance · $300 · Suppl  │    │
-│  │ paid · awaiting receipts│    │
-│  └─────────────────────────┘    │
-│  ┌─────────────────────────┐    │
-│  │ E-0035  Nani Gopal      │    │
-│  │ Reimb · $230 · Prasadam │    │
-│  │ closed                  │    │
+│  │ E-0035  Hydro-Qc        │    │
+│  │ $180 · Utilities        │    │
+│  │ paid                    │    │
 │  └─────────────────────────┘    │
 │         ···                     │
 │                                 │
@@ -157,19 +148,14 @@ Just this list with contextual inline actions per role.
 
 ### 5. Expense Form (create + edit — same screen)
 
-Editable until finalized (paid/closed/rejected).
+Editable until paid (editing approved expense resets to submitted).
 Tapping a list item opens this. "+" opens this blank.
 
 ```
 ┌─────────────────────────────────┐
 │  ← Expenses    E-2026-0044      │
-│                          DRAFT  │
+│                       SUBMITTED │
 ├─────────────────────────────────┤
-│                                 │
-│  Type                           │
-│  ┌────────┬─────────┬────────┐  │
-│  │▌Reimb ▐│ Advance │ Direct │  │
-│  └────────┴─────────┴────────┘  │
 │                                 │
 │  ┌─────────────────────────┐    │
 │  │ 📷  Snap Receipt        │    │
@@ -204,20 +190,17 @@ Tapping a list item opens this. "+" opens this blank.
 │  │        Submit           │    │
 │  └─────────────────────────┘    │
 │                                 │
-│  ── Approvals ──                │  ← shown after submit
-│  ┌─────────────────────────┐    │
+│  ── Approvals (1/2) ──         │  ← shown after submit
+│  ┌─────────────────────────┐    │    count shown inline
 │  │ ✓ Govinda    Approved   │    │
-│  │ ↩ Radha      Returned   │    │
-│  │   "Receipt blurry"      │    │
 │  └─────────────────────────┘    │
 │                                 │
 └─────────────────────────────────┘
 ```
 
 Status determines behavior:
-- **draft/returned** → all fields editable, Submit button
-- **submitted** → read-only, shows approval progress
-- **approved** → read-only, treasurer sees payment section:
+- **submitted** → editable by reporter (editing resets to submitted). Shows approval progress (N/M).
+- **approved** → editable by reporter (resets to submitted). Treasurer sees payment section:
 
 ```
 │  ── Pay ──                      │
@@ -229,30 +212,15 @@ Status determines behavior:
 │  └─────────────────────────┘    │
 ```
 
-- **paid + type=advance** → shows receipt upload section:
+- **paid** → read-only for reporter. Treasurer can edit until paid. Admin can edit always.
+- **rejected** → read-only, no actions
 
-```
-│  ── Reconciliation ──           │
-│  Receipts                       │
-│  ┌─────────────────────────┐    │
-│  │ 📷  Upload Receipt      │    │
-│  └─────────────────────────┘    │
-│  ┌─────────────────────────┐    │
-│  │ Costco   $185    ✓      │    │
-│  │ Metro    $90     ✓      │    │
-│  └─────────────────────────┘    │
-│                                 │
-│  Spent       $275.00            │
-│  Advance     $300.00            │
-│  ────────────────────           │
-│  Return      $25.00             │
-│                                 │
-│  ┌─────────────────────────┐    │
-│  │       Close Advance     │    │
-│  └─────────────────────────┘    │
-```
+**Treasurer "log" flow**: treasurer creates expense → saves directly at paid status. If amount > threshold, approvers get notified (informational only).
 
-- **closed/rejected** → read-only, no actions
+**Editing rules**:
+- Reporter: edit own expense until paid. Editing approved → resets to submitted.
+- Treasurer: edit any expense until paid.
+- Admin: edit any expense always.
 
 
 ---
@@ -509,7 +477,7 @@ Donor pre-filled when coming from detail.
 | 2  | Set Password   | Invite accept + reset (shared)            |
 | 3  | Dashboard      | Adaptive by role (1 layout, 4 variants)   |
 | 4  | Expense List   | All expenses, filtered. Inline approve/pay|
-| 5  | Expense Form   | Create + edit + reconcile. Status governs  |
+| 5  | Expense Form   | Create + edit. Status governs editability  |
 | 6  | Donor List     | All donors + search                       |
 | 7  | Donation Form  | Cash/in-kind/collection. Pledge via donor |
 | 8  | Reports        | Summary/Tax/GST tabs. One screen          |
@@ -518,8 +486,9 @@ Donor pre-filled when coming from detail.
 
 ### Design Principles
 
-- **Editable until finalized.** No separate screens for "returned" or "reconcile" states.
+- **Editable until paid.** Reporter edits until paid (editing approved resets to submitted). Treasurer edits until paid. Admin edits always.
 - **One list, contextual actions.** Expense list serves as approval queue, payment queue, and "my expenses" — filtered by role.
 - **Form = detail.** Creating and viewing are the same screen. Status governs editability.
 - **Inline over separate.** Password reset on login, invite on people, pledge on donor detail.
+- **Approval count visible.** "1/2 approved" shown inline. Threshold and required count configurable.
 - **Deferred.** Donor Board, Year-End Close — not core accounting.

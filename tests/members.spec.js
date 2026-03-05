@@ -10,39 +10,38 @@ function mockMembers(page, { members = [] } = {}) {
     const method = route.request().method()
     const path = url.pathname
 
-    if (path === '/api/clients') {
+    if (path === '/api/members') {
       if (method === 'POST') {
         const body = route.request().postDataJSON()
-        const m = { id: members.length + 1, public_id: `pub${members.length + 1}`, user_id: null, client: body }
+        const m = { id: members.length + 1, public_id: `pub${members.length + 1}`, user_id: null, data: body }
         members.push(m)
         return route.fulfill({ json: m })
       }
       const search = url.searchParams.get('search') || ''
-      const roleFilter = url.searchParams.get('client.role') || ''
+      const roleFilter = url.searchParams.get('data.role') || ''
       let filtered = [...members]
       if (search) {
         filtered = filtered.filter(m => {
-          const c = typeof m.client === 'string' ? JSON.parse(m.client) : m.client
-          const name = `${c.first_name} ${c.last_name}`.toLowerCase()
-          return name.includes(search.toLowerCase()) || (c.email || '').toLowerCase().includes(search.toLowerCase())
+          const d = typeof m.data === 'string' ? JSON.parse(m.data) : m.data
+          return (d.name || '').toLowerCase().includes(search.toLowerCase()) || (d.email || '').toLowerCase().includes(search.toLowerCase())
         })
       }
       if (roleFilter) {
         filtered = filtered.filter(m => {
-          const c = typeof m.client === 'string' ? JSON.parse(m.client) : m.client
-          return c.role === roleFilter
+          const d = typeof m.data === 'string' ? JSON.parse(m.data) : m.data
+          return d.role === roleFilter
         })
       }
       return route.fulfill({ json: { items: filtered, total: filtered.length } })
     }
 
-    if (path.startsWith('/api/clients/') && method === 'PUT') {
+    if (path.startsWith('/api/members/') && method === 'PUT') {
       const id = +path.split('/').at(-1)
       const body = route.request().postDataJSON()
       const i = members.findIndex(m => m.id === id)
       if (i >= 0) {
-        const cur = typeof members[i].client === 'string' ? JSON.parse(members[i].client) : members[i].client
-        members[i] = { ...members[i], client: { ...cur, ...body } }
+        const cur = typeof members[i].data === 'string' ? JSON.parse(members[i].data) : members[i].data
+        members[i] = { ...members[i], data: { ...cur, ...body } }
       }
       return route.fulfill({ json: members[i] ?? {} })
     }
@@ -73,7 +72,7 @@ test.describe('members section', () => {
 
   test('renders members table with name, email and role', async ({ page }) => {
     const members = [
-      { id: 1, public_id: 'p1', user_id: null, client: { first_name: 'Hari', last_name: 'Das', email: 'hari@test.local', role: 'Devotee', phone: '' } },
+      { id: 1, public_id: 'p1', user_id: null, data: { name: 'Hari Das', email: 'hari@test.local', role: 'Devotee', phone: '' } },
     ]
     await mockMembers(page, { members })
     await openMembers(page)
@@ -87,8 +86,8 @@ test.describe('members section', () => {
 
   test('search filter reduces table results', async ({ page }) => {
     const members = [
-      { id: 1, public_id: 'p1', user_id: null, client: { first_name: 'Hari', last_name: 'Das', email: 'hari@test.local', role: 'Devotee', phone: '' } },
-      { id: 2, public_id: 'p2', user_id: null, client: { first_name: 'Gopi', last_name: 'Devi', email: 'gopi@test.local', role: 'Devotee', phone: '' } },
+      { id: 1, public_id: 'p1', user_id: null, data: { name: 'Hari Das', email: 'hari@test.local', role: 'Devotee', phone: '' } },
+      { id: 2, public_id: 'p2', user_id: null, data: { name: 'Gopi Devi', email: 'gopi@test.local', role: 'Devotee', phone: '' } },
     ]
     await mockMembers(page, { members })
     await openMembers(page)
@@ -100,6 +99,24 @@ test.describe('members section', () => {
     await expect(rows.first()).toContainText('Hari Das')
   })
 
+  test('role filter reduces table results', async ({ page }) => {
+    const members = [
+      { id: 1, public_id: 'p1', user_id: null, data: { name: 'Hari Das', email: 'hari@test.local', role: 'Devotee', phone: '' } },
+      { id: 2, public_id: 'p2', user_id: null, data: { name: 'Gopi Devi', email: 'gopi@test.local', role: 'Volunteer', phone: '' } },
+      { id: 3, public_id: 'p3', user_id: null, data: { name: 'Radha Dasi', email: 'radha@test.local', role: 'Devotee', phone: '' } },
+    ]
+    await mockMembers(page, { members })
+    await openMembers(page)
+    await expect(page.locator('table tbody tr')).toHaveCount(3)
+
+    await page.selectOption('select', 'Volunteer')
+    await expect(page.locator('table tbody tr')).toHaveCount(1)
+    await expect(page.locator('table tbody tr').first()).toContainText('Gopi Devi')
+
+    await page.selectOption('select', '')
+    await expect(page.locator('table tbody tr')).toHaveCount(3)
+  })
+
   test('add member: fill form → save → POST sent with correct body', async ({ page }) => {
     const members = []
     await mockMembers(page, { members })
@@ -108,23 +125,21 @@ test.describe('members section', () => {
     await page.click('button:has-text("+ Member")')
     await expect(page.getByRole('heading', { name: 'Add Member' })).toBeVisible()
 
-    await page.fill('#m-first', 'Radha')
-    await page.fill('#m-last', 'Devi')
+    await page.fill('#m-name', 'Radha Devi')
     await page.fill('#m-email', 'radha@test.local')
     await page.fill('#m-phone', '514-222-3333')
     await page.click('button[type="submit"]')
     await expect(page.locator('.modal-overlay').first()).not.toBeVisible({ timeout: 5000 })
 
     expect(members).toHaveLength(1)
-    const saved = members[0].client
-    expect(saved.first_name).toBe('Radha')
-    expect(saved.last_name).toBe('Devi')
+    const saved = members[0].data
+    expect(saved.name).toBe('Radha Devi')
     expect(saved.email).toBe('radha@test.local')
   })
 
   test('edit member: click row → detail opens → Edit → form pre-populated', async ({ page }) => {
     const members = [
-      { id: 1, public_id: 'p1', user_id: null, client: { first_name: 'Krishna', last_name: 'Bhakta', email: 'kb@test.local', role: 'Devotee', phone: '514-000-0001' } },
+      { id: 1, public_id: 'p1', user_id: null, data: { name: 'Krishna Bhakta', email: 'kb@test.local', role: 'Devotee', phone: '514-000-0001' } },
     ]
     await mockMembers(page, { members })
     await openMembers(page)
@@ -135,14 +150,13 @@ test.describe('members section', () => {
 
     await page.click('button:has-text("Edit")')
     await expect(page.getByRole('heading', { name: 'Edit Member' })).toBeVisible()
-    await expect(page.locator('#m-first')).toHaveValue('Krishna')
-    await expect(page.locator('#m-last')).toHaveValue('Bhakta')
+    await expect(page.locator('#m-name')).toHaveValue('Krishna Bhakta')
     await expect(page.locator('#m-email')).toHaveValue('kb@test.local')
   })
 
   test('invite two-step confirm: cancel keeps no POST sent', async ({ page }) => {
     const members = [
-      { id: 1, public_id: 'p1', user_id: null, client: { first_name: 'New', last_name: 'Member', email: 'new@test.local', role: 'Congregation', phone: '' } },
+      { id: 1, public_id: 'p1', user_id: null, data: { name: 'New Member', email: 'new@test.local', role: 'Congregation', phone: '' } },
     ]
     await mockMembers(page, { members })
     await openMembers(page)

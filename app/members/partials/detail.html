@@ -2,10 +2,15 @@
 <div class="modal-overlay" :if="showDetail" :onkeydown.esc.document="closeDetail()" :onclick="e => { if (e.target === e.currentTarget) closeDetail() }">
   <div class="modal">
     <div class="modal-header">
-      <h2 :text="detail.first_name + ' ' + detail.last_name"></h2>
+      <h2 :text="detail.name || '—'"></h2>
       <button class="modal-close" :onclick="closeDetail()">&times;</button>
     </div>
     <div class="modal-body" style="display:flex; flex-direction:column; gap:var(--s-md)">
+      <div style="display:flex; align-items:center; gap:var(--s-md); margin-bottom:var(--s-xs)">
+        <img :if="photoSrc" :src="photoSrc" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--c-border);flex-shrink:0">
+        <div :if="!photoSrc" style="width:64px;height:64px;border-radius:50%;background:var(--c-accent);display:flex;align-items:center;justify-content:center;color:white;font-size:1.4rem;font-weight:600;flex-shrink:0" :text="(detail.name?.[0]||'').toUpperCase()"></div>
+        <span :if="detail.spiritual_name" class="dim" style="font-size:var(--f-sm)" :text="detail.spiritual_name"></span>
+      </div>
       <div style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
         <div>
           <div class="stat-label">Email</div>
@@ -31,10 +36,10 @@
         </div>
       </div>
 
-      <div :if="detail.initiated_name || detail.diksa_guru" style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
-        <div :if="detail.initiated_name">
-          <div class="stat-label">Initiated Name</div>
-          <div :text="detail.initiated_name"></div>
+      <div :if="detail.spiritual_name || detail.diksa_guru" style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
+        <div :if="detail.spiritual_name">
+          <div class="stat-label">Spiritual Name</div>
+          <div :text="detail.spiritual_name"></div>
         </div>
         <div :if="detail.diksa_guru">
           <div class="stat-label">Diksa Guru</div>

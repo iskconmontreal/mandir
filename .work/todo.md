@@ -49,14 +49,20 @@
 
 ## March 5
 
-* [ ] Complete expense flow: adding expenses should work well
-* [ ] Deploy to prod
-* [ ] Import all interacs names from files
+* [ ] harden backend
+* [ ] complete flows (tested dev)
+  * [ ] request expense - treasurer gets notified
+  * [ ] changing / assigning roles
 
-* [ ] page transitions @​view-transition { navigation: auto }
+* [ ] main: deploy to prod;
+
+* [ ] Import all interacs members names from files: MK, Samir
+* [ ] Onboard MK, Samir, Ash
 
 
 ## Backlog
+
+* [x] page transitions @​view-transition { navigation: auto }
 
 * [ ] Mobile version
 
@@ -80,3 +86,10 @@
 * [ ] Data integrity — Financial data is sacred. Backup, audit trail, immutable records. This is non-negotiable from day one.
 
 * [ ] Disaster being pretended away: Mitigation: automated backups to a second location. Document this requirement now.
+
+* [ ] Change expense grouping
+
+## Ideas
+
+* [ ] Upload a file, system decides itself where to classify it: expense, donation, legal etc.
+* [ ] Who is online feature

@@ -1,0 +1,154 @@
+---
+title: Roles & Permissions
+---
+<div class="page-header">
+  <h1>Roles &amp; Permissions</h1>
+</div>
+
+<div :if="loadErr" class="login-error" style="margin-bottom:var(--s-md)" :text="loadErr"></div>
+<div :if="loading" class="dim" style="padding:var(--s-lg)">Loading…</div>
+
+<!-- Role cards -->
+<div :if="!loading" style="display:flex; flex-direction:column; gap:var(--s-lg); margin-bottom:var(--s-xl)">
+  <div :each="role in roles" class="card">
+    <div class="card-header" style="align-items:flex-start; gap:var(--s-md)">
+      <div>
+        <h3 style="margin:0" :text="role.name"></h3>
+        <div class="dim" style="font-size:var(--f-sm)" :text="role.description"></div>
+      </div>
+      <button class="btn btn-outline btn-sm" style="margin-left:auto; flex-shrink:0"
+        :onclick="resetRole(role)" :class="{'btn-loading': role._resetting}">Reset</button>
+    </div>
+    <div style="padding:var(--s-md); display:flex; flex-wrap:wrap; gap:var(--s-xs) var(--s-md)">
+      <label :each="perm in allPerms" style="display:flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); cursor:pointer; white-space:nowrap">
+        <input type="checkbox"
+          :checked="role.permissions.includes(perm)"
+          :onchange="e => togglePerm(role, perm, e.target.checked)"
+          style="width:auto; cursor:pointer">
+        <span :text="fmtPerm(perm)"></span>
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- Create role -->
+<div :if="!loading" class="card" style="margin-bottom:var(--s-xl)">
+  <div class="card-header"><h3>New Role</h3></div>
+  <div style="padding:var(--s-md)">
+    <form :onsubmit.prevent="createRole">
+      <div class="form-row">
+        <div class="field">
+          <label for="r-name">Name</label>
+          <input id="r-name" type="text" :value="newRole.name" :oninput="e => newRole.name = e.target.value" placeholder="e.g. Pujari" required>
+        </div>
+        <div class="field">
+          <label for="r-desc">Description</label>
+          <input id="r-desc" type="text" :value="newRole.description" :oninput="e => newRole.description = e.target.value" placeholder="Brief description">
+        </div>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:var(--s-xs) var(--s-md); margin-bottom:var(--s-md)">
+        <label :each="perm in allPerms" style="display:flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); cursor:pointer; white-space:nowrap">
+          <input type="checkbox"
+            :checked="newRole.permissions.includes(perm)"
+            :onchange="e => toggleNewPerm(perm, e.target.checked)"
+            style="width:auto; cursor:pointer">
+          <span :text="fmtPerm(perm)"></span>
+        </label>
+      </div>
+      <div :if="createErr" class="login-error" style="margin-bottom:var(--s-sm)" :text="createErr"></div>
+      <button type="submit" class="btn btn-primary" :class="{'btn-loading': creating}">Create Role</button>
+    </form>
+  </div>
+</div>
+
+<script type="module">
+  import { init, fmtCat, auth, toast } from '../../../lib/app.js'
+  import { api } from '../../../lib/api.js'
+
+  if (!auth.can('roles:update')) {
+    location.replace(new URL('../../', location.href).href)
+    throw new Error('redirecting')
+  }
+
+  const s = init({
+    roles: [],
+    allPerms: [],
+    loading: true,
+    loadErr: null,
+    creating: false,
+    createErr: null,
+    newRole: { name: '', description: '', permissions: [] },
+
+    fmtPerm(key) {
+      const [scope, action] = key.split(':')
+      return fmtCat(scope) + ' ' + action
+    },
+
+    async togglePerm(role, perm, enabled) {
+      const prev = [...role.permissions]
+      role.permissions = enabled
+        ? [...role.permissions, perm].sort()
+        : role.permissions.filter(p => p !== perm)
+      try {
+        await api.updateRolePermission(role.id, perm, enabled)
+      } catch (e) {
+        role.permissions = prev
+        toast(e.message || 'Failed to update permission')
+      }
+    },
+
+    async resetRole(role) {
+      role._resetting = true
+      try {
+        const res = await api.resetRolePermissions(role.id)
+        role.permissions = res.permissions ? res.permissions.split(',').filter(Boolean) : []
+        toast(`${role.name} reset to defaults`, 'success')
+      } catch (e) {
+        toast(e.message || 'Failed to reset role')
+      } finally {
+        role._resetting = false
+      }
+    },
+
+    toggleNewPerm(perm, enabled) {
+      s.newRole.permissions = enabled
+        ? [...s.newRole.permissions, perm].sort()
+        : s.newRole.permissions.filter(p => p !== perm)
+    },
+
+    async createRole() {
+      s.createErr = null
+      s.creating = true
+      try {
+        await api.createRole({
+          name: s.newRole.name,
+          description: s.newRole.description,
+          permissions: s.newRole.permissions,
+        })
+        toast(`Role "${s.newRole.name}" created`, 'success')
+        s.newRole = { name: '', description: '', permissions: [] }
+        await loadRoles()
+      } catch (e) {
+        s.createErr = e.message || 'Failed to create role'
+      } finally {
+        s.creating = false
+      }
+    },
+  })
+
+  async function loadRoles() {
+    s.loading = true
+    s.loadErr = null
+    try {
+      const res = await api.getRoles()
+      s.allPerms = res.all_permissions || []
+      s.roles = (res.roles || []).map(r => ({ ...r, _resetting: false }))
+    } catch (e) {
+      s.loadErr = e.message || 'Failed to load roles'
+    } finally {
+      s.loading = false
+    }
+  }
+
+  loadRoles()
+</script>

@@ -9,7 +9,7 @@
   <div style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
     <div>
       <div class="stat-label">Name</div>
-      <div :text="[user?.meta?.first_name, user?.meta?.last_name].filter(Boolean).join(' ') || user?.email?.split('@')[0] || '—'"></div>
+      <div :text="user?.meta?.spiritual_name || user?.meta?.name || user?.email?.split('@')[0] || '—'"></div>
     </div>
     <div>
       <div class="stat-label">Email</div>

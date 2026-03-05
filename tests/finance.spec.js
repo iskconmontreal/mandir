@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAs, API } from './fixtures.js'
 
-function mockFinance(page, { donations = [], expenses = [], clients = [] } = {}) {
+function mockFinance(page, { donations = [], expenses = [], members = [] } = {}) {
   return page.route(`${API}/**`, async route => {
     const url = new URL(route.request().url())
     const method = route.request().method()
@@ -11,13 +11,13 @@ function mockFinance(page, { donations = [], expenses = [], clients = [] } = {})
     if (idMatch) {
       const [, id, action] = idMatch
       const exp = expenses.find(e => e.id == id)
-      const transitions = { submit: 'submitted', approve: 'approved', pay: 'paid', close: 'closed', return: 'returned', reject: 'rejected' }
+      const transitions = { approve: 'approved', pay: 'paid', reject: 'rejected' }
       if (exp && transitions[action]) { exp.status = transitions[action]; return route.fulfill({ json: exp }) }
     }
 
     if (path === '/api/donations' && method === 'POST') {
       const body = route.request().postDataJSON()
-      const d = { id: donations.length + 1, ...body, status: 'draft' }
+      const d = { id: donations.length + 1, ...body, status: 'submitted' }
       donations.push(d)
       return route.fulfill({ json: d })
     }
@@ -41,22 +41,34 @@ function mockFinance(page, { donations = [], expenses = [], clients = [] } = {})
     if (path === '/api/expenses') {
       if (method === 'POST') {
         const body = route.request().postDataJSON()
-        const e = { id: expenses.length + 1, ...body, status: 'draft' }
+        const e = { id: expenses.length + 1, ...body, status: 'submitted' }
         expenses.push(e)
         return route.fulfill({ json: e })
       }
       return route.fulfill({ json: { items: [...expenses], total: expenses.length } })
     }
 
-    if (path === '/api/clients') return route.fulfill({ json: { items: clients, total: clients.length } })
+    if (path === '/api/members') return route.fulfill({ json: { items: members, total: members.length } })
     if (path.startsWith('/api/expenses/') && method === 'DELETE') {
       const id = +path.split('/').at(-1)
       const i = expenses.findIndex(e => e.id === id)
       if (i >= 0) expenses.splice(i, 1)
       return route.fulfill({ status: 204 })
     }
+    if (/^\/api\/expenses\/\d+$/.test(path) && method === 'GET') {
+      const id = +path.split('/').at(-1)
+      const exp = expenses.find(e => e.id === id)
+      return route.fulfill(exp ? { json: exp } : { status: 404, json: { error: 'Not found' } })
+    }
     if (path.startsWith('/api/expenses/') && method === 'GET') {
       return route.fulfill({ json: { items: [], total: 0 } })
+    }
+    if (path.startsWith('/api/expenses/') && method === 'PUT') {
+      const id = +path.split('/')[3]
+      const body = route.request().postDataJSON()
+      const i = expenses.findIndex(e => e.id === id)
+      if (i >= 0) expenses[i] = { ...expenses[i], ...body }
+      return route.fulfill({ json: expenses[i] ?? {} })
     }
     if (path === '/api/audit') return route.fulfill({ json: { items: [], total: 0 } })
     if (method !== 'GET') return route.fulfill({ status: 404, json: { error: 'Unexpected mutation in mock: ' + path } })
@@ -67,6 +79,7 @@ function mockFinance(page, { donations = [], expenses = [], clients = [] } = {})
 async function openFinance(page, tab = 'expenses') {
   await page.goto(`/app/finance/#${tab}`)
   await page.locator('.card-tab-group').waitFor()
+  if (tab === 'expenses') await page.locator('.seg[title="Table view"]').click()
 }
 
 test.describe('finance section', () => {
@@ -94,18 +107,6 @@ test.describe('finance section', () => {
     await expect(tabs.nth(2).locator('.stat-label')).toHaveText('Donors')
   })
 
-  test('expense form shows type tabs: Direct, Reimbursement, Advance', async ({ page }) => {
-    await mockFinance(page)
-    await openFinance(page)
-    await page.click('button:has-text("+ Expense")')
-    await expect(page.getByRole('heading', { name: 'Add Expense' })).toBeVisible()
-    const tabs = page.locator('.exp-type-tabs .tab')
-    await expect(tabs).toHaveCount(3)
-    await expect(tabs.nth(0)).toHaveText('Direct')
-    await expect(tabs.nth(1)).toHaveText('Reimbursement')
-    await expect(tabs.nth(2)).toHaveText('Advance')
-    await expect(tabs.nth(0)).toHaveClass(/tab-active/)
-  })
 
   test('no crash on keydown with undefined key (autofill)', async ({ page }) => {
     await mockFinance(page)
@@ -132,7 +133,7 @@ test.describe('finance section', () => {
     const row = page.locator('table tbody tr').first()
     await expect(row).toContainText('Hydro Quebec')
     await expect(row).toContainText('142.50')
-    await expect(row).toContainText('Draft')
+    await expect(row.locator('.status-submitted')).toBeVisible()
     await expect(row).toContainText('Kitchen')
 
     expect(expenses).toHaveLength(1)
@@ -174,7 +175,7 @@ test.describe('finance section', () => {
     await page.click('button:has-text("Save Donation")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
-    expect(donations[0].client_id).toBeFalsy()
+    expect(donations[0].member_id).toBeFalsy()
   })
 
   test('delete donation: two-step confirm in modal (no browser dialog)', async ({ page }) => {
@@ -219,43 +220,100 @@ test.describe('finance section', () => {
 
   test('expense filter by category reduces results', async ({ page }) => {
     const expenses = [
-      { id: 1, amount: 1000, paid_to: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'draft' },
-      { id: 2, amount: 2000, paid_to: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'draft' },
+      { id: 1, amount: 1000, paid_to: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
+      { id: 2, amount: 2000, paid_to: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'submitted' },
     ]
     await mockFinance(page, { expenses })
     await openFinance(page)
     await page.locator('tr.row-link').first().waitFor()
 
-    await page.click('button:has-text("Filter")')
-    await expect(page.locator('.modal-overlay')).toBeVisible()
-    await page.locator('.modal select').nth(1).selectOption('kitchen')
-    await page.locator('.modal .btn-primary').click()
-    await expect(page.locator('.modal-overlay')).not.toBeVisible()
+    const section = page.locator('section').first()
+    await section.locator('.btn-filter').click()
+    await expect(section.locator('.filter-dropdown')).toBeVisible()
+    await section.locator('.filter-dropdown select').nth(1).selectOption('kitchen')
+    await section.locator('.filter-dropdown .btn-primary').click()
+    await expect(section.locator('.filter-dropdown')).not.toBeVisible()
 
-    const expSection = page.locator('section').first()
-    await expect(expSection.locator('tr.row-link')).toHaveCount(1)
-    await expect(expSection.locator('tr.row-link').first()).toContainText('Kitchen')
+    await expect(section.locator('tr.row-link')).toHaveCount(1)
+    await expect(section.locator('tr.row-link').first()).toContainText('Kitchen')
   })
 
   test('expense filter chip appears and can be dismissed', async ({ page }) => {
     const expenses = [
-      { id: 1, amount: 1000, paid_to: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'draft' },
-      { id: 2, amount: 2000, paid_to: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'draft' },
+      { id: 1, amount: 1000, paid_to: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
+      { id: 2, amount: 2000, paid_to: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'submitted' },
     ]
     await mockFinance(page, { expenses })
     await openFinance(page)
     await page.locator('tr.row-link').first().waitFor()
 
-    await page.click('button:has-text("Filter")')
-    await page.locator('.modal select').nth(1).selectOption('kitchen')
-    await page.locator('.modal .btn-primary').click()
+    const section = page.locator('section').first()
+    await section.locator('.btn-filter').click()
+    await section.locator('.filter-dropdown select').nth(1).selectOption('kitchen')
+    await section.locator('.filter-dropdown .btn-primary').click()
 
     await expect(page.locator('.filter-chips .chip')).toHaveCount(1)
     await expect(page.locator('.filter-chips .chip')).toContainText('Kitchen')
 
     await page.locator('.filter-chips .chip').click()
     await expect(page.locator('.filter-chips')).not.toBeVisible()
-    await expect(page.locator('section').first().locator('tr.row-link')).toHaveCount(2)
+    await expect(section.locator('tr.row-link')).toHaveCount(2)
+  })
+
+  test('expense filter by status reduces results', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 1000, paid_to: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
+      { id: 2, amount: 2000, paid_to: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'approved' },
+      { id: 3, amount: 3000, paid_to: 'C', category: 'rent', expense_date: '2025-01-03', status: 'approved' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    const section = page.locator('section').first()
+    await section.locator('.btn-filter').click()
+    await section.locator('.filter-dropdown select').first().selectOption('approved')
+    await section.locator('.filter-dropdown .btn-primary').click()
+
+    await expect(section.locator('tr.row-link')).toHaveCount(2)
+  })
+
+  test('expense filter dropdown stays open while interacting', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 1000, paid_to: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    const section = page.locator('section').first()
+    await section.locator('.btn-filter').click()
+    await expect(section.locator('.filter-dropdown')).toBeVisible()
+
+    await section.locator('.filter-dropdown select').first().selectOption('submitted')
+    await expect(section.locator('.filter-dropdown')).toBeVisible()
+
+    await section.locator('.filter-dropdown select').nth(1).selectOption('kitchen')
+    await expect(section.locator('.filter-dropdown')).toBeVisible()
+  })
+
+  test('donation filter by category reduces results', async ({ page }) => {
+    const donations = [
+      { id: 1, amount: 5000, method: 'cash', category: 'general', date_received: '2025-01-01', note: '' },
+      { id: 2, amount: 3000, method: 'cheque', category: 'building_fund', date_received: '2025-01-02', note: '' },
+      { id: 3, amount: 2000, method: 'cash', category: 'general', date_received: '2025-01-03', note: '' },
+    ]
+    await mockFinance(page, { donations })
+    await openFinance(page, 'donations')
+    const section = page.locator('section').nth(1)
+    await section.locator('tr.row-link').first().waitFor()
+
+    await section.locator('.btn-filter').click()
+    await expect(section.locator('.filter-dropdown')).toBeVisible()
+    await section.locator('.filter-dropdown select').first().selectOption('building_fund')
+    await section.locator('.filter-dropdown .btn-primary').click()
+
+    await expect(section.locator('tr.row-link')).toHaveCount(1)
   })
 
   test('donation search filter reduces results', async ({ page }) => {
@@ -274,38 +332,7 @@ test.describe('finance section', () => {
     await expect(donSection.locator('tr.row-link').first()).toContainText('sunday feast')
   })
 
-  test('expense workflow: draft can be submitted for approval', async ({ page }) => {
-    const expenses = [{ id: 1, amount: 14250, paid_to: 'Hydro Quebec', category: 'utilities', expense_date: '2025-01-01', status: 'draft' }]
-    await mockFinance(page, { expenses })
-    await openFinance(page)
-    await page.locator('tr.row-link').first().waitFor()
 
-    await page.locator('tr.row-link').first().click()
-    await expect(page.locator('.modal-overlay')).toBeVisible()
-    await page.click('button:has-text("Submit for Approval")')
-    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
-
-    await expect(page.locator('tr.row-link').first().locator('.badge').filter({ hasText: 'Submitted' })).toBeVisible()
-  })
-
-  test('shows truncation warning when total > items loaded', async ({ page }) => {
-    await page.route(`${API}/**`, async route => {
-      const path = new URL(route.request().url()).pathname
-      if (path === '/api/donations') return route.fulfill({ json: { items: Array(10).fill({ id: 1, amount: 100, date_received: '2025-01-01', method: 'cash', category: 'general' }), total: 1500 } })
-      if (path === '/api/expenses') return route.fulfill({ json: { items: [], total: 0 } })
-      if (path === '/api/clients') return route.fulfill({ json: { items: [], total: 0 } })
-      route.fulfill({ json: { items: [], total: 0 } })
-    })
-    await openFinance(page)
-    await expect(page.locator('.truncation-warn')).toBeVisible()
-  })
-
-  test('no truncation warning when all records loaded', async ({ page }) => {
-    await mockFinance(page)
-    await openFinance(page)
-    await page.locator('.card-tab-group').waitFor()
-    await expect(page.locator('.truncation-warn')).not.toBeVisible()
-  })
 
   test('loadErr shown when API fails', async ({ page }) => {
     await page.route(`${API}/**`, route => route.fulfill({ status: 500, json: { message: 'Failed to load data' } }))
@@ -315,13 +342,14 @@ test.describe('finance section', () => {
   })
 
   test('CSV export downloads a file from expenses tab', async ({ page }) => {
-    await mockFinance(page, { expenses: [{ id: 1, amount: 1000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-01', status: 'draft' }] })
+    await mockFinance(page, { expenses: [{ id: 1, amount: 1000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' }] })
     await openFinance(page)
     await page.locator('section').first().locator('tr.row-link').first().waitFor()
 
+    await page.click('button:has-text("Export")')
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.click('button:has-text("Export")')
+      page.click('a:has-text("CSV")')
     ])
     expect(download.suggestedFilename()).toBe('expenses.csv')
   })
@@ -331,9 +359,10 @@ test.describe('finance section', () => {
     await openFinance(page, 'donations')
     await page.locator('section').nth(1).locator('tr.row-link').first().waitFor()
 
+    await page.locator('section').nth(1).locator('button:has-text("Export")').click()
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.locator('section').nth(1).locator('button:has-text("Export")').click()
+      page.locator('section').nth(1).locator('a:has-text("CSV")').click()
     ])
     expect(download.suggestedFilename()).toBe('donations.csv')
   })
@@ -355,7 +384,7 @@ test.describe('finance section', () => {
       }
       if (path === '/api/expenses' && method === 'POST') {
         savedBody = route.request().postDataJSON()
-        const e = { id: 1, ...savedBody, status: 'draft' }
+        const e = { id: 1, ...savedBody, status: 'submitted' }
         expenses.push(e)
         return route.fulfill({ json: e })
       }
@@ -468,7 +497,7 @@ test.describe('finance section', () => {
       }
       if (path === '/api/expenses' && method === 'POST') {
         savedBody = route.request().postDataJSON()
-        const e = { id: 1, ...savedBody, status: 'draft' }
+        const e = { id: 1, ...savedBody, status: 'submitted' }
         expenses.push(e)
         return route.fulfill({ json: e })
       }
@@ -506,7 +535,7 @@ test.describe('finance section', () => {
       }
       if (path === '/api/expenses' && method === 'POST') {
         savedBody = route.request().postDataJSON()
-        return route.fulfill({ json: { id: 1, ...savedBody, status: 'draft' } })
+        return route.fulfill({ json: { id: 1, ...savedBody, status: 'submitted' } })
       }
       route.fulfill({ json: { items: [...expenses], total: expenses.length } })
     })
@@ -541,7 +570,7 @@ test.describe('finance section', () => {
       }
       if (path === '/api/expenses' && method === 'POST') {
         savedBody = route.request().postDataJSON()
-        return route.fulfill({ json: { id: 1, ...savedBody, status: 'draft' } })
+        return route.fulfill({ json: { id: 1, ...savedBody, status: 'submitted' } })
       }
       route.fulfill({ json: { items: [...expenses], total: expenses.length } })
     })
@@ -579,7 +608,7 @@ test.describe('finance section', () => {
       }
       if (path === '/api/donations' && method === 'POST') {
         savedBody = route.request().postDataJSON()
-        const d = { id: 1, ...savedBody, status: 'draft' }
+        const d = { id: 1, ...savedBody, status: 'submitted' }
         donations.push(d)
         return route.fulfill({ json: d })
       }
@@ -600,5 +629,345 @@ test.describe('finance section', () => {
     expect(savedBody.files).toHaveLength(1)
     expect(savedBody.files[0].tmp_name).toBe('don123.jpg')
     expect(savedBody.files[0].original_name).toBe('don-receipt.jpg')
+  })
+
+  test('opening + Expense always starts fresh: no leftover receipts or form data', async ({ page }) => {
+    await mockFinance(page, { expenses: [] })
+    await openFinance(page)
+
+    await page.click('button:has-text("+ Expense")')
+    await page.fill('#exp-vendor', 'Leftover Vendor')
+    await page.fill('#exp-amount', '99.00')
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible()
+
+    await page.click('button:has-text("+ Expense")')
+    await expect(page.locator('#exp-vendor')).toHaveValue('')
+    await expect(page.locator('#exp-amount')).toHaveValue('')
+    await expect(page.locator('.receipt-thumb')).toHaveCount(0)
+    await expect(page.locator('.scan-icon')).toBeVisible()
+  })
+
+  test('ESC closes modal when file picker is not open', async ({ page }) => {
+    await mockFinance(page)
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+    await expect(page.getByRole('heading', { name: 'Add Expense' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible()
+  })
+
+  test('ESC on lightbox closes lightbox but not modal', async ({ page }) => {
+    await page.route(`${API}/**`, async route => {
+      const path = new URL(route.request().url()).pathname
+      const method = route.request().method()
+      if (path === '/api/documents/extract' && method === 'POST') {
+        return route.fulfill({ json: {
+          extracted_data: { amount: '10.00' },
+          file_info: { file_name: 'f.jpg', original_name: 'r.jpg', mime_type: 'image/jpeg', file_size: 100 },
+        } })
+      }
+      route.fulfill({ json: { items: [], total: 0 } })
+    })
+
+    const minJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9])
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+    await page.setInputFiles('#receipt-input', { name: 'r.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
+    await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
+
+    await page.locator('.receipt-thumb img').click()
+    await expect(page.locator('.lightbox')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.lightbox')).not.toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Add Expense' })).toBeVisible()
+  })
+
+  test('drag and drop receipt auto-fills form', async ({ page }) => {
+    await page.route(`${API}/**`, async route => {
+      const path = new URL(route.request().url()).pathname
+      const method = route.request().method()
+      if (path === '/api/documents/extract' && method === 'POST') {
+        return route.fulfill({ json: {
+          extracted_data: { amount: '55.00', vendor: 'Drop Store' },
+          file_info: { file_name: 'drop.jpg', original_name: 'drop.jpg', mime_type: 'image/jpeg', file_size: 512 },
+        } })
+      }
+      route.fulfill({ json: { items: [], total: 0 } })
+    })
+
+    const minJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9])
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+
+    const dataTransfer = await page.evaluateHandle((jpeg) => {
+      const dt = new DataTransfer()
+      const file = new File([new Uint8Array(jpeg)], 'drop.jpg', { type: 'image/jpeg' })
+      dt.items.add(file)
+      return dt
+    }, [...minJpeg])
+
+    await page.locator('.receipt-strip').dispatchEvent('drop', { dataTransfer })
+    await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
+    await expect(page.locator('#exp-vendor')).toHaveValue('Drop Store', { timeout: 5000 })
+    await expect(page.locator('#exp-amount')).toHaveValue('55.00')
+  })
+
+
+  test('expense detail shows attachments from backend', async ({ page }) => {
+    const attachment = { file_path: 'uploads/r.jpg', original_name: 'receipt.jpg', mime_type: 'image/jpeg' }
+    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted', attachments: [attachment] }]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    await page.locator('tr.row-link').first().click()
+    await expect(page.locator('.stat-label:has-text("Receipts")')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.receipt-thumb img')).toHaveCount(1)
+  })
+
+  test('expense detail receipt image loads (not broken)', async ({ page }) => {
+    const png1x1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', 'base64')
+    const attachment = { file_path: 'uploads/expenses/1/receipt.png', original_name: 'receipt.png', mime_type: 'image/png' }
+    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted', attachments: [attachment] }]
+
+    await mockFinance(page, { expenses })
+    await page.route(`${API}/uploads/**`, route =>
+      route.fulfill({ body: png1x1, contentType: 'image/png' })
+    )
+    await openFinance(page)
+    await page.locator('tr.row-link').first().click()
+
+    const img = page.locator('.receipt-thumb img')
+    await expect(img).toBeVisible({ timeout: 5000 })
+    const loaded = await img.evaluate(el => el.complete && el.naturalWidth > 0)
+    expect(loaded).toBe(true)
+    await expect(img).toHaveAttribute('src', new RegExp(`${API.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/uploads/`))
+  })
+
+  test('add second receipt via + button after first succeeds', async ({ page }) => {
+    let callCount = 0
+    await page.route(`${API}/**`, async route => {
+      const path = new URL(route.request().url()).pathname
+      const method = route.request().method()
+      if (path === '/api/documents/extract' && method === 'POST') {
+        callCount++
+        return route.fulfill({ json: {
+          extracted_data: { amount: '25.00' },
+          file_info: { file_name: `f${callCount}.jpg`, original_name: `r${callCount}.jpg`, mime_type: 'image/jpeg', file_size: 256 },
+        } })
+      }
+      route.fulfill({ json: { items: [], total: 0 } })
+    })
+
+    const minJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9])
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+    await page.setInputFiles('#receipt-input', { name: 'r1.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
+    await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
+
+    await page.locator('.receipt-add').click()
+    await page.setInputFiles('#receipt-input', { name: 'r2.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
+    await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
+    await expect(page.locator('#exp-amount')).toHaveValue('50.00', { timeout: 5000 })
+  })
+
+  test('cancel button resets form and closes modal', async ({ page }) => {
+    await mockFinance(page)
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+    await page.fill('#exp-vendor', 'Test')
+    await page.click('button:has-text("Cancel")')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible()
+
+    await page.click('button:has-text("+ Expense")')
+    await expect(page.locator('#exp-vendor')).toHaveValue('')
+  })
+
+  test('update submitted expense: edit fields and save', async ({ page }) => {
+    await loginAs(page, 'member')
+    const expenses = [{ id: 1, amount: 5000, paid_to: 'Old Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    await page.locator('tr.row-link').first().click()
+    await expect(page.locator('#exp-vendor')).toHaveValue('Old Vendor')
+    await page.fill('#exp-vendor', 'New Vendor')
+    await page.fill('#exp-amount', '75.00')
+    await page.click('button:has-text("Update")')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
+
+    expect(expenses[0].paid_to).toBe('New Vendor')
+    expect(expenses[0].amount).toBe(7500)
+  })
+
+  test('approve → pay workflow', async ({ page }) => {
+    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    await page.locator('tr.row-link').first().click()
+    await page.locator('.modal button:has-text("Approve")').click()
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.status-approved')).toBeVisible()
+
+    await page.locator('tr.row-link').first().click()
+    await page.locator('.modal button:has-text("Done")').click()
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.status-paid')).toBeVisible()
+  })
+
+  test('quick actions: approve and pay from table row', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, paid_to: 'Vendor A', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' },
+      { id: 2, amount: 3000, paid_to: 'Vendor B', category: 'utilities', expense_date: '2025-01-11', status: 'approved' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    const row1 = page.locator('tr.row-link').filter({ hasText: 'Vendor A' })
+    const row2 = page.locator('tr.row-link').filter({ hasText: 'Vendor B' })
+
+    await expect(row1.locator('.btn-quick-approve')).toBeVisible()
+    await expect(row1.locator('.btn-quick-approve')).toHaveText('Approve')
+    await expect(row2.locator('.btn-quick-pay')).toBeVisible()
+    await expect(row2.locator('.btn-quick-pay')).toHaveText('Done')
+
+    await row1.locator('.btn-quick-approve').click()
+    await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
+    expect(expenses[0].status).toBe('approved')
+
+    await row2.locator('.btn-quick-pay').click()
+    await expect(page.locator('.toast-success').filter({ hasText: 'paid' })).toBeVisible({ timeout: 5000 })
+    expect(expenses[1].status).toBe('paid')
+  })
+
+  test('reject requires note', async ({ page }) => {
+    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    await page.locator('tr.row-link').first().click()
+    await page.locator('.modal button:has-text("Reject")').click()
+    await expect(page.locator('.login-error')).toContainText('Note is required')
+    await expect(page.locator('.modal-overlay')).toBeVisible()
+
+    await page.locator('.modal textarea').fill('not valid')
+    await page.locator('.modal button:has-text("Reject")').click()
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.status-rejected')).toBeVisible()
+  })
+
+  test('extraction: user-edited fields not overridden by later receipt', async ({ page }) => {
+    let callCount = 0
+    await page.route(`${API}/**`, async route => {
+      const path = new URL(route.request().url()).pathname
+      const method = route.request().method()
+      if (path === '/api/documents/extract' && method === 'POST') {
+        callCount++
+        return route.fulfill({ json: {
+          extracted_data: { amount: callCount === 1 ? '10.00' : '20.00', vendor: callCount === 1 ? 'First Store' : 'Second Store' },
+          file_info: { file_name: `f${callCount}.jpg`, original_name: `r${callCount}.jpg`, mime_type: 'image/jpeg', file_size: 256 },
+        } })
+      }
+      route.fulfill({ json: { items: [], total: 0 } })
+    })
+
+    const minJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9])
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+    await page.setInputFiles('#receipt-input', { name: 'r1.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
+    await expect(page.locator('#exp-vendor')).toHaveValue('First Store', { timeout: 5000 })
+
+    await page.fill('#exp-vendor', 'My Override')
+
+    await page.locator('.receipt-add').click()
+    await page.setInputFiles('#receipt-input', { name: 'r2.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
+    await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
+
+    await expect(page.locator('#exp-vendor')).toHaveValue('My Override')
+    await expect(page.locator('#exp-amount')).toHaveValue('30.00', { timeout: 5000 })
+  })
+
+  test('expense date picker: selecting date persists value', async ({ page }) => {
+    const expenses = []
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    await page.click('button:has-text("+ Expense")')
+    await page.fill('#exp-vendor', 'Date Test')
+    await page.fill('#exp-amount', '10.00')
+    await page.fill('#exp-date', '2025-06-15')
+    await expect(page.locator('#exp-date')).toHaveValue('2025-06-15')
+
+    await page.click('button:has-text("Save Expense")')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
+
+    expect(expenses).toHaveLength(1)
+    expect(expenses[0].expense_date).toBe('2025-06-15')
+  })
+
+  test('home quick-add: expense and donation appear on finance page', async ({ page }) => {
+    const expenses = []
+    const donations = []
+    await mockFinance(page, { expenses, donations })
+
+    await page.goto('/app/')
+    await page.locator('button:has-text("+ Expense")').waitFor()
+
+    await page.click('button:has-text("+ Expense")')
+    await page.fill('#home-exp-vendor', 'Bell Canada')
+    await page.selectOption('#home-exp-cat', 'utilities')
+    await page.fill('#home-exp-amount', '89.50')
+    await page.fill('#home-exp-date', '2025-03-01')
+    await page.fill('#home-exp-desc', 'Internet service')
+    await page.click('button:has-text("Save Expense")')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.toast-success')).toBeVisible({ timeout: 5000 })
+
+    await page.click('button:has-text("+ Donation")')
+    await page.fill('#home-don-amount', '200.00')
+    await page.selectOption('#home-don-method', 'cash')
+    await page.selectOption('#home-don-cat', 'sunday_feast')
+    await page.fill('#home-don-date', '2025-03-01')
+    await page.click('button:has-text("Save Donation")')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
+
+    expect(expenses).toHaveLength(1)
+    expect(expenses[0].paid_to).toBe('Bell Canada')
+    expect(expenses[0].amount).toBe(8950)
+    expect(donations).toHaveLength(1)
+    expect(donations[0].amount).toBe(20000)
+    expect(donations[0].method).toBe('cash')
+
+    await openFinance(page)
+    const expRow = page.locator('table tbody tr.row-link').first()
+    await expect(expRow).toContainText('Bell Canada')
+    await expect(expRow).toContainText('89.50')
+
+    await page.locator('.card-tab').filter({ hasText: 'Donations' }).click()
+    const donSection = page.locator('section').nth(1)
+    await donSection.locator('tr.row-link').first().waitFor()
+    await expect(donSection.locator('tr.row-link').first()).toContainText('200.00')
+    await expect(donSection.locator('tr.row-link').first()).toContainText('Sunday Feast')
+  })
+
+  test('delete expense on submitted status allowed', async ({ page }) => {
+    await loginAs(page, 'member')
+    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    await page.locator('tr.row-link').first().click()
+    await page.click('button:has-text("Delete")')
+    await page.click('button:has-text("Yes")')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
+    expect(expenses).toHaveLength(0)
   })
 })

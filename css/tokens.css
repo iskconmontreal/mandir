@@ -56,7 +56,7 @@
   --c-white:          #fff;
   --c-neutral-hover:  rgba(0, 0, 0, .04);      /* hover on non-accent surfaces */
   --c-neutral-active: rgba(0, 0, 0, .06);      /* neutral badge bg (draft, closed) */
-  --c-accent-hover:   rgba(107, 92, 231, .06); /* hover on accent items */
+  --c-accent-hover:   rgba(107, 92, 231, .10); /* hover on accent items */
   --c-accent-active:  rgba(107, 92, 231, .10); /* badge, chip selected bg */
   --c-err-hover:      rgba(226, 92, 92, .08);  /* error state bg, danger hover */
   --c-err-active:     rgba(226, 92, 92, .10);  /* badge-rejected bg */

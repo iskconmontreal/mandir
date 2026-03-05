@@ -2,7 +2,7 @@
   "name": "mandala",
   "private": true,
   "scripts": {
-    "start": "bundle exec jekyll serve --livereload",
+    "start": "bundle exec jekyll serve",
     "start:https": "bundle exec jekyll serve --ssl-key .ssl/key.pem --ssl-cert .ssl/cert.pem",
     "test": "npx playwright test",
     "test:ui": "npx playwright test --ui",

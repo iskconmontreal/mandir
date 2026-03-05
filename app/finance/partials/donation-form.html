@@ -28,7 +28,7 @@
           <div style="font-weight:var(--f-wt-b)">Scan receipt</div>
           <div class="scan-hint">Drop image or PDF, or click to browse</div>
         </div>
-        <div :if="extracting" class="dim">Extracting data…</div>
+        <div :if="extracting" class="dim">Scanning…</div>
       </div>
       <input id="don-receipt-input" type="file" accept="image/*,.pdf" style="display:none"
         :onchange="e => { scanFile(e.target.files[0]); e.target.value = '' }">
@@ -39,11 +39,11 @@
           <div style="position:relative">
             <input type="text" :value="memberQuery"
               :onfocus="e => filterDonors(memberQuery)"
-              :oninput="e => { donForm.client_id = null; filterDonors(e.target.value) }"
+              :oninput="e => { donForm.member_id = null; filterDonors(e.target.value) }"
               :onblur="e => { memberHits = [] }"
-              :style="donForm.client_id ? 'padding-right:2rem' : ''"
+              :style="donForm.member_id ? 'padding-right:2rem' : ''"
               placeholder="Search member… (optional)">
-            <button :if="donForm.client_id" type="button" class="btn-link"
+            <button :if="donForm.member_id" type="button" class="btn-link"
               style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%)"
               :onclick="clearDonor()">&times;</button>
           </div>
@@ -85,8 +85,8 @@
           <div class="stat-label" style="margin-bottom:var(--s-sm)">History</div>
           <div class="history-list">
             <div class="history-item" :each="h in donHistory">
-              <span class="badge" :text="fmt(h.action)"></span>
-              <span class="dim" :if="h.diff" :text="typeof h.diff === 'string' ? h.diff : Object.keys(h.diff).join(', ')"></span>
+              <span class="badge" :class="'badge-' + eventBadge(h)" :text="eventLabel(h)"></span>
+              <span class="dim" :if="eventDetail(h)" :text="eventDetail(h)"></span>
               <span class="history-date" :text="h.created_at?.slice(0,10) || ''"></span>
             </div>
           </div>
@@ -97,9 +97,9 @@
         <div style="display:flex; justify-content:flex-end; gap:var(--s-sm)">
           <button :if="editId && !delConfirm" type="button" class="btn btn-danger btn-sm" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
           <span :if="editId && delConfirm" class="dim" style="font-size:var(--f-sm); margin-right:auto; align-self:center">Delete permanently?</span>
-          <button :if="editId && delConfirm" type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': adding}" :onclick="delDonation()">Yes</button>
+          <button :if="editId && delConfirm" type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': deleting}" :onclick="delDonation()">Yes</button>
           <button :if="editId && delConfirm" type="button" class="btn btn-outline btn-sm" :onclick="delConfirm = false">No</button>
-          <button type="button" class="btn btn-outline" :onclick="cancelAdd()">Cancel</button>
+          <button :if="!editId" type="button" class="btn btn-outline" :onclick="cancelAdd()">Cancel</button>
           <button type="submit" class="btn btn-primary" :class="{'btn-loading': adding}" :text="editId ? 'Update' : 'Save Donation'"></button>
         </div>
       </form>
