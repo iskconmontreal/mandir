@@ -1,6 +1,6 @@
 <!-- Expense modal (add/edit/detail) -->
-<div class="modal-overlay" :if="showAdd && activeTab === 'expenses'" :onkeydown.esc.document="e => { if (lightboxSrc || filePickerOpen) return; showAdd = false }" :onclick="e => { if (e.target === e.currentTarget) showAdd = false }">
-  <div class="modal">
+<div class="modal-overlay" :if="showAdd && activeTab === 'expenses'" :onkeydown.esc.document="e => { if (lightboxSrc || filePickerOpen) return; showAdd = false }">
+  <div class="modal" :onclick.outside="e => { if (lightboxSrc || filePickerOpen) return; showAdd = false }">
     <div class="modal-header">
       <h2 :if="!detailExp" :text="editId ? 'Edit Expense' : 'Add Expense'"></h2>
       <h2 :if="detailExp" style="display:flex;align-items:center;gap:var(--s-sm)">
@@ -23,8 +23,8 @@
             <div :text="'$' + fmtAmt(detailExp?.tax_amount)"></div>
           </div>
           <div class="detail-field">
-            <div class="stat-label">Paid to</div>
-            <div :text="detailExp?.member_id ? (memberNames[detailExp?.member_id] || detailExp?.paid_to) : detailExp?.paid_to"></div>
+            <div class="stat-label">Payee</div>
+            <div :text="detailExp?.member_id ? (memberNames[detailExp?.member_id] || detailExp?.payee) : detailExp?.payee"></div>
           </div>
           <div class="detail-field">
             <div class="stat-label">Category</div>
@@ -66,11 +66,11 @@
             <div class="activity-item" :each="e in expTimeline">
               <div class="activity-icon" :class="'activity-icon-' + e.badge" :html="activityIcon(e.badge)"></div>
               <div class="activity-body">
-                <span :if="e.actor" class="activity-actor" :text="e.actor + ' '"></span>
+                <span :if="e.actor" class="activity-actor"><a :if="e.uid && e.uid !== myUid" href="{{ '/app/members/' | relative_url }}" :text="e.actor"></a><span :if="!e.uid || e.uid === myUid" :text="e.actor"></span> </span>
                 <span :text="e.actor ? e.label.toLowerCase() : e.label"></span>
                 <span :if="e.detail" class="dim" :text="' · ' + e.detail"></span>
               </div>
-              <span class="activity-date" :text="timeAgo(e.date)"></span>
+              <span class="activity-date" :text="fmtDate(e.date)"></span>
             </div>
           </div>
         </div>
@@ -144,14 +144,14 @@
 
         <form :onsubmit.prevent="saveExpense" style="display:flex;flex-direction:column;gap:var(--s-md)">
           <div class="form-row">
-            <div class="field autocomplete">
-              <label for="exp-vendor">Paid to</label>
-              <input id="exp-vendor" type="text" :value="expForm.paid_to"
+            <div :if="can('expenses:approve')" class="field autocomplete">
+              <label for="exp-vendor">Payee</label>
+              <input id="exp-vendor" type="text" :value="expForm.payee"
                 :oninput="e => filterVendors(e.target.value)"
                 :onblur="e => { vendorHits = [] }"
                 placeholder="Vendor, store, person…" required>
               <div :if="vendorHits.length" class="autocomplete-list">
-                <div class="autocomplete-item" :each="v in vendorHits" :onmousedown.prevent="() => { expForm.paid_to = v; vendorHits = [] }" :text="v"></div>
+                <div class="autocomplete-item" :each="v in vendorHits" :onmousedown.prevent="() => { expForm.payee = v; vendorHits = [] }" :text="v"></div>
               </div>
             </div>
             <div class="field">
@@ -184,7 +184,7 @@
             <button :if="delConfirm" type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': deleting}" :onclick="delExpense()">Yes</button>
             <button :if="delConfirm" type="button" class="btn btn-outline btn-sm" :onclick="delConfirm = false">No</button>
             <button :if="!editId && !delConfirm" type="button" class="btn btn-outline" :onclick="cancelAdd()">Cancel</button>
-            <button :if="!delConfirm" type="submit" class="btn btn-primary" :class="{'btn-loading': adding}" :text="editId ? 'Update' : 'Save Expense'"></button>
+            <button :if="!delConfirm" type="submit" class="btn btn-primary" :class="{'btn-loading': adding}" :text="editId ? 'Update' : 'Submit'"></button>
           </div>
         </form>
       </div>

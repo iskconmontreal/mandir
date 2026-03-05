@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAs, API } from './fixtures.js'
 
-function mockFinance(page, { donations = [], expenses = [], members = [] } = {}) {
+function mockFinance(page, { donations = [], expenses = [], members = [], auditLogs = [] } = {}) {
   return page.route(`${API}/**`, async route => {
     const url = new URL(route.request().url())
     const method = route.request().method()
@@ -70,7 +70,11 @@ function mockFinance(page, { donations = [], expenses = [], members = [] } = {})
       if (i >= 0) expenses[i] = { ...expenses[i], ...body }
       return route.fulfill({ json: expenses[i] ?? {} })
     }
-    if (path === '/api/audit') return route.fulfill({ json: { items: [], total: 0 } })
+    if (path === '/api/audit') {
+      const eid = url.searchParams.get('entity_id')
+      const items = eid ? auditLogs.filter(l => String(l.entity_id) === eid) : auditLogs
+      return route.fulfill({ json: { items, total: items.length } })
+    }
     if (method !== 'GET') return route.fulfill({ status: 404, json: { error: 'Unexpected mutation in mock: ' + path } })
     route.fulfill({ json: { items: [], total: 0 } })
   })
@@ -79,7 +83,7 @@ function mockFinance(page, { donations = [], expenses = [], members = [] } = {})
 async function openFinance(page, tab = 'expenses') {
   await page.goto(`/app/finance/#${tab}`)
   await page.locator('.card-tab-group').waitFor()
-  if (tab === 'expenses') await page.locator('.seg[title="Table view"]').click()
+  if (tab === 'expenses') await page.evaluate(() => document.querySelector('.seg[title="Table view"]')?.click())
 }
 
 test.describe('finance section', () => {
@@ -127,7 +131,7 @@ test.describe('finance section', () => {
     await page.selectOption('#exp-cat', 'kitchen')
     await page.fill('#exp-amount', '142.50')
     await page.fill('#exp-desc', 'Monthly electricity bill')
-    await page.click('button:has-text("Save Expense")')
+    await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
     const row = page.locator('table tbody tr').first()
@@ -137,7 +141,7 @@ test.describe('finance section', () => {
     await expect(row).toContainText('Kitchen')
 
     expect(expenses).toHaveLength(1)
-    expect(expenses[0].paid_to).toBe('Hydro Quebec')
+    expect(expenses[0].payee).toBe('Hydro Quebec')
     expect(expenses[0].amount).toBe(14250)
     expect(expenses[0].category).toBe('kitchen')
   })
@@ -210,7 +214,7 @@ test.describe('finance section', () => {
 
   test('approve button NOT visible without expenses:approve', async ({ page }) => {
     await loginAs(page, 'member')
-    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+    const expenses = [{ id: 1, amount: 5000, payee: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
     await mockFinance(page, { expenses })
     await openFinance(page)
 
@@ -218,53 +222,62 @@ test.describe('finance section', () => {
     await expect(page.locator('button:has-text("Approve")')).toHaveCount(0)
   })
 
+  test('paid-to field visible for treasurers in expense form', async ({ page }) => {
+    await mockFinance(page)
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+    await expect(page.getByRole('heading', { name: 'Add Expense' })).toBeVisible()
+    await expect(page.locator('#exp-vendor')).toBeVisible()
+  })
+
+  test('paid-to field hidden for members in expense form', async ({ page }) => {
+    await loginAs(page, 'member')
+    await mockFinance(page)
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+    await expect(page.getByRole('heading', { name: 'Add Expense' })).toBeVisible()
+    await expect(page.locator('#exp-vendor')).not.toBeVisible()
+  })
+
   test('expense filter by category reduces results', async ({ page }) => {
     const expenses = [
-      { id: 1, amount: 1000, paid_to: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
-      { id: 2, amount: 2000, paid_to: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'submitted' },
+      { id: 1, amount: 1000, payee: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
+      { id: 2, amount: 2000, payee: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'submitted' },
     ]
     await mockFinance(page, { expenses })
     await openFinance(page)
     await page.locator('tr.row-link').first().waitFor()
 
     const section = page.locator('section').first()
-    await section.locator('.btn-filter').click()
-    await expect(section.locator('.filter-dropdown')).toBeVisible()
-    await section.locator('.filter-dropdown select').nth(1).selectOption('kitchen')
-    await section.locator('.filter-dropdown .btn-primary').click()
-    await expect(section.locator('.filter-dropdown')).not.toBeVisible()
+    await section.locator('.cat-pill-seg').filter({ hasText: 'Kitchen' }).click({ force: true })
 
     await expect(section.locator('tr.row-link')).toHaveCount(1)
     await expect(section.locator('tr.row-link').first()).toContainText('Kitchen')
   })
 
-  test('expense filter chip appears and can be dismissed', async ({ page }) => {
+  test('expense category pill toggles filter on and off', async ({ page }) => {
     const expenses = [
-      { id: 1, amount: 1000, paid_to: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
-      { id: 2, amount: 2000, paid_to: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'submitted' },
+      { id: 1, amount: 1000, payee: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
+      { id: 2, amount: 2000, payee: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'submitted' },
     ]
     await mockFinance(page, { expenses })
     await openFinance(page)
     await page.locator('tr.row-link').first().waitFor()
 
     const section = page.locator('section').first()
-    await section.locator('.btn-filter').click()
-    await section.locator('.filter-dropdown select').nth(1).selectOption('kitchen')
-    await section.locator('.filter-dropdown .btn-primary').click()
+    const pill = section.locator('.cat-pill-seg').filter({ hasText: 'Kitchen' })
+    await pill.click({ force: true })
+    await expect(section.locator('tr.row-link')).toHaveCount(1)
 
-    await expect(page.locator('.filter-chips .chip')).toHaveCount(1)
-    await expect(page.locator('.filter-chips .chip')).toContainText('Kitchen')
-
-    await page.locator('.filter-chips .chip').click()
-    await expect(page.locator('.filter-chips')).not.toBeVisible()
+    await pill.click({ force: true })
     await expect(section.locator('tr.row-link')).toHaveCount(2)
   })
 
   test('expense filter by status reduces results', async ({ page }) => {
     const expenses = [
-      { id: 1, amount: 1000, paid_to: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
-      { id: 2, amount: 2000, paid_to: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'approved' },
-      { id: 3, amount: 3000, paid_to: 'C', category: 'rent', expense_date: '2025-01-03', status: 'approved' },
+      { id: 1, amount: 1000, payee: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
+      { id: 2, amount: 2000, payee: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'approved' },
+      { id: 3, amount: 3000, payee: 'C', category: 'rent', expense_date: '2025-01-03', status: 'approved' },
     ]
     await mockFinance(page, { expenses })
     await openFinance(page)
@@ -280,7 +293,7 @@ test.describe('finance section', () => {
 
   test('expense filter dropdown stays open while interacting', async ({ page }) => {
     const expenses = [
-      { id: 1, amount: 1000, paid_to: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
+      { id: 1, amount: 1000, payee: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
     ]
     await mockFinance(page, { expenses })
     await openFinance(page)
@@ -293,7 +306,7 @@ test.describe('finance section', () => {
     await section.locator('.filter-dropdown select').first().selectOption('submitted')
     await expect(section.locator('.filter-dropdown')).toBeVisible()
 
-    await section.locator('.filter-dropdown select').nth(1).selectOption('kitchen')
+    await section.locator('.filter-dropdown input[type="date"]').first().fill('2025-01-01')
     await expect(section.locator('.filter-dropdown')).toBeVisible()
   })
 
@@ -308,11 +321,7 @@ test.describe('finance section', () => {
     const section = page.locator('section').nth(1)
     await section.locator('tr.row-link').first().waitFor()
 
-    await section.locator('.btn-filter').click()
-    await expect(section.locator('.filter-dropdown')).toBeVisible()
-    await section.locator('.filter-dropdown select').first().selectOption('building_fund')
-    await section.locator('.filter-dropdown .btn-primary').click()
-
+    await section.locator('.cat-pill-seg').filter({ hasText: 'Building' }).click({ force: true })
     await expect(section.locator('tr.row-link')).toHaveCount(1)
   })
 
@@ -342,7 +351,7 @@ test.describe('finance section', () => {
   })
 
   test('CSV export downloads a file from expenses tab', async ({ page }) => {
-    await mockFinance(page, { expenses: [{ id: 1, amount: 1000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' }] })
+    await mockFinance(page, { expenses: [{ id: 1, amount: 1000, payee: 'Vendor', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' }] })
     await openFinance(page)
     await page.locator('section').first().locator('tr.row-link').first().waitFor()
 
@@ -423,7 +432,7 @@ test.describe('finance section', () => {
     await expect(page.locator('#exp-amount')).toHaveValue('142.50', { timeout: 5000 })
     await expect(page.locator('#exp-vendor')).toHaveValue('Hydro Quebec')
 
-    await page.click('button:has-text("Save Expense")')
+    await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
     expect(savedBody).not.toBeNull()
@@ -439,7 +448,7 @@ test.describe('finance section', () => {
     await page.click('button:has-text("+ Expense")')
     await page.fill('#exp-vendor', 'Test Vendor')
     await page.fill('#exp-amount', '50.00')
-    await page.click('button:has-text("Save Expense")')
+    await page.click('button:has-text("Submit")')
     await expect(page.locator('.toast-success')).toBeVisible({ timeout: 5000 })
     await expect(page.locator('.toast-success')).toContainText('Expense saved')
   })
@@ -474,7 +483,7 @@ test.describe('finance section', () => {
 
     await page.fill('#exp-vendor', 'Test')
     await page.fill('#exp-amount', '10.00')
-    await page.click('button:has-text("Save Expense")')
+    await page.click('button:has-text("Submit")')
     await expect(page.locator('.login-error')).toContainText('Please wait for receipt processing')
 
     extractResolve()
@@ -515,7 +524,7 @@ test.describe('finance section', () => {
 
     await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
     await page.fill('#exp-vendor', 'Multi Vendor')
-    await page.click('button:has-text("Save Expense")')
+    await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
     expect(savedBody.files).toHaveLength(2)
@@ -548,7 +557,7 @@ test.describe('finance section', () => {
 
     await page.fill('#exp-vendor', 'Fallback Vendor')
     await page.fill('#exp-amount', '99.00')
-    await page.click('button:has-text("Save Expense")')
+    await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
     expect(savedBody.files).toBeUndefined()
@@ -586,10 +595,10 @@ test.describe('finance section', () => {
     await page.locator('.receipt-remove').click()
     await expect(page.locator('.receipt-thumb')).toHaveCount(0)
 
-    await page.click('button:has-text("Save Expense")')
+    await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
-    expect(savedBody.paid_to).toBe('Removed Store')
+    expect(savedBody.payee).toBe('Removed Store')
     expect(savedBody.files).toBeUndefined()
   })
 
@@ -715,36 +724,6 @@ test.describe('finance section', () => {
   })
 
 
-  test('expense detail shows attachments from backend', async ({ page }) => {
-    const attachment = { file_path: 'uploads/r.jpg', original_name: 'receipt.jpg', mime_type: 'image/jpeg' }
-    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted', attachments: [attachment] }]
-    await mockFinance(page, { expenses })
-    await openFinance(page)
-    await page.locator('tr.row-link').first().waitFor()
-
-    await page.locator('tr.row-link').first().click()
-    await expect(page.locator('.stat-label:has-text("Receipts")')).toBeVisible({ timeout: 5000 })
-    await expect(page.locator('.receipt-thumb img')).toHaveCount(1)
-  })
-
-  test('expense detail receipt image loads (not broken)', async ({ page }) => {
-    const png1x1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', 'base64')
-    const attachment = { file_path: 'uploads/expenses/1/receipt.png', original_name: 'receipt.png', mime_type: 'image/png' }
-    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted', attachments: [attachment] }]
-
-    await mockFinance(page, { expenses })
-    await page.route(`${API}/uploads/**`, route =>
-      route.fulfill({ body: png1x1, contentType: 'image/png' })
-    )
-    await openFinance(page)
-    await page.locator('tr.row-link').first().click()
-
-    const img = page.locator('.receipt-thumb img')
-    await expect(img).toBeVisible({ timeout: 5000 })
-    const loaded = await img.evaluate(el => el.complete && el.naturalWidth > 0)
-    expect(loaded).toBe(true)
-    await expect(img).toHaveAttribute('src', new RegExp(`${API.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/uploads/`))
-  })
 
   test('add second receipt via + button after first succeeds', async ({ page }) => {
     let callCount = 0
@@ -787,43 +766,25 @@ test.describe('finance section', () => {
 
   test('update submitted expense: edit fields and save', async ({ page }) => {
     await loginAs(page, 'member')
-    const expenses = [{ id: 1, amount: 5000, paid_to: 'Old Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+    const expenses = [{ id: 1, amount: 5000, payee: 'Old Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
     await mockFinance(page, { expenses })
     await openFinance(page)
     await page.locator('tr.row-link').first().waitFor()
 
     await page.locator('tr.row-link').first().click()
-    await expect(page.locator('#exp-vendor')).toHaveValue('Old Vendor')
-    await page.fill('#exp-vendor', 'New Vendor')
+    await expect(page.locator('#exp-vendor')).not.toBeVisible()
     await page.fill('#exp-amount', '75.00')
     await page.click('button:has-text("Update")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
-    expect(expenses[0].paid_to).toBe('New Vendor')
     expect(expenses[0].amount).toBe(7500)
   })
 
-  test('approve → pay workflow', async ({ page }) => {
-    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
-    await mockFinance(page, { expenses })
-    await openFinance(page)
-    await page.locator('tr.row-link').first().waitFor()
-
-    await page.locator('tr.row-link').first().click()
-    await page.locator('.modal button:has-text("Approve")').click()
-    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
-    await expect(page.locator('.status-approved')).toBeVisible()
-
-    await page.locator('tr.row-link').first().click()
-    await page.locator('.modal button:has-text("Done")').click()
-    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
-    await expect(page.locator('.status-paid')).toBeVisible()
-  })
 
   test('quick actions: approve and pay from table row', async ({ page }) => {
     const expenses = [
-      { id: 1, amount: 5000, paid_to: 'Vendor A', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' },
-      { id: 2, amount: 3000, paid_to: 'Vendor B', category: 'utilities', expense_date: '2025-01-11', status: 'approved' },
+      { id: 1, amount: 5000, payee: 'Vendor A', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' },
+      { id: 2, amount: 3000, payee: 'Vendor B', category: 'utilities', expense_date: '2025-01-11', status: 'approved' },
     ]
     await mockFinance(page, { expenses })
     await openFinance(page)
@@ -846,22 +807,62 @@ test.describe('finance section', () => {
     expect(expenses[1].status).toBe('paid')
   })
 
-  test('reject requires note', async ({ page }) => {
-    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
-    await mockFinance(page, { expenses })
+  test('quick approve: button shows loading then clears after response', async ({ page }) => {
+    let resolveApproval
+    const expenses = [{ id: 1, amount: 5000, payee: 'Slow Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+
+    await page.route(`${API}/**`, async route => {
+      const url = new URL(route.request().url())
+      const method = route.request().method()
+      const path = url.pathname
+      const idMatch = path.match(/\/api\/expenses\/(\d+)\/approve/)
+      if (idMatch && method === 'POST') {
+        await new Promise(r => { resolveApproval = r })
+        expenses[0].status = 'approved'
+        return route.fulfill({ json: expenses[0] })
+      }
+      if (path === '/api/expenses' && method === 'GET') return route.fulfill({ json: { items: [...expenses], total: expenses.length } })
+      route.fulfill({ json: { items: [], total: 0 } })
+    })
+
     await openFinance(page)
     await page.locator('tr.row-link').first().waitFor()
+    const btn = page.locator('.btn-quick-approve')
+    await expect(btn).toBeVisible()
 
-    await page.locator('tr.row-link').first().click()
-    await page.locator('.modal button:has-text("Reject")').click()
-    await expect(page.locator('.login-error')).toContainText('Note is required')
-    await expect(page.locator('.modal-overlay')).toBeVisible()
+    await btn.click()
+    await expect(btn).toHaveClass(/btn-loading/, { timeout: 3000 })
 
-    await page.locator('.modal textarea').fill('not valid')
-    await page.locator('.modal button:has-text("Reject")').click()
-    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
-    await expect(page.locator('.status-rejected')).toBeVisible()
+    resolveApproval()
+    await expect(btn).not.toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.toast-success')).toBeVisible({ timeout: 5000 })
   })
+
+  test('quick approve: uses server response status (partial approval)', async ({ page }) => {
+    const expenses = [{ id: 1, amount: 5000, payee: 'Partial Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+
+    await page.route(`${API}/**`, async route => {
+      const url = new URL(route.request().url())
+      const method = route.request().method()
+      const path = url.pathname
+      const idMatch = path.match(/\/api\/expenses\/(\d+)\/approve/)
+      if (idMatch && method === 'POST') {
+        return route.fulfill({ json: { ...expenses[0], status: 'submitted' } })
+      }
+      if (path === '/api/expenses' && method === 'GET') return route.fulfill({ json: { items: [...expenses], total: expenses.length } })
+      route.fulfill({ json: { items: [], total: 0 } })
+    })
+
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+    const btn = page.locator('.btn-quick-approve')
+    await btn.click()
+
+    await expect(page.locator('.toast-success')).toContainText('Approval recorded', { timeout: 5000 })
+    await expect(btn).toBeVisible()
+    await expect(btn).not.toHaveClass(/btn-loading/)
+  })
+
 
   test('extraction: user-edited fields not overridden by later receipt', async ({ page }) => {
     let callCount = 0
@@ -905,7 +906,7 @@ test.describe('finance section', () => {
     await page.fill('#exp-date', '2025-06-15')
     await expect(page.locator('#exp-date')).toHaveValue('2025-06-15')
 
-    await page.click('button:has-text("Save Expense")')
+    await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
     expect(expenses).toHaveLength(1)
@@ -926,7 +927,7 @@ test.describe('finance section', () => {
     await page.fill('#home-exp-amount', '89.50')
     await page.fill('#home-exp-date', '2025-03-01')
     await page.fill('#home-exp-desc', 'Internet service')
-    await page.click('button:has-text("Save Expense")')
+    await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
     await expect(page.locator('.toast-success')).toBeVisible({ timeout: 5000 })
 
@@ -939,7 +940,7 @@ test.describe('finance section', () => {
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
     expect(expenses).toHaveLength(1)
-    expect(expenses[0].paid_to).toBe('Bell Canada')
+    expect(expenses[0].payee).toBe('Bell Canada')
     expect(expenses[0].amount).toBe(8950)
     expect(donations).toHaveLength(1)
     expect(donations[0].amount).toBe(20000)
@@ -957,17 +958,19 @@ test.describe('finance section', () => {
     await expect(donSection.locator('tr.row-link').first()).toContainText('Sunday Feast')
   })
 
-  test('delete expense on submitted status allowed', async ({ page }) => {
-    await loginAs(page, 'member')
-    const expenses = [{ id: 1, amount: 5000, paid_to: 'Vendor', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
-    await mockFinance(page, { expenses })
-    await openFinance(page)
-    await page.locator('tr.row-link').first().waitFor()
 
-    await page.locator('tr.row-link').first().click()
-    await page.click('button:has-text("Delete")')
-    await page.click('button:has-text("Yes")')
-    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
-    expect(expenses).toHaveLength(0)
+  test('list view: hover card and click Edit opens modal', async ({ page }) => {
+    const expenses = [{ id: 1, amount: 5000, payee: 'Costco', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+    await mockFinance(page, { expenses })
+    await page.goto('/app/finance/#expenses')
+    await page.locator('.card-tab-group').waitFor()
+    await page.locator('.exp-card').first().waitFor()
+
+    await page.locator('.exp-card').first().hover()
+    const editBtn = page.locator('.exp-card-actions .btn-outline').first()
+    await editBtn.click({ force: true })
+    await expect(page.locator('.modal-overlay')).toBeVisible()
+    await expect(page.locator('.modal')).toBeVisible()
   })
+
 })

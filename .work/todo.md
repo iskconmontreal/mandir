@@ -49,7 +49,7 @@
 
 ## March 5
 
-* [ ] harden backend
+* [x] harden backend
 * [ ] complete flows (tested dev)
   * [ ] request expense - treasurer gets notified
   * [ ] changing / assigning roles
@@ -59,22 +59,24 @@
 * [ ] Import all interacs members names from files: MK, Samir
 * [ ] Onboard MK, Samir, Ash
 
+## [ ] Notifications
+  * [ ] Invitations for all oboardees
+
+## [ ] Auth flows
+  * [ ] Google
+  * [ ] Apple
+  * [ ] OTP SMS
+  * [ ] Passcode / keycode (biometrics)
+
+## [ ] Mobile version
+
 
 ## Backlog
 
+* [ ] Sprae load first
 * [x] page transitions @​view-transition { navigation: auto }
 
-* [ ] Mobile version
-
 * [ ] Enhance frontend looks: not SLOP
-
-* [ ] Limit user/pass login only to temple internal network
-
-* [ ] Overview
-  * [ ] donation total this month
-  * [ ] expense total
-  * [ ] net
-  * [ ] recent activity
 
 * [ ] Tax receipt template formatting / PDF generation (necessary, not exciting)
 * [ ] Auth/session management for cross-domain static→API (real friction, must solve cleanly)

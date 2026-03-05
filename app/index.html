@@ -8,7 +8,7 @@
 <!-- Quick actions -->
 <div style="display:flex; gap:var(--s-sm); margin-bottom:var(--s-xl)">
   <button :if="can('donations:view')" class="btn btn-primary" :onclick="openDonForm()">+ Donation</button>
-  <button class="btn btn-outline" :onclick="openExpForm()">+ Expense</button>
+  <button class="btn btn-primary" :onclick="openExpForm()">+ Expense</button>
 </div>
 
 <!-- Financial pulse (admin only) -->
@@ -264,8 +264,8 @@
       <form :onsubmit.prevent="saveExpense" style="display:flex;flex-direction:column;gap:var(--s-md)">
         <div class="form-row">
           <div class="field">
-            <label for="home-exp-vendor">Paid to</label>
-            <input id="home-exp-vendor" type="text" :value="expForm.paid_to" :oninput="e => expForm.paid_to = e.target.value" placeholder="Vendor, store, person…" required>
+            <label for="home-exp-vendor">Payee</label>
+            <input id="home-exp-vendor" type="text" :value="expForm.payee" :oninput="e => expForm.payee = e.target.value" placeholder="Vendor, store, person…" required>
           </div>
           <div class="field">
             <label for="home-exp-cat">Category</label>
@@ -291,7 +291,7 @@
         <div class="login-error" :if="addErr" :text="addErr"></div>
         <div style="display:flex; justify-content:flex-end; gap:var(--s-sm)">
           <button type="button" class="btn btn-outline" :onclick="showExpForm = false">Cancel</button>
-          <button type="submit" class="btn btn-primary" :class="{'btn-loading': adding}">Save Expense</button>
+          <button type="submit" class="btn btn-primary" :class="{'btn-loading': adding}">Submit</button>
         </div>
       </form>
     </div>
@@ -324,7 +324,7 @@
   const vis = prev ? (Date.now() - prev) / 3600000 : Infinity
 
   const emptyDonForm = () => ({ amount: '', method: 'cash', category: 'general', date_received: today, note: '', member_id: null, receipt: null })
-  const emptyExpForm = () => ({ paid_to: '', amount: '', category: 'utilities', expense_date: today, description: '' })
+  const emptyExpForm = () => ({ payee: '', amount: '', category: 'utilities', expense_date: today, description: '' })
   let pendingExtracts = 0, _syncedAmt = '', _syncedDesc = ''
 
   const s = init({
@@ -502,7 +502,7 @@
       if (d.date) s.donForm.date_received = d.date
       if (d.description) s.donForm.note = d.description
       s.donForm.receipt = res.file_info || null
-    } catch (e) { s.addErr = e.message }
+    } catch (e) { toast(e.message) }
     finally { s.extracting = false }
   }
 
@@ -519,7 +519,7 @@
     if (newDesc && (s.expForm.description === _syncedDesc || !s.expForm.description)) { s.expForm.description = newDesc; _syncedDesc = newDesc }
     const first = s.receipts.find(r => r.data)?.data
     if (!first) return
-    if (!s.expForm.paid_to && first.vendor) s.expForm.paid_to = first.vendor
+    if (!s.expForm.payee && first.vendor) s.expForm.payee = first.vendor
     if (s.expForm.category === 'utilities' && first.category) s.expForm.category = first.category
     if (s.expForm.expense_date === today && first.date) s.expForm.expense_date = first.date
   }
@@ -528,7 +528,7 @@
     if (!fileList?.length) return
     const fingerprints = new Set(s.receipts.map(r => r.name + ':' + r.size))
     const files = [...fileList].filter(f => !fingerprints.has(f.name + ':' + f.size))
-    if (!files.length) { s.addErr = 'Receipt already added'; return }
+    if (!files.length) { toast('Receipt already added'); return }
     s.addErr = null; pendingExtracts++; s.extracting = true
     const startIdx = s.receipts.length
     s.receipts.push(...files.map(f => ({ name: f.name, size: f.size, preview: '', data: null, extracting: true, err: null })))
@@ -537,7 +537,7 @@
         const r = s.receipts[startIdx + i]
         if (file.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => { r.preview = rd.result }; rd.readAsDataURL(file) }
         try { const res = await api.extractDoc(file); r.data = res.extracted_data || {}; r.fileInfo = res.file_info || null }
-        catch (e) { r.err = e.message; s.addErr = e.message }
+        catch (e) { r.err = e.message; toast(e.message) }
         r.extracting = false
         syncExpReceipts()
       }))
@@ -573,7 +573,7 @@
         mime_type: r.fileInfo.mime_type, file_size: r.fileInfo.file_size,
       }))
       await api.createExpense({
-        amount: toCents(s.expForm.amount), paid_to: s.expForm.paid_to,
+        amount: toCents(s.expForm.amount), payee: s.expForm.payee,
         description: s.expForm.description, category: s.expForm.category,
         currency: 'CAD', expense_date: s.expForm.expense_date,
         files: files.length ? files : undefined,

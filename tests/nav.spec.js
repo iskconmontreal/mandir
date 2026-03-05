@@ -33,24 +33,25 @@ test.describe('navigation (viewer)', () => {
     await page.route(`${API}/**`, route => route.fulfill({ json: { items: [], total: 0 } }))
   })
 
-  test('finance and members nav items hidden for viewer', async ({ page }) => {
+  test('viewer sees finance nav but not community', async ({ page }) => {
     await page.goto('/app/')
     await page.locator('.topbar').waitFor()
-    await expect(page.locator('.nav-item').filter({ hasText: 'Finance' })).toHaveCount(0)
+    await expect(page.locator('.nav-item').filter({ hasText: 'Finance' })).toBeVisible()
     await expect(page.locator('.nav-item').filter({ hasText: 'Community' })).toHaveCount(0)
   })
 
-  test('overview hides org sections for viewer', async ({ page }) => {
+  test('overview shows finance card but not community for viewer', async ({ page }) => {
     await page.goto('/app/')
     await page.locator('.topbar').waitFor()
     const cards = page.locator('.card h3')
-    await expect(cards.filter({ hasText: 'Finance' })).toHaveCount(0)
+    await expect(cards.filter({ hasText: 'Finance' })).toBeVisible()
     await expect(cards.filter({ hasText: 'Community' })).toHaveCount(0)
   })
 
-  test('finance page redirects viewer to overview', async ({ page }) => {
+  test('viewer can access finance page', async ({ page }) => {
     await page.goto('/app/finance/')
-    await page.waitForURL('/app/')
+    await page.locator('.card-tab-group').waitFor()
+    await expect(page.locator('.card-tab-group')).toBeVisible()
   })
 
   test('members page redirects viewer to overview', async ({ page }) => {

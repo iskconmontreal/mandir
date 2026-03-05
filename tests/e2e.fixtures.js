@@ -10,8 +10,8 @@ const CREDS = {
   admin:     { email: 'admin@test.local',     password: 'test123' },
   treasurer: { email: 'treasurer@test.local', password: 'test123' },
   approver:  { email: 'approver@test.local',  password: 'test123' },
-  viewer:    { email: 'viewer@test.local',    password: 'test123' },
-  sevaka:    { email: 'sevaka@test.local',    password: 'test123' },
+  viewer:    { email: 'viewer@test.local' },
+  sevaka:    { email: 'sevaka@test.local' },
 }
 
 const tokenCache = {}
@@ -20,9 +20,9 @@ async function fetchToken(role) {
   if (tokenCache[role]) return tokenCache[role]
   const ctx = await request.newContext()
   const { email, password } = CREDS[role]
-  const res = await ctx.post(`${API}/auth/login`, {
-    data: { email, password, device_id: DEVICE, device_label: 'E2E Test' },
-  })
+  const data = { email, device_id: DEVICE, device_label: 'E2E Test' }
+  if (password) data.password = password
+  const res = await ctx.post(`${API}/auth/login`, { data })
   const body = await res.json()
   await ctx.dispose()
   if (!body.token) throw new Error(`Login failed for ${role}: ${JSON.stringify(body)}`)

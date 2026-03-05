@@ -1,20 +1,22 @@
 // fixtures.js — shared Playwright test helpers: named roles, tokens, loginAs
 
-const mk = perms => 'header.' + btoa(JSON.stringify({ permissions: perms })) + '.sig'
+const mk = (perms, uid) => 'header.' + btoa(JSON.stringify({ permissions: perms, user_id: uid })) + '.sig'
 
 export const API = 'https://api.iskconmontreal.ca'
 
 export const TOKENS = {
-  admin:     mk(['users:view', 'users:create', 'members:view', 'members:create', 'members:manage', 'donations:view', 'donations:create', 'expenses:view', 'expenses:create', 'expenses:approve']),
-  treasurer: mk(['donations:view', 'donations:create', 'expenses:view', 'expenses:create', 'expenses:approve', 'members:view']),
-  member:    mk(['expenses:view', 'expenses:create', 'members:view']),
-  viewer:    mk([]),
+  admin:     mk(['users:view', 'users:create', 'members:view', 'members:create', 'members:manage', 'donations:view', 'donations:create', 'expenses:view', 'expenses:create', 'expenses:approve'], 1),
+  treasurer: mk(['donations:view', 'donations:create', 'expenses:view', 'expenses:create', 'expenses:approve', 'members:view'], 2),
+  member:    mk(['expenses:view', 'expenses:create', 'members:view'], 3),
+  approver:  mk(['audit:view', 'donations:view', 'expenses:approve', 'expenses:create', 'expenses:view', 'members:view', 'users:view'], 5),
+  viewer:    mk(['donations:view', 'expenses:create', 'expenses:view'], 4),
 }
 
 export const USERS = {
   admin:     { name: 'Bhakti Devi',   email: 'admin@test.local',     meta: { name: 'Bhakti Devi' } },
   treasurer: { name: 'Bhaktin Maria', email: 'treasurer@test.local', meta: { name: 'Bhaktin Maria' } },
   member:    { name: 'Prabhu Das',    email: 'member@test.local',    meta: { name: 'Prabhu Das' } },
+  approver:  { name: 'Approver',      email: 'approver@test.local',  meta: { name: 'Approver' } },
   viewer:    { name: 'Guest',         email: 'guest@test.local',     meta: { name: 'Guest' } },
 }
 

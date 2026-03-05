@@ -1,6 +1,6 @@
 <!-- Donation modal (add/edit) -->
-<div class="modal-overlay" :if="showAdd && activeTab === 'donations'" :onkeydown.esc.document="showAdd = false" :onclick="e => { if (e.target === e.currentTarget) showAdd = false }">
-  <div class="modal">
+<div class="modal-overlay" :if="showAdd && activeTab === 'donations'" :onkeydown.esc.document="showAdd = false">
+  <div class="modal" :onclick.outside="showAdd = false">
     <div class="modal-header">
       <h2 :text="editId ? 'Edit Donation' : 'Add Donation'"></h2>
       <button class="modal-close" :onclick="showAdd = false">&times;</button>

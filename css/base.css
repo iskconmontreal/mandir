@@ -9,6 +9,7 @@
 ::view-transition-new(root) { animation: .28s ease-out vt-in  both; }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
 
 html { height: 100%; -webkit-font-smoothing: antialiased; }
 
@@ -166,7 +167,7 @@ td {
 }
 @keyframes btn-spin { to { transform: rotate(360deg) } }
 
-/* Small buttons */
+/* Button sizes */
 .btn-sm {
   padding: var(--s-xs) var(--s-md);
   font-size: var(--f-sm);
