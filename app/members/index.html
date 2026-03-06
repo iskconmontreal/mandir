@@ -52,7 +52,12 @@
           </td>
           <td :html="hl(m.email || '—', search)"></td>
           <td :html="hl(m.phone || '—', search)"></td>
-          <td><span class="badge" :text="m.role || '—'"></span></td>
+          <td>
+            <span :if="m.roles?.length">
+              <span :each="r in m.roles" class="badge" style="margin-right:var(--s-xs)" :text="r"></span>
+            </span>
+            <span :if="!m.roles?.length" class="badge" :text="m.role || '—'"></span>
+          </td>
           <td class="dim" :text="m.joined || '—'"></td>
         </tr>
         <tr :if="!members.length && !loadErr">
@@ -99,6 +104,9 @@
   const today = new Date().toISOString().slice(0, 10)
   const perPage = 20
   const modalCache = {}
+  const roleNameById = new Map()
+  const userRolesByUserId = new Map()
+  let userRoleLookupDenied = false
 
   const emptyForm = () => ({
     name: '', spiritual_name: '', email: '', phone: '', role: 'Devotee', joined: today,
@@ -110,11 +118,124 @@
     lives_in_temple: false, namahatta: false
   })
 
+  function roleName(v) {
+    if (!v) return ''
+    if (typeof v === 'number') return roleNameById.get(v) || String(v)
+    if (typeof v === 'string') {
+      const s = v.trim()
+      if ((s.startsWith('{') || s.startsWith('[')) && s.length > 1) {
+        try { return roleName(JSON.parse(s)) } catch {}
+      }
+      if (/^\d+$/.test(s)) return roleNameById.get(+s) || s
+      return s
+    }
+    if (Array.isArray(v)) return roleName(v[0])
+    if (typeof v !== 'object') return ''
+    return v.name || v.role_name || roleName(v.role) || roleName(v.id) || roleName(v.role_id) || ''
+  }
+
+  function uniqueRoles(list) {
+    const seen = new Set()
+    const out = []
+    for (const x of list) {
+      const r = String(x || '').trim()
+      if (!r) continue
+      const k = r.toLowerCase()
+      if (seen.has(k)) continue
+      seen.add(k)
+      out.push(r)
+    }
+    return out
+  }
+
+  function roleTags(v) {
+    if (!v) return []
+    if (Array.isArray(v)) return uniqueRoles(v.flatMap(roleTags))
+    if (typeof v === 'number') return uniqueRoles([roleName(v)])
+    if (typeof v === 'string') {
+      const s = v.trim()
+      if (!s) return []
+      if ((s.startsWith('{') || s.startsWith('[')) && s.length > 1) {
+        try { return roleTags(JSON.parse(s)) } catch {}
+      }
+      if (s.includes(',')) return uniqueRoles(s.split(',').map(x => roleName(x)))
+      return uniqueRoles([roleName(s) || s])
+    }
+    if (typeof v !== 'object') return []
+    return uniqueRoles([
+      ...roleTags(v.roles),
+      ...roleTags(v.role),
+      ...roleTags(v.name),
+      ...roleTags(v.role_name),
+      ...roleTags(v.id),
+      ...roleTags(v.role_id),
+    ])
+  }
+
+  function fmtJoined(v) {
+    if (!v) return ''
+    const s = String(v)
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+    const t = new Date(v)
+    return Number.isNaN(t.getTime()) ? s : t.toISOString().slice(0, 10)
+  }
+
   function toMember(c) {
-    const d = typeof c.data === 'string' ? JSON.parse(c.data) : c.data
+    let d = c.data
+    if (typeof d === 'string') {
+      try { d = JSON.parse(d) } catch { d = {} }
+    }
+    if (!d || typeof d !== 'object') d = {}
+
     const services = Array.isArray(d.services) ? d.services
-      : (d.services ? d.services.split(',').map(s => s.trim()).filter(Boolean) : [])
-    return { _id: c.id, _public: c.public_id, _user_id: c.user_id, ...d, services }
+      : (d.services ? String(d.services).split(',').map(s => s.trim()).filter(Boolean) : [])
+
+    const roles = uniqueRoles([
+      ...roleTags(d.roles),
+      ...roleTags(d.role),
+      ...roleTags(d.role_name),
+      ...roleTags(d.user_role),
+      ...roleTags(d.role_id),
+      ...roleTags(c.roles),
+      ...roleTags(c.role),
+      ...roleTags(c.role_name),
+      ...roleTags(c.user_role),
+      ...roleTags(c.role_id),
+      ...roleTags(c.user?.roles),
+      ...roleTags(c.user?.role),
+      ...roleTags(c.user?.role_id),
+    ])
+    const role = roles[0] || ''
+    const joined = fmtJoined(d.joined || d.joined_at || d.member_since || c.joined || c.joined_at || c.member_since || c.created_at || d.created_at)
+
+    return { _id: c.id, _public: c.public_id, _user_id: c.user_id, ...d, role: role || d.role || '', roles, joined: joined || d.joined || '', services }
+  }
+
+  function userRoles(u) {
+    return uniqueRoles([
+      ...roleTags(u?.roles),
+      ...roleTags(u?.role),
+      ...roleTags(u?.role_id),
+      ...roleTags(u?.data?.roles),
+      ...roleTags(u?.data?.role),
+      ...roleTags(u?.data?.role_id),
+      ...roleTags(u?.user?.roles),
+      ...roleTags(u?.user?.role),
+      ...roleTags(u?.user?.role_id),
+      ...roleTags(u?.item?.roles),
+      ...roleTags(u?.item?.role),
+      ...roleTags(u?.item?.role_id),
+    ])
+  }
+
+  function mergeUserRoles(rows) {
+    return rows.map(m => {
+      if (!m._user_id) return m
+      const extra = userRolesByUserId.get(String(m._user_id)) || []
+      if (!extra.length) return m
+      const roles = uniqueRoles([...(m.roles || []), ...extra])
+      return { ...m, roles, role: roles[0] || m.role || '' }
+    })
   }
 
   async function loadModal(name) {
@@ -355,7 +476,32 @@
       if (s.filterRole) params['data.role'] = s.filterRole
       if (s.sortBy) { params.sortBy = s.sortBy; params.sortDesc = s.sortDir === 'desc' }
       const res = await api.getMembers(params)
-      s.members = (res.items || []).map(toMember)
+      let rows = (res.items || []).map(toMember)
+      if (!userRoleLookupDenied) {
+        const missingIds = [...new Set(rows
+          .filter(m => m._user_id && !(m.roles || []).length)
+          .map(m => String(m._user_id).trim())
+          .filter(Boolean)
+          .filter(id => !userRolesByUserId.has(id))
+        )]
+        for (const id of missingIds) {
+          try {
+            const u = await api.getUser(id)
+            userRolesByUserId.set(id, userRoles(u))
+          } catch (e) {
+            const msg = String(e?.message || '')
+            if (/forbidden|unauthorized|401|403/i.test(msg)) {
+              userRoleLookupDenied = true
+              break
+            }
+            userRolesByUserId.set(id, [])
+          }
+        }
+      }
+      if (!userRoleLookupDenied) {
+        rows = mergeUserRoles(rows)
+      }
+      s.members = rows
       s.total = res.total || 0
     } catch (e) {
       s.loadErr = e.message || 'Failed to load members'
@@ -370,6 +516,11 @@
   }).catch(e => { s.loadErr = e.message || 'Failed to load page templates' })
   load()
   api.getRoles().then(res => {
-    if (res.roles?.length) s.roles = res.roles.map(r => r.name)
+    if (res.roles?.length) {
+      s.roles = res.roles.map(r => r.name)
+      roleNameById.clear()
+      for (const r of res.roles) roleNameById.set(+r.id, r.name)
+      load()
+    }
   }).catch(() => {})
 </script>

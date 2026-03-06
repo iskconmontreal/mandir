@@ -116,6 +116,8 @@ test.describe('finance section', () => {
     await mockFinance(page)
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.click('a:has-text("More fields")')
     await page.locator('#exp-vendor').focus()
     await page.evaluate(() => document.dispatchEvent(new Event('keydown')))
     await page.locator('#exp-vendor').fill('Test')
@@ -127,6 +129,8 @@ test.describe('finance section', () => {
     await openFinance(page)
 
     await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.click('a:has-text("More fields")')
     await page.fill('#exp-vendor', 'Hydro Quebec')
     await page.selectOption('#exp-cat', 'kitchen')
     await page.fill('#exp-amount', '142.50')
@@ -154,7 +158,9 @@ test.describe('finance section', () => {
     await page.click('button:has-text("+ Donation")')
     await expect(page.getByRole('heading', { name: 'Add Donation' })).toBeVisible()
 
+    await page.locator('#don-amount').waitFor({ timeout: 5000 })
     await page.fill('#don-amount', '50.00')
+    await page.click('a:has-text("More fields")')
     await page.selectOption('#don-method', 'cash')
     await page.selectOption('#don-cat', 'general')
     await page.click('button:has-text("Save Donation")')
@@ -175,6 +181,7 @@ test.describe('finance section', () => {
     await openFinance(page, 'donations')
 
     await page.click('button:has-text("+ Donation")')
+    await page.locator('#don-amount').waitFor({ timeout: 5000 })
     await page.fill('#don-amount', '25.00')
     await page.click('button:has-text("Save Donation")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
@@ -227,11 +234,11 @@ test.describe('finance section', () => {
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
     await expect(page.getByRole('heading', { name: 'Add Expense' })).toBeVisible()
+    await page.click('a:has-text("More fields")')
     await expect(page.locator('#exp-vendor')).toBeVisible()
   })
 
-  test('paid-to field hidden for members in expense form', async ({ page }) => {
-    await loginAs(page, 'member')
+  test('payee hidden by default in expense form', async ({ page }) => {
     await mockFinance(page)
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
@@ -388,7 +395,7 @@ test.describe('finance section', () => {
       if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ json: {
           extracted_data: { amount: '142.50', vendor: 'Hydro Quebec', category: 'utilities', date: '2025-01-15' },
-          attachment: { id: 42, file_path: 'uploads/finance/2025/01/expense-2025-01-15-1.webp', original_name: 'receipt.jpg', mime_type: 'image/webp', file_size: 1024, intent: 'expense' },
+          attachment: { id: 42, file_path: 'uploads/finance/2025/2025-01-15-1.webp', original_name: 'receipt.jpg', mime_type: 'image/webp', file_size: 1024, intent: '' },
         } })
       }
       if (path === '/api/expenses' && method === 'POST') {
@@ -430,7 +437,7 @@ test.describe('finance section', () => {
 
     await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
     await expect(page.locator('#exp-amount')).toHaveValue('142.50', { timeout: 5000 })
-    await expect(page.locator('#exp-vendor')).toHaveValue('Hydro Quebec')
+    await expect(page.locator('#exp-vendor')).toHaveValue('Hydro Quebec', { timeout: 5000 })
 
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
@@ -444,6 +451,8 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses: [] })
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.click('a:has-text("More fields")')
     await page.fill('#exp-vendor', 'Test Vendor')
     await page.fill('#exp-amount', '50.00')
     await page.click('button:has-text("Submit")')
@@ -455,6 +464,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations: [] })
     await openFinance(page, 'donations')
     await page.click('button:has-text("+ Donation")')
+    await page.locator('#don-amount').waitFor({ timeout: 5000 })
     await page.fill('#don-amount', '25.00')
     await page.click('button:has-text("Save Donation")')
     await expect(page.locator('.toast-success')).toBeVisible({ timeout: 5000 })
@@ -468,7 +478,7 @@ test.describe('finance section', () => {
       const method = route.request().method()
       if (path === '/api/documents/upload' && method === 'POST') {
         await new Promise(r => { extractResolve = r })
-        return route.fulfill({ json: { extracted_data: { amount: '10.00' }, attachment: { id: 99, file_path: 'uploads/finance/2026/03/expense-2026-03-05-1.jpg', original_name: 'r.jpg', mime_type: 'image/jpeg', file_size: 100, intent: 'expense' } } })
+        return route.fulfill({ json: { extracted_data: { amount: '10.00' }, attachment: { id: 99, file_path: 'uploads/finance/2026/2026-03-05-1.jpg', original_name: 'r.jpg', mime_type: 'image/jpeg', file_size: 100, intent: '' } } })
       }
       route.fulfill({ json: { items: [], total: 0 } })
     })
@@ -479,6 +489,7 @@ test.describe('finance section', () => {
     await page.setInputFiles('#receipt-input', { name: 'r.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
 
+    await page.click('a:has-text("More fields")')
     await page.fill('#exp-vendor', 'Test')
     await page.fill('#exp-amount', '10.00')
     await page.click('button:has-text("Submit")')
@@ -499,7 +510,7 @@ test.describe('finance section', () => {
         callCount++
         return route.fulfill({ json: {
           extracted_data: { amount: '50.00' },
-          attachment: { id: 100 + callCount, file_path: `uploads/finance/2026/03/expense-2026-03-05-${callCount}.webp`, original_name: `receipt${callCount}.jpg`, mime_type: 'image/webp', file_size: 512, intent: 'expense' },
+          attachment: { id: 100 + callCount, file_path: `uploads/finance/2026/2026-03-05-${callCount}.webp`, original_name: `receipt${callCount}.jpg`, mime_type: 'image/webp', file_size: 512, intent: '' },
         } })
       }
       if (path === '/api/expenses' && method === 'POST') {
@@ -521,7 +532,7 @@ test.describe('finance section', () => {
     ])
 
     await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
-    await page.fill('#exp-vendor', 'Multi Vendor')
+    await page.fill('#exp-amount', '100.00')
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
@@ -553,6 +564,7 @@ test.describe('finance section', () => {
     await page.setInputFiles('#receipt-input', { name: 'bad.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb.receipt-error')).toHaveCount(1, { timeout: 5000 })
 
+    await page.click('a:has-text("More fields")')
     await page.fill('#exp-vendor', 'Fallback Vendor')
     await page.fill('#exp-amount', '99.00')
     await page.click('button:has-text("Submit")')
@@ -572,7 +584,7 @@ test.describe('finance section', () => {
       if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ json: {
           extracted_data: { amount: '75.00', vendor: 'Removed Store' },
-          attachment: { id: 77, file_path: 'uploads/finance/2026/03/expense-2026-03-05-1.webp', original_name: 'r.jpg', mime_type: 'image/webp', file_size: 256, intent: 'expense' },
+          attachment: { id: 77, file_path: 'uploads/finance/2026/2026-03-05-1.webp', original_name: 'r.jpg', mime_type: 'image/webp', file_size: 256, intent: '' },
         } })
       }
       if (path === '/api/expenses' && method === 'POST') {
@@ -587,6 +599,7 @@ test.describe('finance section', () => {
     await page.click('button:has-text("+ Expense")')
     await page.setInputFiles('#receipt-input', { name: 'r.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
 
+    await page.locator('#exp-vendor').waitFor({ timeout: 5000 })
     await expect(page.locator('#exp-vendor')).toHaveValue('Removed Store', { timeout: 5000 })
     await expect(page.locator('#exp-amount')).toHaveValue('75.00')
 
@@ -610,7 +623,7 @@ test.describe('finance section', () => {
       if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ json: {
           extracted_data: { amount: '100.00', method: 'cheque' },
-          attachment: { id: 55, file_path: 'uploads/finance/2026/03/donation-2026-03-05-1.webp', original_name: 'don-receipt.jpg', mime_type: 'image/webp', file_size: 2048, intent: 'donation' },
+          attachment: { id: 55, file_path: 'uploads/finance/2026/2026-03-05-1.webp', original_name: 'don-receipt.jpg', mime_type: 'image/webp', file_size: 2048, intent: '' },
         } })
       }
       if (path === '/api/donations' && method === 'POST') {
@@ -626,6 +639,7 @@ test.describe('finance section', () => {
     await openFinance(page, 'donations')
     await page.click('button:has-text("+ Donation")')
     await expect(page.getByRole('heading', { name: 'Add Donation' })).toBeVisible()
+    await page.locator('#don-receipt-input').waitFor({ state: 'attached', timeout: 5000 })
 
     await page.setInputFiles('#don-receipt-input', { name: 'don-receipt.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('#don-amount')).toHaveValue('100.00', { timeout: 5000 })
@@ -642,12 +656,16 @@ test.describe('finance section', () => {
     await openFinance(page)
 
     await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.click('a:has-text("More fields")')
     await page.fill('#exp-vendor', 'Leftover Vendor')
     await page.fill('#exp-amount', '99.00')
     await page.keyboard.press('Escape')
     await expect(page.locator('.modal-overlay')).not.toBeVisible()
 
     await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.click('a:has-text("More fields")')
     await expect(page.locator('#exp-vendor')).toHaveValue('')
     await expect(page.locator('#exp-amount')).toHaveValue('')
     await expect(page.locator('.receipt-thumb')).toHaveCount(0)
@@ -670,7 +688,7 @@ test.describe('finance section', () => {
       if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ json: {
           extracted_data: { amount: '10.00' },
-          attachment: { id: 99, file_path: 'uploads/finance/2026/03/expense-2026-03-05-1.webp', original_name: 'r.jpg', mime_type: 'image/webp', file_size: 100, intent: 'expense' },
+          attachment: { id: 99, file_path: 'uploads/finance/2026/2026-03-05-1.webp', original_name: 'r.jpg', mime_type: 'image/webp', file_size: 100, intent: '' },
         } })
       }
       route.fulfill({ json: { items: [], total: 0 } })
@@ -697,7 +715,7 @@ test.describe('finance section', () => {
       if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ json: {
           extracted_data: { amount: '55.00', vendor: 'Drop Store' },
-          attachment: { id: 88, file_path: 'uploads/finance/2026/03/expense-2026-03-05-1.webp', original_name: 'drop.jpg', mime_type: 'image/webp', file_size: 512, intent: 'expense' },
+          attachment: { id: 88, file_path: 'uploads/finance/2026/2026-03-05-1.webp', original_name: 'drop.jpg', mime_type: 'image/webp', file_size: 512, intent: '' },
         } })
       }
       route.fulfill({ json: { items: [], total: 0 } })
@@ -716,6 +734,7 @@ test.describe('finance section', () => {
 
     await page.locator('.receipt-strip').dispatchEvent('drop', { dataTransfer })
     await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
+    await page.locator('#exp-vendor').waitFor({ timeout: 5000 })
     await expect(page.locator('#exp-vendor')).toHaveValue('Drop Store', { timeout: 5000 })
     await expect(page.locator('#exp-amount')).toHaveValue('55.00')
   })
@@ -731,7 +750,7 @@ test.describe('finance section', () => {
         callCount++
         return route.fulfill({ json: {
           extracted_data: { amount: '25.00' },
-          attachment: { id: 200 + callCount, file_path: `uploads/finance/2026/03/expense-2026-03-05-${callCount}.webp`, original_name: `r${callCount}.jpg`, mime_type: 'image/webp', file_size: 256, intent: 'expense' },
+          attachment: { id: 200 + callCount, file_path: `uploads/finance/2026/2026-03-05-${callCount}.webp`, original_name: `r${callCount}.jpg`, mime_type: 'image/webp', file_size: 256, intent: '' },
         } })
       }
       route.fulfill({ json: { items: [], total: 0 } })
@@ -753,11 +772,15 @@ test.describe('finance section', () => {
     await mockFinance(page)
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.click('a:has-text("More fields")')
     await page.fill('#exp-vendor', 'Test')
     await page.click('button:has-text("Cancel")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible()
 
     await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.click('a:has-text("More fields")')
     await expect(page.locator('#exp-vendor')).toHaveValue('')
   })
 
@@ -769,7 +792,7 @@ test.describe('finance section', () => {
     await page.locator('tr.row-link').first().waitFor()
 
     await page.locator('tr.row-link').first().click()
-    await expect(page.locator('#exp-vendor')).not.toBeVisible()
+    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
     await page.fill('#exp-amount', '75.00')
     await page.click('button:has-text("Update")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
@@ -870,7 +893,7 @@ test.describe('finance section', () => {
         callCount++
         return route.fulfill({ json: {
           extracted_data: { amount: callCount === 1 ? '10.00' : '20.00', vendor: callCount === 1 ? 'First Store' : 'Second Store' },
-          attachment: { id: 200 + callCount, file_path: `uploads/finance/2026/03/expense-2026-03-05-${callCount}.webp`, original_name: `r${callCount}.jpg`, mime_type: 'image/webp', file_size: 256, intent: 'expense' },
+          attachment: { id: 200 + callCount, file_path: `uploads/finance/2026/2026-03-05-${callCount}.webp`, original_name: `r${callCount}.jpg`, mime_type: 'image/webp', file_size: 256, intent: '' },
         } })
       }
       route.fulfill({ json: { items: [], total: 0 } })
@@ -880,6 +903,7 @@ test.describe('finance section', () => {
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
     await page.setInputFiles('#receipt-input', { name: 'r1.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
+    await page.locator('#exp-vendor').waitFor({ timeout: 5000 })
     await expect(page.locator('#exp-vendor')).toHaveValue('First Store', { timeout: 5000 })
 
     await page.fill('#exp-vendor', 'My Override')
@@ -898,6 +922,8 @@ test.describe('finance section', () => {
     await openFinance(page)
 
     await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.click('a:has-text("More fields")')
     await page.fill('#exp-vendor', 'Date Test')
     await page.fill('#exp-amount', '10.00')
     await page.fill('#exp-date', '2025-06-15')
@@ -929,10 +955,12 @@ test.describe('finance section', () => {
     await expect(page.locator('.toast-success')).toBeVisible({ timeout: 5000 })
 
     await page.click('button:has-text("+ Donation")')
-    await page.fill('#home-don-amount', '200.00')
-    await page.selectOption('#home-don-method', 'cash')
-    await page.selectOption('#home-don-cat', 'sunday_feast')
-    await page.fill('#home-don-date', '2025-03-01')
+    await page.locator('#don-amount').waitFor({ timeout: 5000 })
+    await page.fill('#don-amount', '200.00')
+    await page.click('a:has-text("More fields")')
+    await page.selectOption('#don-method', 'cash')
+    await page.selectOption('#don-cat', 'sunday_feast')
+    await page.fill('#don-date', '2025-03-01')
     await page.click('button:has-text("Save Donation")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 

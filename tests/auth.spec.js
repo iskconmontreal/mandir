@@ -396,6 +396,26 @@ test.describe('keepAlive token refresh', () => {
     expect(refreshCalled).toBe(true)
   })
 
+  test('does not logout when proactive refresh fails', async ({ page }) => {
+    const token = mkToken([], 90)
+    await page.addInitScript(([t, u]) => {
+      localStorage.setItem('mandala_token', t)
+      localStorage.setItem('mandala_user', JSON.stringify(u))
+      localStorage.setItem('mandala_refresh', 'test-refresh')
+    }, [token, { name: 'Test', email: 'test@test.local' }])
+
+    await page.route(`${API}/auth/refresh`, route => route.fulfill({ status: 500, json: { error: 'server down' } }))
+    await page.route(`${API}/api/**`, route => route.fulfill({ json: { items: [], total: 0 } }))
+
+    await page.clock.install()
+    await page.goto('/app/')
+    await page.mouse.click(100, 100)
+    await page.clock.fastForward(61_000)
+    await page.waitForTimeout(200)
+    await expect(page).toHaveURL(/app\//)
+    await expect(page).not.toHaveURL(/login/)
+  })
+
   test('does not refresh when user is idle', async ({ page }) => {
     const token = mkToken([], 90)
     await page.addInitScript(([t, u]) => {

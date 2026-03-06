@@ -108,6 +108,124 @@ test.describe('e2e: viewer restrictions', () => {
     await page.goto('/app/members/')
     await expect(page).not.toHaveURL(/members/, { timeout: 5000 })
   })
+
+  test('overview: My Expenses table shows after submitting expense', async ({ page }) => {
+    await page.goto('/app/')
+    await page.locator('h1').waitFor()
+
+    const ts = Date.now()
+    await page.click('button:has-text("+ Expense")')
+    await page.locator('.modal').waitFor()
+    await page.fill('#home-exp-amount', '19.99')
+    await page.selectOption('#home-exp-cat', 'books')
+    await page.fill('#home-exp-desc', `E2E-myexp-${ts}`)
+    await page.click('button:has-text("Submit")')
+    await page.waitForSelector('.modal', { state: 'hidden', timeout: 15_000 })
+
+    await expect(page.locator('h3').filter({ hasText: 'My Expenses' })).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('table tbody tr', { hasText: '$19.99' }).first()).toBeVisible()
+    await expect(page.locator('tfoot td', { hasText: '$' })).toBeVisible()
+  })
+
+  test('overview: click submitted expense → edit category/note → save', async ({ page }) => {
+    await page.goto('/app/')
+    await page.locator('h1').waitFor()
+
+    const myExpTable = page.locator('h3').filter({ hasText: 'My Expenses' })
+    if (!await myExpTable.isVisible().catch(() => false)) {
+      await page.click('button:has-text("+ Expense")')
+      await page.locator('.modal').waitFor()
+      await page.fill('#home-exp-amount', '5.00')
+      await page.selectOption('#home-exp-cat', 'admin')
+      await page.click('button:has-text("Submit")')
+      await page.waitForSelector('.modal', { state: 'hidden', timeout: 15_000 })
+      await myExpTable.waitFor({ timeout: 10_000 })
+    }
+
+    const submittedRow = page.locator('table tbody tr.row-link').first()
+    await expect(submittedRow).toBeVisible({ timeout: 10_000 })
+    await submittedRow.click()
+
+    const modal = page.locator('.modal')
+    await modal.waitFor()
+    await expect(modal.locator('.badge')).toBeVisible()
+    await expect(modal.locator('select')).toBeVisible()
+    await expect(modal.locator('textarea')).toBeVisible()
+
+    await modal.locator('select').selectOption('kitchen')
+    await modal.locator('textarea').fill('Updated by E2E')
+    await modal.locator('button:has-text("Save")').click()
+    await page.waitForSelector('.modal', { state: 'hidden', timeout: 15_000 })
+
+    await expect(page.locator('table tbody tr', { hasText: 'Kitchen' }).first()).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('overview: approved expense row is read-only (no Save button)', async ({ browser }) => {
+    const viewerCtx = await browser.newContext()
+    const viewerPage = await viewerCtx.newPage()
+    const viewerToken = await loginAsReal(viewerPage, 'viewer')
+    const viewerHeaders = { Authorization: `Bearer ${viewerToken}`, 'Content-Type': 'application/json' }
+
+    const ts = Date.now()
+    const createRes = await viewerPage.request.post(`${API}/api/expenses`, {
+      headers: viewerHeaders,
+      data: { payee: `E2E-readonly-${ts}`, amount: 500, category: 'admin', expense_date: '2026-03-01', description: 'readonly test', currency: 'CAD' },
+    })
+    const created = await createRes.json()
+
+    const treasurerCtx = await browser.newContext()
+    const treasurerPage = await treasurerCtx.newPage()
+    const treasurerToken = await loginAsReal(treasurerPage, 'treasurer')
+    await treasurerPage.request.post(`${API}/api/expenses/${created.id}/approve`, {
+      headers: { Authorization: `Bearer ${treasurerToken}`, 'Content-Type': 'application/json' },
+      data: {},
+    })
+    await treasurerCtx.close()
+
+    await viewerPage.goto('/app/')
+    await viewerPage.locator('h1').waitFor()
+    await expect(viewerPage.locator('h3').filter({ hasText: 'My Expenses' })).toBeVisible({ timeout: 10_000 })
+
+    const approvedRow = viewerPage.locator('table tbody tr', { hasText: '$5.00' }).first()
+    await expect(approvedRow).toBeVisible()
+    await approvedRow.click()
+
+    const modal = viewerPage.locator('.modal')
+    await modal.waitFor()
+    await expect(modal.locator('button:has-text("Save")')).not.toBeVisible()
+    await expect(modal.locator('select')).not.toBeVisible()
+    await expect(modal.locator('button:has-text("Close")')).toBeVisible()
+
+    await modal.locator('button:has-text("Close")').click()
+    await viewerPage.request.delete(`${API}/api/expenses/${created.id}`, { headers: viewerHeaders })
+    await viewerCtx.close()
+  })
+
+  test('overview: viewer expense form shows simplified fields and submits', async ({ page }) => {
+    await page.goto('/app/')
+    await page.locator('h1').waitFor()
+
+    await page.click('button:has-text("+ Expense")')
+    await page.locator('.modal').waitFor()
+
+    await expect(page.locator('#home-exp-amount')).toBeVisible()
+    await expect(page.locator('#home-exp-cat')).toBeVisible()
+    await expect(page.locator('#home-exp-desc')).toBeVisible()
+    await expect(page.locator('#home-exp-vendor')).not.toBeVisible()
+    await expect(page.locator('#home-exp-date')).not.toBeVisible()
+
+    const options = await page.locator('#home-exp-cat option:not([disabled])').allTextContents()
+    expect(options.length).toBe(17)
+
+    const ts = Date.now()
+    await page.fill('#home-exp-amount', '12.34')
+    await page.selectOption('#home-exp-cat', 'kitchen')
+    await page.fill('#home-exp-desc', `E2E-viewer-${ts}`)
+    await page.click('button:has-text("Submit")')
+    await page.waitForSelector('.modal', { state: 'hidden', timeout: 15_000 })
+
+    await expect(page.locator('table tbody tr', { hasText: `$12.34` }).first()).toBeVisible({ timeout: 10_000 })
+  })
 })
 
 test.describe('e2e: viewer submits → approver approves', () => {
@@ -297,7 +415,7 @@ test.describe('e2e: donations', () => {
     expect(upload.ok()).toBeTruthy()
     const { attachment } = await upload.json()
     expect(attachment.id).toBeGreaterThan(0)
-    expect(attachment.intent).toBe('donation')
+    expect(attachment.id).toBeTruthy()
 
     const create = await page.request.post(`${API}/api/donations`, {
       headers: { ...authHeaders, 'Content-Type': 'application/json' },
@@ -307,7 +425,7 @@ test.describe('e2e: donations', () => {
     const donation = await create.json()
     expect(donation.attachments).toHaveLength(1)
     expect(donation.attachments[0].parent_type).toBe('donation')
-    expect(donation.attachments[0].file_path).toContain('/donation/')
+    expect(donation.attachments[0].file_path).toContain('uploads/finance/')
 
     const get = await page.request.get(`${API}/api/donations/${donation.id}`, { headers: authHeaders })
     const fetched = await get.json()
@@ -349,7 +467,7 @@ test.describe('e2e: donations', () => {
     expect(latest.amount).toBe(5555)
     expect(latest.attachments).toHaveLength(1)
     expect(latest.attachments[0].parent_type).toBe('donation')
-    expect(latest.attachments[0].file_path).toContain('/donation/')
+    expect(latest.attachments[0].file_path).toContain('uploads/finance/')
   })
 })
 

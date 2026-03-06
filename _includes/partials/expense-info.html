@@ -1,0 +1,39 @@
+<!-- Read-only expense detail fields in form layout -->
+<div class="form-row">
+  <div class="detail-field">
+    <div class="stat-label">Amount</div>
+    <div :text="'$' + fmtAmt(detailExp?.amount)"></div>
+  </div>
+  <div class="detail-field">
+    <div class="stat-label">Date</div>
+    <div :text="detailExp?.expense_date?.slice(0,10) || '—'"></div>
+  </div>
+</div>
+<div class="form-row">
+  <div class="detail-field">
+    <div class="stat-label">Payee</div>
+    <div :text="detailExp?.member_id ? (memberNames[detailExp?.member_id] || detailExp?.payee) : (detailExp?.payee || '—')"></div>
+  </div>
+  <div class="detail-field">
+    <div class="stat-label">Category</div>
+    <div :text="fmt(detailExp?.category)"></div>
+  </div>
+</div>
+<div class="form-row" :if="detailExp?.tax_amount || detailExp?.bank_ref">
+  <div class="detail-field" :if="detailExp?.tax_amount">
+    <div class="stat-label">Tax</div>
+    <div :text="'$' + fmtAmt(detailExp?.tax_amount)"></div>
+  </div>
+  <div class="detail-field" :if="detailExp?.bank_ref">
+    <div class="stat-label">Bank Ref</div>
+    <div :text="detailExp?.bank_ref"></div>
+  </div>
+</div>
+<div class="detail-field" :if="detailExp?.member_id && memberNames[detailExp?.member_id]">
+  <div class="stat-label">Submitted by</div>
+  <div :text="memberNames[detailExp?.member_id]"></div>
+</div>
+<div :if="detailExp?.description">
+  <div class="stat-label">Description</div>
+  <div :text="detailExp?.description"></div>
+</div>

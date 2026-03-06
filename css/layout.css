@@ -547,6 +547,10 @@ form {
   min-width: 10rem;
   margin: 0;
 }
+.form-row .detail-field {
+  flex: 1;
+  min-width: 10rem;
+}
 
 /* Modal */
 .modal-overlay {
@@ -667,6 +671,28 @@ form {
   font-size: var(--f-sm);
   color: var(--c-text-dim);
 }
+.attach-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+}
+.attach-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-xs);
+  font-size: var(--f-sm);
+}
+.attach-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-sm);
+}
+.attach-thumb {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: cover;
+  border-radius: var(--r-sm);
+}
 .scan-warn {
   padding: var(--s-sm) var(--s-md);
   border-radius: var(--r-sm);
@@ -695,12 +721,12 @@ form {
   border: 1px solid var(--c-border);
 }
 .receipt-thumb img {
-  height: 4rem;
+  height: 6rem;
   display: block;
 }
 .receipt-placeholder {
-  height: 4rem;
-  width: 3.5rem;
+  height: 6rem;
+  width: 5rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -711,6 +737,10 @@ form {
 .receipt-error {
   border-color: var(--c-err);
   opacity: .6;
+}
+.receipt-duplicate {
+  border-color: var(--c-warn);
+  opacity: .7;
 }
 .receipt-extracting {
   opacity: .7;
@@ -1249,7 +1279,7 @@ input.filter-search {
   display: flex;
   flex-direction: column-reverse;
   gap: var(--s-xs);
-  z-index: 200;
+  z-index: 9999;
   pointer-events: none;
 }
 .toast {
@@ -1267,14 +1297,32 @@ input.filter-search {
 }
 .toast-in { opacity: 1; transform: translateY(0); }
 .toast-error {
-  background: rgba(226, 92, 92, .07);
-  border: 1px solid rgba(226, 92, 92, .25);
+  background: #fef2f2;
+  border: 1px solid rgba(226, 92, 92, .3);
   border-left: 3px solid var(--c-err);
   color: var(--c-err);
 }
 .toast-success {
-  background: rgba(58, 158, 110, .07);
-  border: 1px solid rgba(58, 158, 110, .25);
+  background: #f0faf5;
+  border: 1px solid rgba(58, 158, 110, .3);
   border-left: 3px solid var(--c-ok);
   color: var(--c-ok);
+}
+.toast-warn {
+  background: #fefce8;
+  border: 1px solid rgba(230, 162, 60, .3);
+  border-left: 3px solid var(--c-warn);
+  color: var(--c-warn-text);
+}
+
+/* Permissions grid — roles page */
+.perm-grid { columns: 22rem; column-gap: var(--s-xl); }
+.perm-row { break-inside: avoid; display: flex; align-items: baseline; gap: var(--s-md); padding: var(--s-xs) 0; font-size: var(--f-sm); }
+.perm-scope { font-weight: 600; min-width: 6rem; flex-shrink: 0; }
+.perm-actions { display: flex; flex-wrap: wrap; gap: var(--s-xs) var(--s-sm); }
+.perm-check { display: inline-flex; align-items: baseline; gap: var(--s-xs); cursor: pointer; white-space: nowrap; }
+.perm-check input { width: auto; cursor: pointer; position: relative; top: 2px; }
+@media (max-width: 480px) {
+  .perm-row { flex-wrap: wrap; }
+  .perm-scope { width: 100%; }
 }

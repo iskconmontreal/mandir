@@ -1,0 +1,36 @@
+<!-- Donation modal (add/edit) -->
+<div class="modal-overlay" :if="showAdd && activeTab === 'donations'" :onkeydown.esc.document="showAdd = false">
+  <div class="modal" :onclick.outside="showAdd = false">
+    <div class="modal-header">
+      <h2 :text="editId ? 'Edit Donation' : 'Add Donation'"></h2>
+      <button class="modal-close" :onclick="showAdd = false">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form :onsubmit.prevent="saveDonation" style="display:flex;flex-direction:column;gap:var(--s-md)">
+        {% include partials/donation-fields.html %}
+
+        <div :if="donHistory.length">
+          <div class="stat-label" style="margin-bottom:var(--s-sm)">History</div>
+          <div class="history-list">
+            <div class="history-item" :each="h in donHistory">
+              <span class="badge" :class="'badge-' + eventBadge(h)" :text="eventLabel(h)"></span>
+              <span class="dim" :if="eventDetail(h)" :text="eventDetail(h)"></span>
+              <span class="history-date" :text="h.created_at?.slice(0,10) || ''"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="login-error" :if="addErr" :text="addErr"></div>
+
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm)">
+          <button :if="editId && !delConfirm" type="button" class="btn btn-danger btn-sm" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
+          <span :if="editId && delConfirm" class="dim" style="font-size:var(--f-sm); margin-right:auto; align-self:center">Delete permanently?</span>
+          <button :if="editId && delConfirm" type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': deleting}" :onclick="delDonation()">Yes</button>
+          <button :if="editId && delConfirm" type="button" class="btn btn-outline btn-sm" :onclick="delConfirm = false">No</button>
+          <button :if="!editId" type="button" class="btn btn-outline" :onclick="cancelAdd()">Cancel</button>
+          <button type="submit" class="btn btn-primary" :class="{'btn-loading': adding}" :text="editId ? 'Update' : 'Save Donation'"></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

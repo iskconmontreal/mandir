@@ -12,3 +12,5 @@
 /.claude
 .claude/settings.json
 /.claude
+/.playwright-mcp
+/test-results

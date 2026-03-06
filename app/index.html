@@ -7,8 +7,8 @@
 
 <!-- Quick actions -->
 <div style="display:flex; gap:var(--s-sm); margin-bottom:var(--s-xl)">
+  <button :if="can('expenses:create')" class="btn btn-primary" :onclick="openAdd()">+ Expense</button>
   <button :if="can('donations:create')" class="btn btn-primary" :onclick="openDonForm()">+ Donation</button>
-  <button class="btn btn-primary" :onclick="openExpForm()">+ Expense</button>
 </div>
 
 <!-- Financial pulse (admin only) -->
@@ -59,8 +59,8 @@
   </div>
 </div>
 
-<!-- Recent Activity -->
-<div class="card" style="margin-bottom:var(--s-xl)">
+<!-- Recent Activity (finance roles only) -->
+<div :if="can('donations:view') || can('expenses:view')" class="card" style="margin-bottom:var(--s-xl)">
   <div class="card-header">
     <h3>Recent Activity</h3>
   </div>
@@ -87,6 +87,38 @@
   <div :if="!activity.length" class="dim" style="font-size:var(--f-sm); padding:var(--s-sm) 0">No recent activity</div>
 </div>
 
+<!-- My Expenses -->
+<div :if="myExpenses.length" class="card" style="margin-bottom:var(--s-xl)">
+  <div class="card-header">
+    <h3>My Expenses</h3>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Category</th>
+          <th>Status</th>
+          <th style="text-align:right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr :each="x in myExpenses" class="row-link" :onclick="editExpense(x)">
+          <td :text="(x.created_at || x.expense_date)?.slice(0,10) || '—'"></td>
+          <td :text="fmtCat(x.category)"></td>
+          <td><span class="badge" :class="'badge-' + x.status" :text="x.status === 'submitted' ? `Pending ${x.approval_count||0}/${x.approvals_required||'?'}` : fmtCat(x.status)"></span></td>
+          <td style="text-align:right" :text="'$' + fmtAmt(x.amount)"></td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr style="font-weight:var(--f-wt-b)">
+          <td colspan="3">Total</td>
+          <td style="text-align:right" :text="'$' + fmtAmt(myExpenses.reduce((t, x) => t + (x.amount || 0), 0))"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
 
 <!-- My Giving -->
 <div :if="!can('members:view')" class="card" style="margin-bottom:var(--s-xl)">
@@ -133,6 +165,8 @@
   </div>
 </div>
 
+{% include finance/expense-form.html %}
+
 <!-- Donation form modal -->
 <div class="modal-overlay" :if="showDonForm" :onkeydown.esc.document="showDonForm = false" :onclick="e => { if (e.target === e.currentTarget) showDonForm = false }">
   <div class="modal">
@@ -141,79 +175,8 @@
       <button class="modal-close" :onclick="showDonForm = false">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="scan-area" :class="{'has-image': receiptPreview || receiptName}"
-        :onclick="document.getElementById('home-don-receipt').click()"
-        :ondragover="e => e.preventDefault()"
-        :ondrop="e => { e.preventDefault(); scanDonReceipt(e.dataTransfer.files[0]) }">
-        <img :if="receiptPreview" :src="receiptPreview">
-        <div :if="!receiptPreview && receiptName && !extracting" style="text-align:center">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="opacity:.5">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
-          </svg>
-          <div class="dim" style="font-size:var(--f-sm);margin-top:var(--s-xs)" :text="receiptName"></div>
-          <div class="scan-hint">Click to scan another</div>
-        </div>
-        <div :if="!receiptPreview && !receiptName && !extracting">
-          <div class="scan-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>
-              <line x1="9" y1="3" x2="9" y2="9"/><circle cx="14" cy="15" r="2.5"/><path d="M16 17l2.5 2.5"/>
-            </svg>
-          </div>
-          <div style="font-weight:var(--f-wt-b)">Scan receipt</div>
-          <div class="scan-hint">Drop image or PDF, or click to browse</div>
-        </div>
-        <div :if="extracting" class="dim">Scanning…</div>
-      </div>
-      <input id="home-don-receipt" type="file" accept="image/*,.pdf" style="display:none"
-        :onchange="e => { scanDonReceipt(e.target.files[0]); e.target.value = '' }">
-
       <form :onsubmit.prevent="saveDonation" style="display:flex;flex-direction:column;gap:var(--s-md)">
-        <div class="field autocomplete">
-          <label>Donor</label>
-          <div style="position:relative">
-            <input type="text" :value="memberQuery"
-              :onfocus="e => filterDonors(memberQuery)"
-              :oninput="e => { donForm.member_id = null; filterDonors(e.target.value) }"
-              :onblur="e => { memberHits = [] }"
-              :style="donForm.member_id ? 'padding-right:2rem' : ''"
-              placeholder="Search member… (optional)">
-            <button :if="donForm.member_id" type="button" class="btn-link"
-              style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%)"
-              :onclick="clearDonor()">&times;</button>
-          </div>
-          <div :if="memberHits.length" class="autocomplete-list">
-            <div class="autocomplete-item" :each="m in memberHits" :onmousedown.prevent="selectDonor(m)" :text="m.name"></div>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="home-don-amount">Amount ($)</label>
-            <input id="home-don-amount" type="number" :value="donForm.amount" :oninput="e => donForm.amount = e.target.value" step="0.01" min="0.01" required>
-          </div>
-          <div class="field">
-            <label for="home-don-date">Date</label>
-            <input id="home-don-date" type="date" :value="donForm.date_received" :oninput="e => donForm.date_received = e.target.value" required>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="home-don-method">Method</label>
-            <select id="home-don-method" :value="donForm.method" :onchange="e => donForm.method = e.target.value">
-              <option :each="m in donMethods" :value="m" :text="fmtCat(m)"></option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="home-don-cat">Category</label>
-            <select id="home-don-cat" :value="donForm.category" :onchange="e => donForm.category = e.target.value">
-              <option :each="c in donCats" :value="c" :text="fmtCat(c)"></option>
-            </select>
-          </div>
-        </div>
-        <div class="field">
-          <label for="home-don-note">Note</label>
-          <textarea id="home-don-note" rows="1" :value="donForm.note" :oninput="e => donForm.note = e.target.value" placeholder="Optional…"></textarea>
-        </div>
+        {% include partials/donation-fields.html %}
         <div class="login-error" :if="addErr" :text="addErr"></div>
         <div style="display:flex; justify-content:flex-end; gap:var(--s-sm)">
           <button type="button" class="btn btn-outline" :onclick="showDonForm = false">Cancel</button>
@@ -224,88 +187,9 @@
   </div>
 </div>
 
-<!-- Expense form modal -->
-<div class="modal-overlay" :if="showExpForm" :onkeydown.esc.document="e => { if (lightboxSrc || filePickerOpen) return; showExpForm = false }" :onclick="e => { if (e.target === e.currentTarget) showExpForm = false }">
-  <div class="modal">
-    <div class="modal-header">
-      <h2>Add Expense</h2>
-      <button class="modal-close" :onclick="showExpForm = false">&times;</button>
-    </div>
-    <div class="modal-body">
-      <div class="receipt-strip"
-        :ondragover="e => e.preventDefault()"
-        :ondrop="e => { e.preventDefault(); addReceipts(e.dataTransfer.files) }">
-        <div :if="!receipts.length" style="flex:1;text-align:center;cursor:pointer"
-          :onclick="() => { filePickerOpen = true; document.getElementById('home-exp-receipt').click() }">
-          <div class="scan-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>
-              <line x1="9" y1="3" x2="9" y2="9"/><circle cx="14" cy="15" r="2.5"/><path d="M16 17l2.5 2.5"/>
-            </svg>
-          </div>
-          <div style="font-weight:var(--f-wt-b)">Scan receipts</div>
-          <div class="scan-hint">Drop images or PDFs, or click to browse</div>
-        </div>
-        <div :each="r in receipts" class="receipt-thumb" :class="{ 'receipt-extracting': r.extracting, 'receipt-error': r.err }"
-          :onclick="e => { if (!e.target.closest('.receipt-remove') && r.preview) lightboxSrc = r.preview }">
-          <img :if="r.preview" :src="r.preview">
-          <div :if="!r.preview" class="receipt-placeholder" :text="r.name?.split('.').pop()?.toUpperCase() || 'FILE'"></div>
-          <div class="receipt-amount" :if="r.extracting || r.data?.amount" :text="r.extracting ? 'Scanning…' : '$' + r.data.amount"></div>
-          <div :if="r.extracting" class="receipt-spinner"></div>
-          <button type="button" class="receipt-remove" :onclick="removeReceipt(r)">&times;</button>
-        </div>
-        <div :if="receipts.length" class="receipt-add"
-          :onclick="() => { filePickerOpen = true; document.getElementById('home-exp-receipt').click() }">+</div>
-      </div>
-      <input id="home-exp-receipt" type="file" accept="image/*,.pdf" multiple style="display:none"
-        :oncancel="() => filePickerOpen = false"
-        :onchange="e => { filePickerOpen = false; addReceipts(e.target.files); e.target.value = '' }">
-
-      <form :onsubmit.prevent="saveExpense" style="display:flex;flex-direction:column;gap:var(--s-md)">
-        <div class="form-row">
-          <div class="field">
-            <label for="home-exp-vendor">Payee</label>
-            <input id="home-exp-vendor" type="text" :value="expForm.payee" :oninput="e => expForm.payee = e.target.value" placeholder="Vendor, store, person…" required>
-          </div>
-          <div class="field">
-            <label for="home-exp-cat">Category</label>
-            <select id="home-exp-cat" :value="expForm.category" :onchange="e => expForm.category = e.target.value">
-              <option :each="c in expCats" :value="c" :text="fmtCat(c)"></option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="home-exp-amount">Amount ($)</label>
-            <input id="home-exp-amount" type="number" :value="expForm.amount" :oninput="e => expForm.amount = e.target.value" step="0.01" min="0.01" placeholder="0.01" required>
-          </div>
-          <div class="field">
-            <label for="home-exp-date">Date</label>
-            <input id="home-exp-date" type="date" :value="expForm.expense_date" :oninput="e => expForm.expense_date = e.target.value" required>
-          </div>
-        </div>
-        <div class="field">
-          <label for="home-exp-desc">Description</label>
-          <textarea id="home-exp-desc" rows="1" :value="expForm.description" :oninput="e => expForm.description = e.target.value" placeholder="Optional…"></textarea>
-        </div>
-        <div class="login-error" :if="addErr" :text="addErr"></div>
-        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm)">
-          <button type="button" class="btn btn-outline" :onclick="showExpForm = false">Cancel</button>
-          <button type="submit" class="btn btn-primary" :class="{'btn-loading': adding}">Submit</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<div :if="lightboxSrc" class="lightbox" :onclick="lightboxSrc = ''" :onkeydown.esc.document="lightboxSrc = ''">
-  <img :src="lightboxSrc">
-  <button class="lightbox-close" :onclick="lightboxSrc = ''">&times;</button>
-</div>
-
 <script type="module">
-  import { init, fmtAmt, fmtCat, toCents, toast, auth } from '../lib/app.js'
-  import { api } from '../lib/api.js'
+  import { init, fmtAmt, fmtCat, rawAmt, toCents, toast, auth } from '../lib/app.js'
+  import { api, BASE } from '../lib/api.js'
   import { greeting } from '../lib/greeting.js'
 
   const DON_CATS = ['general', 'sunday_feast', 'book_distribution', 'deity_worship', 'building_fund', 'annadana', 'festival', 'events', 'other']
@@ -323,9 +207,78 @@
   localStorage.setItem('mandala_last_visit', Date.now())
   const vis = prev ? (Date.now() - prev) / 3600000 : Infinity
 
+  const MY_USER_ID = auth.user?.id
+  const STATUS_LABELS = { submitted: 'Pending', approved: 'Approved', paid: 'Paid', rejected: 'Rejected' }
+  function fmtStatus(s) { return STATUS_LABELS[s] || fmtCat(s) }
+  function fmtDate(d) {
+    if (!d) return '—'
+    const dt = new Date(d), ms = Date.now() - dt
+    if (ms < 3600000) return Math.floor(ms / 60000) + 'm ago'
+    if (ms < 86400000) return Math.floor(ms / 3600000) + 'h ago'
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...( dt.getFullYear() !== now.getFullYear() && { year: 'numeric' }) })
+  }
+
+  const ACTIVITY_ICONS = {
+    create: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v6M5 8h6"/></svg>',
+    approved: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+    rejected: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+    reject: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+    paid: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path stroke-width="1.5" d="M9 4c-.4-.6-1-.8-1.5-.8C6.2 3.2 5.5 4 5.5 5s.8 1.5 2 1.8 2 .8 2 1.7-.7 1.7-1.8 1.7c-.6 0-1.2-.2-1.7-.8"/><path stroke-width="1.5" d="M7.5 2v1.2m0 8v1.3"/><path stroke-width="2.5" d="M10 12l1.5 1.5L15 10"/></svg>',
+    submitted: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3.5l2.5 1.5"/></svg>',
+    update: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/></svg>',
+    delete: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5v8h6v-8"/></svg>',
+  }
+  function activityIcon(badge) { return ACTIVITY_ICONS[badge] || ACTIVITY_ICONS.update }
+
+  function parseDiff(d) {
+    if (!d) return null
+    if (typeof d === 'string') { try { return JSON.parse(d) } catch { return null } }
+    return d
+  }
+  function eventBadge(h) {
+    if (h.action !== 'update') return h.action
+    const d = parseDiff(h.diff)
+    if (!d) return 'update'
+    if (d.status) return d.status
+    if (d.approval) return d.approval === 'approve' ? 'approved' : d.approval
+    return 'update'
+  }
+  function eventLabel(h) {
+    if (h.action === 'create') return 'Created'
+    if (h.action === 'archive' || h.action === 'delete') return 'Deleted'
+    if (h.action !== 'update') return fmtCat(h.action)
+    const d = parseDiff(h.diff)
+    if (!d) return 'Updated'
+    if (d.approval) return 'Approved' + (d.count ? ` (${d.count})` : '')
+    if (d.status) return fmtStatus(d.status)
+    return 'Updated'
+  }
+  function eventDetail(h) {
+    if (!h.diff || h.action === 'create' || h.action === 'archive' || h.action === 'delete') return ''
+    const d = parseDiff(h.diff)
+    if (!d) return ''
+    const META = new Set(['id', 'created_at', 'updated_at', 'updated_by', 'attachments', 'submitter_name', 'due_date', 'currency', 'expense_no', 'member_id', 'paid_by', 'count', 'status', 'approval'])
+    const AMT = new Set(['amount', 'tax_amount', 'eligible_amount'])
+    const fv = (k, v) => v == null || v === '' ? '—' : AMT.has(k) ? '$' + fmtAmt(v) : fmtCat(String(v))
+    const parts = []
+    for (const [k, v] of Object.entries(d)) {
+      if (META.has(k)) continue
+      if (v && typeof v === 'object' && 'old' in v && 'new' in v) parts.push(fmtCat(k) + ' ' + fv(k, v.old) + ' → ' + fv(k, v.new))
+      else if (k === 'note' && v) parts.push(v)
+      else if (AMT.has(k)) parts.push(fmtCat(k) + ' $' + fmtAmt(v))
+      else if (k === 'bank_ref' && v) parts.push('Ref ' + v)
+    }
+    return parts.join(' · ')
+  }
+  function actorName(uid, names) {
+    if (!uid || !names[uid]) return ''
+    return uid === MY_USER_ID ? 'you' : names[uid]
+  }
+
   const emptyDonForm = () => ({ amount: '', method: 'cash', category: 'general', date_received: today, note: '', member_id: null, attachment: null })
-  const emptyExpForm = () => ({ payee: '', amount: '', category: 'utilities', expense_date: today, description: '' })
-  let pendingExtracts = 0, _syncedAmt = '', _syncedDesc = ''
+  const emptyExpForm = () => ({ payee: '', amount: '', category: '', expense_date: today, description: '' })
+  const AMT_MAX = 100_000
+  let pendingExtracts = 0, _syncedAmt = ''
 
   const s = init({
     _greeting: greeting(now, vis),
@@ -335,16 +288,51 @@
     memLoading: true,
     giving: { total: 0, count: 0, byCategory: {}, receipts: [] },
     activity: [],
-    fmtAmt,
-    fmtCat,
+    fmtAmt, fmtCat, fmtDate, fmtStatus, activityIcon,
+    fmt: fmtCat,
 
-    showDonForm: false, showExpForm: false,
+    activeTab: 'expenses',
+    showDonForm: false, showAdd: false,
     donForm: emptyDonForm(), expForm: emptyExpForm(),
     donCats: DON_CATS, donMethods: DON_METHODS, expCats: EXP_CATS,
     adding: false, addErr: null, extracting: false,
+    delConfirm: false, deleting: false, actioning: false,
+    actionNote: '', actionRef: '',
     receiptPreview: '', receiptName: '', receipts: [],
     lightboxSrc: '', filePickerOpen: false,
     memberNames: {}, memberHits: [], memberQuery: '',
+    vendorHits: [], expFull: false,
+    editId: null, donFull: false, apiBase: BASE,
+    myExpenses: [], detailExp: null, myUid: MY_USER_ID,
+    expApprovals: [], expHistory: [], userNames: {},
+    get expEditable() {
+      if (!this.detailExp) return true
+      if (this.detailExp.status !== 'submitted') return false
+      return !this.can('expenses:approve')
+    },
+    get expAttachments() { return this.detailExp?.attachments || [] },
+    get expTimeline() {
+      const entries = []
+      for (const a of this.expApprovals) {
+        entries.push({
+          badge: a.action === 'approve' ? 'approved' : a.action,
+          label: a.action === 'approve' ? 'Approved' : a.action === 'reject' ? 'Rejected' : fmtCat(a.action),
+          actor: this.memberNames[a.approved_by] || '',
+          uid: null, detail: a.note || '', date: a.created_at,
+        })
+      }
+      for (const h of this.expHistory) {
+        const d = parseDiff(h.diff)
+        if (d?.approval) continue
+        entries.push({
+          badge: eventBadge(h), label: eventLabel(h),
+          actor: actorName(h.user_id, this.userNames),
+          uid: h.user_id, detail: eventDetail(h), date: h.created_at,
+        })
+      }
+      entries.sort((a, b) => new Date(b.date) - new Date(a.date))
+      return entries
+    },
   })
 
   const hasFin = s.can('donations:view') || s.can('expenses:view')
@@ -395,6 +383,10 @@
     }
   }).catch(() => { })
 
+  api.getMyExpenses({ limit: 10, sortBy: 'created_at', sortDesc: 'true' })
+    .then(res => { s.myExpenses = res.items || [] })
+    .catch(() => {})
+
   if (hasFin) {
     api.getAuditLogs({ limit: 15, sortBy: 'created_at', sortDesc: 'true' })
       .then(res => {
@@ -403,16 +395,6 @@
           type: a.action || a.entity_type || '—',
           desc: [a.entity_type, '#' + a.entity_id, a.action].filter(Boolean).join(' '),
           amount: a.diff?.amount,
-        }))
-      }).catch(() => { })
-  } else {
-    api.getMyDonations({ limit: 10, sortBy: 'created_at', sortDesc: 'true' })
-      .then(res => {
-        s.activity = (res.items || []).map(d => ({
-          date: d.donation_date?.slice(0, 10) || d.created_at?.slice(0, 10) || '—',
-          type: 'donation',
-          desc: fmtCat(d.category),
-          amount: d.amount,
         }))
       }).catch(() => { })
   }
@@ -446,10 +428,6 @@
       api.getAuditLogs({ limit: 15, sortBy: 'created_at', sortDesc: 'true' }).then(res => {
         s.activity = (res.items || []).map(a => ({ date: a.created_at?.slice(0, 10) || '—', type: a.action || a.entity_type || '—', desc: [a.entity_type, '#' + a.entity_id, a.action].filter(Boolean).join(' '), amount: a.diff?.amount }))
       }).catch(() => {})
-    } else {
-      api.getMyDonations({ limit: 10, sortBy: 'created_at', sortDesc: 'true' }).then(res => {
-        s.activity = (res.items || []).map(d => ({ date: d.donation_date?.slice(0, 10) || d.created_at?.slice(0, 10) || '—', type: 'donation', desc: fmtCat(d.category), amount: d.amount }))
-      }).catch(() => {})
     }
     Promise.all([api.getMyDonationSummary(y).catch(() => null), api.getMyTaxReceipts().catch(() => null)]).then(([summary, receipts]) => {
       if (!summary && !receipts) return
@@ -457,24 +435,42 @@
       if (summary?.by_category) for (const [k, v] of Object.entries(summary.by_category)) byCat[k] = v
       s.giving = { total: summary?.total || 0, count: summary?.count || 0, byCategory: byCat, receipts: receipts?.items || receipts || [] }
     }).catch(() => {})
+    api.getMyExpenses({ limit: 10, sortBy: 'created_at', sortDesc: 'true' })
+      .then(res => { s.myExpenses = res.items || [] })
+      .catch(() => {})
+  }
+
+  function resetForm() {
+    s.editId = null; s.addErr = null; s.detailExp = null
+    s.receiptPreview = ''; s.receiptName = ''; s.receipts = []; s.extracting = false
+    s.memberQuery = ''; s.memberHits = []; s.vendorHits = []; s.expFull = false
+    s.actionNote = ''; s.actionRef = ''
+    s.delConfirm = false; s.deleting = false
+    s.expForm = emptyExpForm(); s.expApprovals = []; s.expHistory = []
+    _syncedAmt = ''
   }
 
   s.openDonForm = () => {
-    s.showExpForm = false
-    s.donForm = emptyDonForm(); s.addErr = null; s.adding = false
-    s.extracting = false; s.receiptPreview = ''; s.receiptName = ''
-    s.memberQuery = ''; s.memberHits = []
+    s.showAdd = false; resetForm()
+    s.donForm = emptyDonForm(); s.donFull = false
     s.showDonForm = true
     loadMemberNames()
   }
 
-  s.openExpForm = () => {
-    s.showDonForm = false
-    s.expForm = emptyExpForm(); s.addErr = null; s.adding = false
-    s.extracting = false; s.receipts = []
-    s.lightboxSrc = ''; s.filePickerOpen = false
-    pendingExtracts = 0; _syncedAmt = ''; _syncedDesc = ''
-    s.showExpForm = true
+  s.openAdd = () => { resetForm(); s.showAdd = true }
+  s.cancelAdd = () => { resetForm(); s.showAdd = false }
+
+  s.editExpense = (x) => {
+    s.showDonForm = false; resetForm()
+    s.editId = x.id; s.detailExp = x
+    const cat = x.category || 'other'
+    s.expForm = { payee: x.payee || '', amount: rawAmt(x.amount), category: cat, expense_date: (x.expense_date || '').slice(0, 10), description: x.description || '' }
+    s.expFull = true; s.showAdd = true
+    if (x.id) {
+      api.getExpenseApprovals(x.id).then(r => { s.expApprovals = r.items || r || [] }).catch(() => {})
+      api.getAuditLogs({ entity_type: 'expense', entity_id: x.id, limit: 20, sortBy: 'created_at', sortDesc: 'true' })
+        .then(r => { s.expHistory = r.items || [] }).catch(() => {})
+    }
   }
 
   s.filterDonors = q => {
@@ -485,7 +481,14 @@
   s.selectDonor = m => { s.donForm.member_id = m.id; s.memberQuery = m.name; s.memberHits = [] }
   s.clearDonor = () => { s.donForm.member_id = null; s.memberQuery = ''; s.memberHits = [] }
 
-  s.scanDonReceipt = async file => {
+  s.filterVendors = q => {
+    s.expForm.payee = q
+    if (!q) { s.vendorHits = []; return }
+    const seen = new Set()
+    s.vendorHits = s.myExpenses.map(x => x.payee).filter(v => v && !seen.has(v) && (seen.add(v), v.toLowerCase().includes(q.toLowerCase()))).slice(0, 5)
+  }
+
+  s.scanFile = async file => {
     if (!file) return
     s.extracting = true; s.addErr = null; s.receiptName = file.name
     if (file.type.startsWith('image/')) {
@@ -494,33 +497,37 @@
       reader.readAsDataURL(file)
     } else s.receiptPreview = ''
     try {
-      const res = await api.uploadDoc(file, 'donation')
-      const d = res.extracted_data || {}
-      if (d.amount) s.donForm.amount = d.amount
+      let res = await api.uploadDoc(file, 'donation')
+      let isDup = false
+      if (res.duplicate) {
+        if (!res.can_claim) { isDup = true; toast('Possible duplicate — this receipt was uploaded before', 'warn') }
+        else res = await api.claimAttachment(res.attachment.id)
+      }
+      const d = res.extracted_data || res.attachment?.extracted_data || {}
+      const amt = parseFloat(d.amount)
+      if (amt > 0 && amt < AMT_MAX) s.donForm.amount = d.amount
       if (d.method) s.donForm.method = d.method
       if (d.category) s.donForm.category = d.category
       if (d.date) s.donForm.date_received = d.date
-      if (d.description) s.donForm.note = d.description
-      s.donForm.attachment = res.attachment || null
+      s.donForm.attachment = isDup ? null : (res.attachment || null)
     } catch (e) { toast(e.message) }
     finally { s.extracting = false }
   }
 
   function syncExpReceipts() {
-    let total = 0, descs = []
+    let total = 0
     for (const r of s.receipts) {
       if (!r.data) continue
-      if (r.data.amount) total += parseFloat(r.data.amount)
-      if (r.data.description) descs.push(r.data.description)
+      const amt = parseFloat(r.data.amount)
+      if (amt > 0 && amt < AMT_MAX) total += amt
     }
     const newAmt = total ? total.toFixed(2) : ''
     if (newAmt && (s.expForm.amount === _syncedAmt || !s.expForm.amount)) { s.expForm.amount = newAmt; _syncedAmt = newAmt }
-    const newDesc = descs.join(';\n')
-    if (newDesc && (s.expForm.description === _syncedDesc || !s.expForm.description)) { s.expForm.description = newDesc; _syncedDesc = newDesc }
     const first = s.receipts.find(r => r.data)?.data
     if (!first) return
+    if (first.vendor || first.category || first.date) s.expFull = true
     if (!s.expForm.payee && first.vendor) s.expForm.payee = first.vendor
-    if (s.expForm.category === 'utilities' && first.category) s.expForm.category = first.category
+    if (!s.expForm.category && first.category) s.expForm.category = first.category
     if (s.expForm.expense_date === today && first.date) s.expForm.expense_date = first.date
   }
 
@@ -536,8 +543,20 @@
       await Promise.all(files.map(async (file, i) => {
         const r = s.receipts[startIdx + i]
         if (file.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => { r.preview = rd.result }; rd.readAsDataURL(file) }
-        try { const res = await api.uploadDoc(file, 'expense'); r.data = res.extracted_data || {}; r.attachment = res.attachment || null }
-        catch (e) { r.err = e.message; toast(e.message) }
+        try {
+          let res = await api.uploadDoc(file, 'expense')
+          if (res.duplicate) {
+            if (!res.can_claim) {
+              r.duplicate = true
+              r.data = res.extracted_data || res.attachment?.extracted_data || {}
+              r.extracting = false
+              syncExpReceipts()
+              return
+            }
+            res = await api.claimAttachment(res.attachment.id)
+          }
+          r.data = res.extracted_data || {}; r.attachment = res.attachment || null
+        } catch (e) { r.err = e.message; toast(e.message) }
         r.extracting = false
         syncExpReceipts()
       }))
@@ -567,17 +586,43 @@
     if (pendingExtracts > 0) { s.addErr = 'Please wait for receipt processing.'; return }
     s.addErr = null; s.adding = true
     try {
-      const attIds = s.receipts.filter(r => r.attachment).map(r => r.attachment.id)
-      await api.createExpense({
-        amount: toCents(s.expForm.amount), payee: s.expForm.payee,
-        description: s.expForm.description, category: s.expForm.category,
-        currency: 'CAD', expense_date: s.expForm.expense_date,
-        attachment_ids: attIds.length ? attIds : undefined,
-      })
-      toast('Expense saved', 'success')
-      s.showExpForm = false
+      const f = s.expForm
+      const data = { amount: toCents(f.amount) }
+      if (f.payee) data.payee = f.payee
+      if (f.description) data.description = f.description
+      if (f.category) data.category = f.category
+      if (f.expense_date) data.expense_date = f.expense_date
+      if (s.editId) {
+        await api.updateExpense(s.editId, data)
+      } else {
+        const attIds = s.receipts.filter(r => r.attachment).map(r => r.attachment.id)
+        if (attIds.length) data.attachment_ids = attIds
+        await api.createExpense(data)
+      }
+      toast(s.editId ? 'Expense updated' : 'Expense saved', 'success')
+      s.showAdd = false
       refreshDashboard()
     } catch (e) { s.addErr = e.message }
     finally { s.adding = false }
   }
+
+  async function expAction(fn) {
+    s.actioning = true
+    try { const msg = await fn(); s.showAdd = false; toast(msg, 'success'); refreshDashboard() }
+    catch (e) { s.addErr = e.message }
+    finally { s.actioning = false }
+  }
+
+  s.approveExp = async () => { await expAction(async () => { const r = await api.approveExpense(s.editId, s.actionNote); const exp = r.expense || r; return exp.status === 'approved' ? 'Expense approved' : `Approval recorded (${r.approval_count}/${r.approvals_required})` }) }
+  s.rejectExp = async () => { if (!s.actionNote.trim()) { s.addErr = 'Note is required'; return }; await expAction(async () => { await api.rejectExpense(s.editId, s.actionNote); return 'Expense rejected' }) }
+  s.payExp = async () => { await expAction(async () => { await api.payExpense(s.editId, s.actionRef); return 'Expense marked as paid' }) }
+
+  s.delExpense = async () => {
+    s.deleting = true
+    try { await api.deleteExpense(s.editId); resetForm(); s.showAdd = false; refreshDashboard() }
+    catch (e) { s.addErr = e.message }
+    finally { s.deleting = false }
+  }
+
+  if (hasFin) loadMemberNames()
 </script>

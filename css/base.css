@@ -101,6 +101,11 @@ table {
 }
 td, th { overflow: hidden; text-overflow: ellipsis; }
 mark { background: var(--c-warn-bg); color: var(--c-warn-text); border-radius: 2px; }
+mark.hl-hit {
+  background: var(--c-hl-bg);
+  color: var(--c-hl-text);
+  padding: 0 .08em;
+}
 th {
   text-align: left;
   font-weight: var(--f-wt-b);

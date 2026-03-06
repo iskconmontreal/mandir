@@ -13,40 +13,7 @@
 
       <!-- ===== DETAIL MODE (non-editable states) ===== -->
       <div :if="detailExp && !expEditable" style="display:flex;flex-direction:column;gap:var(--s-md)">
-        <div class="detail-grid">
-          <div class="detail-field">
-            <div class="stat-label">Amount</div>
-            <div :text="'$' + fmtAmt(detailExp?.amount)"></div>
-          </div>
-          <div class="detail-field" :if="detailExp?.tax_amount">
-            <div class="stat-label">Tax</div>
-            <div :text="'$' + fmtAmt(detailExp?.tax_amount)"></div>
-          </div>
-          <div class="detail-field">
-            <div class="stat-label">Payee</div>
-            <div :text="detailExp?.member_id ? (memberNames[detailExp?.member_id] || detailExp?.payee) : detailExp?.payee"></div>
-          </div>
-          <div class="detail-field">
-            <div class="stat-label">Category</div>
-            <div :text="fmt(detailExp?.category)"></div>
-          </div>
-          <div class="detail-field">
-            <div class="stat-label">Date</div>
-            <div :text="detailExp?.expense_date?.slice(0,10) || '—'"></div>
-          </div>
-          <div class="detail-field" :if="detailExp?.bank_ref">
-            <div class="stat-label">Bank Ref</div>
-            <div :text="detailExp?.bank_ref"></div>
-          </div>
-          <div class="detail-field" :if="detailExp?.member_id">
-            <div class="stat-label">Submitted by</div>
-            <div :text="memberNames[detailExp?.member_id] || '—'"></div>
-          </div>
-        </div>
-        <div :if="detailExp?.description">
-          <div class="stat-label">Description</div>
-          <div :text="detailExp?.description"></div>
-        </div>
+        {% include partials/expense-info.html %}
 
         <div :if="expAttachments.length">
           <div class="stat-label" style="margin-bottom:var(--s-sm)">Receipts</div>
@@ -116,11 +83,11 @@
             <div style="font-weight:var(--f-wt-b)">Scan receipts</div>
             <div class="scan-hint">Drop images or PDFs, or click to browse</div>
           </div>
-          <div :each="r in receipts" class="receipt-thumb" :class="{ 'receipt-extracting': r.extracting, 'receipt-error': r.err }"
+          <div :each="r in receipts" class="receipt-thumb" :class="{ 'receipt-extracting': r.extracting, 'receipt-error': r.err, 'receipt-duplicate': r.duplicate }"
             :onclick="e => { if (!e.target.closest('.receipt-remove') && r.preview) lightboxSrc = r.preview }">
             <img :if="r.preview" :src="r.preview">
             <div :if="!r.preview" class="receipt-placeholder" :text="r.name?.split('.').pop()?.toUpperCase() || 'FILE'"></div>
-            <div class="receipt-amount" :if="r.extracting || r.data?.amount" :text="r.extracting ? 'Scanning…' : '$' + r.data.amount"></div>
+            <div class="receipt-amount" :if="r.extracting" :text="'Scanning…'"></div>
             <div :if="r.extracting" class="receipt-spinner"></div>
             <button type="button" class="receipt-remove" :onclick="removeReceipt(r)">&times;</button>
           </div>
@@ -143,40 +110,58 @@
         </div>
 
         <form :onsubmit.prevent="saveExpense" style="display:flex;flex-direction:column;gap:var(--s-md)">
-          <div class="field">
-            <label for="exp-amount">Amount ($)</label>
-            <input id="exp-amount" type="number" :value="expForm.amount" :oninput="e => expForm.amount = e.target.value" step="0.01" min="0.01" placeholder="0.01" required>
-          </div>
-          <div class="field">
-            <label for="exp-desc">Description</label>
-            <textarea id="exp-desc" rows="1" :value="expForm.description" :oninput="e => expForm.description = e.target.value" placeholder="What's this for? (optional)"></textarea>
-          </div>
-          <a :if="!expFull" href="#" class="dim" style="font-size:var(--f-sm)" :onclick.prevent="expFull = true">More fields</a>
-          <div :if="expFull" style="display:flex;flex-direction:column;gap:var(--s-md)">
-            <div class="form-row">
-              <div class="field autocomplete">
-                <label for="exp-vendor">Payee</label>
-                <input id="exp-vendor" type="text" :value="expForm.payee"
-                  :oninput="e => filterVendors(e.target.value)"
-                  :onblur="e => { vendorHits = [] }"
-                  placeholder="Defaults to your name">
-                <div :if="vendorHits.length" class="autocomplete-list">
-                  <div class="autocomplete-item" :each="v in vendorHits" :onmousedown.prevent="() => { expForm.payee = v; vendorHits = [] }" :text="v"></div>
-                </div>
-              </div>
-              <div class="field">
-                <label for="exp-cat">Category</label>
-                <select id="exp-cat" :value="expForm.category" :onchange="e => expForm.category = e.target.value">
-                  <option :each="c in expCats" :value="c" :text="fmt(c)"></option>
-                </select>
+          <div :if="can('expenses:approve')" class="form-row">
+            <div class="field autocomplete">
+              <label>Payee</label>
+              <input type="text" :value="expForm.payee"
+                :oninput="e => filterVendors(e.target.value)"
+                :onblur="e => { vendorHits = [] }"
+                placeholder="Vendor, store, person…" :required="!editId">
+              <div :if="vendorHits.length" class="autocomplete-list">
+                <div class="autocomplete-item" :each="v in vendorHits" :onmousedown.prevent="() => { expForm.payee = v; vendorHits = [] }" :text="v"></div>
               </div>
             </div>
             <div class="field">
-              <label for="exp-date">Date</label>
-              <input id="exp-date" type="date" :value="expForm.expense_date" :oninput="e => expForm.expense_date = e.target.value">
+              <label>Category</label>
+              <select :value="expForm.category" :onchange="e => expForm.category = e.target.value">
+                <option value="" disabled hidden>Select…</option>
+                <option :each="c in expCats" :value="c" :text="fmt(c)"></option>
+              </select>
             </div>
           </div>
+          <div :if="can('expenses:approve')" class="form-row">
+            <div class="field">
+              <label>Amount ($)</label>
+              <input type="number" :value="expForm.amount" :oninput="e => expForm.amount = e.target.value" step="0.01" min="0.01" placeholder="0.01" required>
+            </div>
+            <div class="field">
+              <label>Date</label>
+              <input type="date" :value="expForm.expense_date" :oninput="e => expForm.expense_date = e.target.value" required>
+            </div>
+          </div>
+          <div :if="can('expenses:approve')" class="field">
+            <label>Description</label>
+            <textarea rows="1" style="field-sizing:content;resize:none" :value="expForm.description" :oninput="e => expForm.description = e.target.value" placeholder="Optional…"></textarea>
+          </div>
+          <div :if="!can('expenses:approve')" class="form-row">
+            <div class="field">
+              <label>Amount ($)</label>
+              <input type="number" :value="expForm.amount" :oninput="e => expForm.amount = e.target.value" step="0.01" min="0.01" placeholder="0.01" required>
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <select :value="expForm.category" :onchange="e => expForm.category = e.target.value">
+                <option value="" disabled hidden>Select…</option>
+                <option :each="c in expCats" :value="c" :text="fmt(c)"></option>
+              </select>
+            </div>
+          </div>
+          <div :if="!can('expenses:approve')" class="field">
+            <label>Note</label>
+            <textarea rows="1" style="field-sizing:content;resize:none" :value="expForm.description" :oninput="e => expForm.description = e.target.value" placeholder="Optional…"></textarea>
+          </div>
 
+          <div :if="receipts.some(r => r.duplicate)" class="form-warn">Possible duplicate — a receipt was previously uploaded for another expense</div>
           <div class="login-error" :if="addErr" :text="addErr"></div>
 
           <div style="display:flex; justify-content:flex-end; gap:var(--s-sm)">

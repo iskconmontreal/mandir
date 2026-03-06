@@ -125,7 +125,8 @@
           <tr :each="x in expPaged" class="row-link" :onclick="editExpense(x)">
             <td :each="c in expCols" :html="_expCell(x, c.key)" :style="c.right ? 'text-align:right' : ''"></td>
             <td :if="can('expenses:approve')" class="quick-actions" :onclick.stop="">
-              <button :if="x.status === 'submitted'" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickApprove(x)">Approve</button>
+              <button :if="x.status === 'submitted' && !myApprovals[x.id]" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickApprove(x)">Approve</button>
+              <span :if="x.status === 'submitted' && myApprovals[x.id]" class="dim" style="font-size:var(--f-sm)">✓</span>
               <button :if="x.status === 'approved'" class="btn-quick btn-quick-pay" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickPay(x)">Done</button>
             </td>
           </tr>
@@ -164,13 +165,14 @@
         <div :each="x in g.items">
           <div class="exp-card" :class="{open: expExpandId === x.id}" :onclick="toggleExpand(x.id)">
             <div class="exp-card-icon" :class="'status-' + (x.status || 'submitted')" :html="expIcon(x)"></div>
-            <strong class="exp-card-title" :text="x.payee || '—'"></strong>
-            <span class="badge" :class="catCls(x.category)" :text="fmt(x.category)"></span>
-            <span class="exp-card-date" :text="fmtDate(x.expense_date)"></span>
+            <strong class="exp-card-title"><span :html="hl(x.payee || '—', expSearch)"></span><span :if="memberNames[x.member_id]" class="dim" style="font-weight:400" :html="' by ' + hl(memberNames[x.member_id], expSearch)"></span></strong>
+            <span class="badge" :class="catCls(x.category)" :html="hl(fmt(x.category), expSearch)"></span>
+            <span class="exp-card-date" :text="fmtDate(x.created_at || x.expense_date)"></span>
             <div class="exp-card-status" :class="'status-' + (x.status || 'submitted')" :text="expMeta(x)"></div>
             <div class="exp-card-actions">
               <button class="btn btn-outline btn-sm" :onclick.stop="editExpense(x)">Edit</button>
-              <button :if="can('expenses:approve') && x.status === 'submitted'" class="btn btn-primary btn-sm" :class="{'btn-loading': quickLoading[x.id]}" :onclick.stop="quickApprove(x)">Approve</button>
+              <button :if="can('expenses:approve') && x.status === 'submitted' && !myApprovals[x.id]" class="btn btn-primary btn-sm" :class="{'btn-loading': quickLoading[x.id]}" :onclick.stop="quickApprove(x)">Approve</button>
+              <span :if="can('expenses:approve') && x.status === 'submitted' && myApprovals[x.id]" class="dim" style="font-size:var(--f-sm)">Approved ✓</span>
               <button :if="can('expenses:approve') && x.status === 'approved'" class="btn btn-primary btn-sm" :class="{'btn-loading': quickLoading[x.id]}" :onclick.stop="quickPay(x)">Paid</button>
             </div>
             <div class="exp-card-amount" :text="'$' + fmtAmt(x.amount)"></div>
@@ -184,7 +186,7 @@
                 </div>
                 <div :if="x.description">
                   <div class="stat-label">Note</div>
-                  <div :text="x.description"></div>
+                  <div :html="hl(x.description, expSearch)"></div>
                 </div>
                 <div :if="x.attachments?.length">
                   <div class="stat-label">Receipts</div>
@@ -367,9 +369,8 @@
 
 </section>
 
-<!-- Form modals loaded once at init -->
-<div :html="expFormHTML"></div>
-<div :html="donFormHTML"></div>
+{% include finance/expense-form.html %}
+{% include finance/donation-form.html %}
 
 <script type="module">
   import { init, fmtCat, fmtAmt, rawAmt, toCents, toast, auth, hl } from '../../lib/app.js'
@@ -464,29 +465,28 @@
     s.donHistory = []; s.actionNote = ''; s.actionRef = ''; s.actionAmt = ''
     s.delConfirm = false; s.deleting = false
     s.donForm = emptyDonForm(); s.expForm = emptyExpForm()
-    _syncedAmt = ''; _syncedDesc = ''
+    _syncedAmt = ''
   }
 
   let pendingExtracts = 0
-  let _syncedAmt = '', _syncedDesc = ''
+  let _syncedAmt = ''
+
+  const AMT_MAX = 100_000
 
   function syncExpReceipts() {
-    let total = 0, descs = []
+    let total = 0
     for (const r of s.receipts) {
       if (!r.data) continue
-      if (r.data.amount) total += parseFloat(r.data.amount)
-      if (r.data.description) descs.push(r.data.description)
+      const amt = parseFloat(r.data.amount)
+      if (amt > 0 && amt < AMT_MAX) total += amt
     }
     const newAmt = total ? total.toFixed(2) : ''
     if (newAmt && (s.expForm.amount === _syncedAmt || !s.expForm.amount)) {
       s.expForm.amount = newAmt; _syncedAmt = newAmt
     }
-    const newDesc = descs.join(';\n')
-    if (newDesc && (s.expForm.description === _syncedDesc || !s.expForm.description)) {
-      s.expForm.description = newDesc; _syncedDesc = newDesc
-    }
     const first = s.receipts.find(r => r.data)?.data
     if (!first) return
+    if (first.vendor || first.category || first.date) s.expFull = true
     if (!s.expForm.payee && first.vendor) s.expForm.payee = first.vendor
     if (!s.expForm.category && first.category) s.expForm.category = first.category
     if (!s.expForm.expense_date && first.date) s.expForm.expense_date = first.date
@@ -568,7 +568,6 @@
   const s = init({
     year: curYear, years, monthLabel,
     activeTab: location.hash.slice(1) || 'expenses',
-    expFormHTML: '', donFormHTML: '',
     editId: null, showAdd: false, filePickerOpen: false,
     loading: false, adding: false, deleting: false, extracting: false, actioning: false,
     receiptPreview: '', receiptName: '', receipts: [], lightboxSrc: '',
@@ -605,7 +604,11 @@
     },
     expMeta(x) {
       const st = x.status || 'submitted'
-      return st === 'submitted' ? 'Pending approval' : fmtStatus(st)
+      if (st === 'submitted') {
+        const cnt = x.approval_count || 0, req = x.approvals_required || '?'
+        return `Pending approval ${cnt}/${req}`
+      }
+      return fmtStatus(st)
     },
     expIcon(x) { return statusIcon(x.status || 'submitted') },
     toggleExpand(id) {
@@ -682,9 +685,9 @@
 
     expSearch: '', expFilterCat: '', expFilterStatus: '', expDateFrom: '', expDateTo: '', expPage: 1,
     expView: 'list', expExpandId: null, expInlineHistory: {}, expInlineLoading: {},
-    expSortBy: 'expense_date', expSortDir: 'desc',
+    expSortBy: 'created_at', expSortDir: 'desc',
     expCols: [
-      { key: 'expense_date', label: 'Date' },
+      { key: 'created_at', label: 'Date' },
       { key: 'status', label: 'Status' },
       { key: 'payee', label: 'Payee' },
       { key: 'category', label: 'Category' },
@@ -703,9 +706,9 @@
     _expCell(x, key) {
       const q = this.expSearch
       switch (key) {
-        case 'expense_date': return fmtDate(x.expense_date)
-        case 'status': { const st = x.status || 'submitted'; return '<span class="status-icon status-' + st + '">' + statusIcon(st) + ' ' + fmtStatus(st) + '</span>' }
-        case 'payee': return hl(x.payee || '', q)
+        case 'created_at': return fmtDate(x.created_at || x.expense_date)
+        case 'status': { const st = x.status || 'submitted'; const lbl = st === 'submitted' ? `Pending ${x.approval_count||0}/${x.approvals_required||'?'}` : fmtStatus(st); return '<span class="status-icon status-' + st + '">' + statusIcon(st) + ' ' + lbl + '</span>' }
+        case 'payee': { const by = this.memberNames[x.member_id]; return hl(x.payee || '', q) + (by ? ' <span class="dim">by ' + hl(by, q) + '</span>' : '') }
         case 'category': return '<span class="badge ' + catCls(x.category) + '">' + hl(fmtCat(x.category), q) + '</span>'
         case '_submitter': return '<span class="dim">' + hl(this.memberNames[x.member_id] || '—', q) + '</span>'
         case 'amount': return '$' + fmtAmt(x.amount)
@@ -747,7 +750,7 @@
         map[d].total += x.amount || 0
       }
       const groups = Object.values(map).sort((a, b) => b.key.localeCompare(a.key))
-      for (const g of groups) g.items.sort((a, b) => (b.expense_date || '') > (a.expense_date || '') ? 1 : -1)
+      for (const g of groups) g.items.sort((a, b) => (b.created_at || b.expense_date || '') > (a.created_at || a.expense_date || '') ? 1 : -1)
       return groups
     },
     fmtMonth(key) {
@@ -761,7 +764,7 @@
       const resolve = k === '_submitter' ? r => this.memberNames[r.member_id] || ''
         : k === 'status' ? r => STATUS_ORDER[r.status] ?? 9
         : null
-      const arr = k ? this._doSort(this.expFiltered, k, this.expSortDir, resolve) : [...this.expFiltered].sort((a, b) => (b.expense_date||'') > (a.expense_date||'') ? 1 : -1)
+      const arr = k ? this._doSort(this.expFiltered, k, this.expSortDir, resolve) : [...this.expFiltered].sort((a, b) => (b.created_at||b.expense_date||'') > (a.created_at||a.expense_date||'') ? 1 : -1)
       return arr.slice(0, this.expPage * perPage)
     },
 
@@ -833,14 +836,19 @@
         reader.readAsDataURL(file)
       } else s.receiptPreview = ''
       try {
-        const res = await api.uploadDoc(file, 'donation')
-        const d = res.extracted_data || {}
-        if (d.amount) s.donForm.amount = d.amount
+        let res = await api.uploadDoc(file, 'donation')
+        let isDup = false
+        if (res.duplicate) {
+          if (!res.can_claim) { isDup = true; toast('Possible duplicate — this receipt was uploaded before', 'warn') }
+          else res = await api.claimAttachment(res.attachment.id)
+        }
+        const d = res.extracted_data || res.attachment?.extracted_data || {}
+        const amt = parseFloat(d.amount)
+        if (amt > 0 && amt < AMT_MAX) s.donForm.amount = d.amount
         if (d.method) s.donForm.method = d.method
         if (d.category) s.donForm.category = d.category
         if (d.date) s.donForm.date_received = d.date
-        if (d.description) s.donForm.note = d.description
-        s.donForm.attachment = res.attachment || null
+        s.donForm.attachment = isDup ? null : (res.attachment || null)
       } catch (e) { toast(e.message) }
       finally { s.extracting = false }
     },
@@ -857,8 +865,20 @@
         await Promise.all(files.map(async (file, i) => {
           const r = s.receipts[startIdx + i]
           if (file.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => { r.preview = rd.result }; rd.readAsDataURL(file) }
-          try { const res = await api.uploadDoc(file, 'expense'); r.data = res.extracted_data || {}; r.attachment = res.attachment || null }
-          catch (e) { r.err = e.message; toast(e.message) }
+          try {
+            let res = await api.uploadDoc(file, 'expense')
+            if (res.duplicate) {
+              if (!res.can_claim) {
+                r.duplicate = true
+                r.data = res.extracted_data || res.attachment?.extracted_data || {}
+                r.extracting = false
+                syncExpReceipts()
+                return
+              }
+              res = await api.claimAttachment(res.attachment.id)
+            }
+            r.data = res.extracted_data || res.attachment?.extracted_data || {}; r.attachment = res.attachment || null
+          } catch (e) { r.err = e.message; toast(e.message) }
           r.extracting = false
           syncExpReceipts()
         }))
@@ -895,20 +915,24 @@
       })
     },
 
-    async approveExp()   { await expAction(async () => { const r = await api.approveExpense(s.editId, s.actionNote); return r.status === 'approved' ? 'Expense approved' : 'Approval recorded' }) },
+    async approveExp()   { await expAction(async () => { const r = await api.approveExpense(s.editId, s.actionNote); const exp = r.expense || r; return exp.status === 'approved' ? 'Expense approved' : `Approval recorded (${r.approval_count}/${r.approvals_required})` }) },
     async rejectExp()    { if (!s.actionNote.trim()) { s.addErr = 'Note is required'; return }; await expAction(async () => { await api.rejectExpense(s.editId, s.actionNote); return 'Expense rejected' }) },
     async payExp()       { await expAction(async () => { await api.payExpense(s.editId, s.actionRef); return 'Expense marked as paid' }) },
 
     _hoverCat: null,
-    quickLoading: {},
+    quickLoading: {}, myApprovals: {},
     async quickApprove(x) {
-      if (s.quickLoading[x.id]) return
+      if (s.quickLoading[x.id] || s.myApprovals[x.id]) return
       s.quickLoading = { ...s.quickLoading, [x.id]: true }
       try {
         const res = await api.approveExpense(x.id, '')
-        x.status = res.status
+        const exp = res.expense || res
+        x.status = exp.status
+        x.approval_count = res.approval_count ?? x.approval_count
+        x.approvals_required = res.approvals_required ?? x.approvals_required
+        s.myApprovals = { ...s.myApprovals, [x.id]: true }
         s.expenses = [...s.expenses]
-        toast(res.status === 'approved' ? 'Approved' : 'Approval recorded', 'success')
+        toast(exp.status === 'approved' ? 'Approved' : `Approval recorded (${res.approval_count}/${res.approvals_required})`, 'success')
       }
       catch (e) { toast(e.message) }
       finally { const l = { ...s.quickLoading }; delete l[x.id]; s.quickLoading = l }
@@ -1114,17 +1138,5 @@
     if (tab && tab !== s.activeTab) s.switchTab(tab)
   })
 
-  async function loadFormModals() {
-    try {
-      const [ef, df] = await Promise.all([
-        fetch('partials/expense-form.html').then(r => r.text()),
-        fetch('partials/donation-form.html').then(r => r.text()),
-      ])
-      s.expFormHTML = ef
-      s.donFormHTML = df
-    } catch { toast('Failed to load form templates') }
-  }
-
   loadAll()
-  loadFormModals()
 </script>
