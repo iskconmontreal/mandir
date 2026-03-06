@@ -288,6 +288,12 @@ test.describe('otp flow', () => {
 test.describe('logout', () => {
   test('sign out clears auth and redirects to login', async ({ page }) => {
     await loginAs(page, 'viewer')
+    await page.addInitScript(() => {
+      if (location.pathname.endsWith('login.html')) {
+        localStorage.removeItem('mandala_token')
+        localStorage.removeItem('mandala_user')
+      }
+    })
     await page.route('https://api.iskconmontreal.ca/**', route => route.fulfill({ json: { items: [], total: 0 } }))
     await page.goto('/app/')
     await page.locator('.user-trigger').click()

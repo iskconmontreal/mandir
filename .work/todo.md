@@ -1,3 +1,69 @@
+
+
+## March ~~5~~ 6
+
+* [x] harden backend
+
+* [ ] complete flows (tested dev)
+  * [ ] request expense - treasurer gets notified
+  * [ ] changing / assigning roles
+
+* [ ] switch year persists
+
+* [ ] adding member when adding expense button
+
+* [ ] main: deploy to prod;
+  * [ ] import all 2025 receipts database
+
+* [ ] Import all interacs members names from files: MK, Samir
+* [ ] Onboard MK, Samir, Ash
+
+
+
+## [ ] Notifications
+  * [ ] Invitations for all oboardees
+
+## [ ] Auth flows
+  * [ ] Google
+  * [ ] Apple
+  * [ ] OTP SMS
+  * [ ] Passcode / keycode (biometrics)
+
+* [x] Donations
+  * [ ] "+" → "Donation" → selects/creates donor → amount, category, date, note → Save or save and add one more
+
+## [ ] Mobile version
+
+
+## Backlog
+
+* [ ] Sprae load first
+* [ ] Autoloading is a bit strange
+* [x] page transitions @​view-transition { navigation: auto }
+
+* [ ] Enhance frontend looks: not SLOP
+
+* [ ] Tax receipt template formatting / PDF generation (necessary, not exciting)
+* [ ] Auth/session management for cross-domain static→API (real friction, must solve cleanly)
+  - JWT tokens, cookie-less, Authorization header
+
+* [ ] Offline/unreachable API — Static pages must gracefully handle API being down. No spinner-of-death.
+
+* [ ] Mac Mini reliability — Hardware failure, power outage, network. Need backup strategy. Not day-one, but must be acknowledged.
+* [ ] Data integrity — Financial data is sacred. Backup, audit trail, immutable records. This is non-negotiable from day one.
+
+* [ ] Disaster being pretended away: Mitigation: automated backups to a second location. Document this requirement now.
+
+* [ ] Change expense grouping
+
+## Ideas
+
+* [ ] Upload a file, system decides itself where to classify it: expense, donation, legal etc.
+* [ ] Who is online feature
+
+
+## Archive
+
 * [x] landing: basic setup with sprae
 * [x] datatable.net example page for finance
 * [x] login page
@@ -43,55 +109,3 @@
   * [x] Rename `setting.html` → `settings.html`
 
 * [x] OTP with trusted device
-
-* [x] Donations
-  * [ ] "+" → "Donation" → selects/creates donor → amount, category, date, note → Save or save and add one more
-
-## March 5
-
-* [x] harden backend
-* [ ] complete flows (tested dev)
-  * [ ] request expense - treasurer gets notified
-  * [ ] changing / assigning roles
-
-* [ ] main: deploy to prod;
-
-* [ ] Import all interacs members names from files: MK, Samir
-* [ ] Onboard MK, Samir, Ash
-
-## [ ] Notifications
-  * [ ] Invitations for all oboardees
-
-## [ ] Auth flows
-  * [ ] Google
-  * [ ] Apple
-  * [ ] OTP SMS
-  * [ ] Passcode / keycode (biometrics)
-
-## [ ] Mobile version
-
-
-## Backlog
-
-* [ ] Sprae load first
-* [x] page transitions @​view-transition { navigation: auto }
-
-* [ ] Enhance frontend looks: not SLOP
-
-* [ ] Tax receipt template formatting / PDF generation (necessary, not exciting)
-* [ ] Auth/session management for cross-domain static→API (real friction, must solve cleanly)
-  - JWT tokens, cookie-less, Authorization header
-
-* [ ] Offline/unreachable API — Static pages must gracefully handle API being down. No spinner-of-death.
-
-* [ ] Mac Mini reliability — Hardware failure, power outage, network. Need backup strategy. Not day-one, but must be acknowledged.
-* [ ] Data integrity — Financial data is sacred. Backup, audit trail, immutable records. This is non-negotiable from day one.
-
-* [ ] Disaster being pretended away: Mitigation: automated backups to a second location. Document this requirement now.
-
-* [ ] Change expense grouping
-
-## Ideas
-
-* [ ] Upload a file, system decides itself where to classify it: expense, donation, legal etc.
-* [ ] Who is online feature

@@ -7,7 +7,7 @@
 
 <!-- Quick actions -->
 <div style="display:flex; gap:var(--s-sm); margin-bottom:var(--s-xl)">
-  <button :if="can('donations:view')" class="btn btn-primary" :onclick="openDonForm()">+ Donation</button>
+  <button :if="can('donations:create')" class="btn btn-primary" :onclick="openDonForm()">+ Donation</button>
   <button class="btn btn-primary" :onclick="openExpForm()">+ Expense</button>
 </div>
 
@@ -309,7 +309,7 @@
   import { greeting } from '../lib/greeting.js'
 
   const DON_CATS = ['general', 'sunday_feast', 'book_distribution', 'deity_worship', 'building_fund', 'annadana', 'festival', 'events', 'other']
-  const EXP_CATS = ['admin', 'bank_charges', 'deity', 'equipment', 'events', 'insurance', 'kitchen', 'maintenance', 'office', 'professional', 'rent', 'salary', 'software', 'travel', 'utilities', 'other']
+  const EXP_CATS = ['admin', 'bhoga', 'books', 'deity', 'equipment', 'events', 'flowers', 'insurance', 'kitchen', 'maintenance', 'renovation', 'rent', 'salary', 'travel', 'utilities', 'vehicle', 'other']
   const DON_METHODS = ['cash', 'cheque', 'e-transfer', 'card', 'in-kind']
 
   const now = new Date()
@@ -323,7 +323,7 @@
   localStorage.setItem('mandala_last_visit', Date.now())
   const vis = prev ? (Date.now() - prev) / 3600000 : Infinity
 
-  const emptyDonForm = () => ({ amount: '', method: 'cash', category: 'general', date_received: today, note: '', member_id: null, receipt: null })
+  const emptyDonForm = () => ({ amount: '', method: 'cash', category: 'general', date_received: today, note: '', member_id: null, attachment: null })
   const emptyExpForm = () => ({ payee: '', amount: '', category: 'utilities', expense_date: today, description: '' })
   let pendingExtracts = 0, _syncedAmt = '', _syncedDesc = ''
 
@@ -494,14 +494,14 @@
       reader.readAsDataURL(file)
     } else s.receiptPreview = ''
     try {
-      const res = await api.extractDoc(file)
+      const res = await api.uploadDoc(file, 'donation')
       const d = res.extracted_data || {}
       if (d.amount) s.donForm.amount = d.amount
       if (d.method) s.donForm.method = d.method
       if (d.category) s.donForm.category = d.category
       if (d.date) s.donForm.date_received = d.date
       if (d.description) s.donForm.note = d.description
-      s.donForm.receipt = res.file_info || null
+      s.donForm.attachment = res.attachment || null
     } catch (e) { toast(e.message) }
     finally { s.extracting = false }
   }
@@ -536,7 +536,7 @@
       await Promise.all(files.map(async (file, i) => {
         const r = s.receipts[startIdx + i]
         if (file.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => { r.preview = rd.result }; rd.readAsDataURL(file) }
-        try { const res = await api.extractDoc(file); r.data = res.extracted_data || {}; r.fileInfo = res.file_info || null }
+        try { const res = await api.uploadDoc(file, 'expense'); r.data = res.extracted_data || {}; r.attachment = res.attachment || null }
         catch (e) { r.err = e.message; toast(e.message) }
         r.extracting = false
         syncExpReceipts()
@@ -550,12 +550,11 @@
     if (s.extracting) { s.addErr = 'Please wait for receipt processing.'; return }
     s.addErr = null; s.adding = true
     try {
-      const f = s.donForm.receipt
-      const files = f ? [{ tmp_name: f.file_name, original_name: f.original_name, mime_type: f.mime_type, file_size: f.file_size }] : undefined
+      const attIds = s.donForm.attachment ? [s.donForm.attachment.id] : undefined
       await api.createDonation({
         amount: toCents(s.donForm.amount), method: s.donForm.method,
         category: s.donForm.category, date_received: s.donForm.date_received,
-        note: s.donForm.note, member_id: s.donForm.member_id || undefined, files,
+        note: s.donForm.note, member_id: s.donForm.member_id || undefined, attachment_ids: attIds,
       })
       toast('Donation saved', 'success')
       s.showDonForm = false
@@ -568,15 +567,12 @@
     if (pendingExtracts > 0) { s.addErr = 'Please wait for receipt processing.'; return }
     s.addErr = null; s.adding = true
     try {
-      const files = s.receipts.filter(r => r.fileInfo).map(r => ({
-        tmp_name: r.fileInfo.file_name, original_name: r.fileInfo.original_name,
-        mime_type: r.fileInfo.mime_type, file_size: r.fileInfo.file_size,
-      }))
+      const attIds = s.receipts.filter(r => r.attachment).map(r => r.attachment.id)
       await api.createExpense({
         amount: toCents(s.expForm.amount), payee: s.expForm.payee,
         description: s.expForm.description, category: s.expForm.category,
         currency: 'CAD', expense_date: s.expForm.expense_date,
-        files: files.length ? files : undefined,
+        attachment_ids: attIds.length ? attIds : undefined,
       })
       toast('Expense saved', 'success')
       s.showExpForm = false

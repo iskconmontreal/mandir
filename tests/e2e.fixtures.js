@@ -18,10 +18,10 @@ const tokenCache = {}
 
 async function fetchToken(role) {
   if (tokenCache[role]) return tokenCache[role]
-  const ctx = await request.newContext()
   const { email, password } = CREDS[role]
   const data = { email, device_id: DEVICE, device_label: 'E2E Test' }
   if (password) data.password = password
+  const ctx = await request.newContext()
   const res = await ctx.post(`${API}/auth/login`, { data })
   const body = await res.json()
   await ctx.dispose()

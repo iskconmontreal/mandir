@@ -378,10 +378,10 @@
   const MY_USER_ID = (() => { try { return JSON.parse(atob(auth.token.split('.')[1])).user_id } catch { return null } })()
 
   const DON_CATS = ['general', 'sunday_feast', 'book_distribution', 'deity_worship', 'building_fund', 'annadana', 'festival', 'events', 'other']
-  const EXP_CATS = ['admin', 'bank_charges', 'deity', 'equipment', 'events', 'insurance', 'kitchen', 'maintenance', 'office', 'professional', 'rent', 'salary', 'software', 'travel', 'utilities', 'other']
+  const EXP_CATS = ['admin', 'bhoga', 'books', 'deity', 'equipment', 'events', 'flowers', 'insurance', 'kitchen', 'maintenance', 'renovation', 'rent', 'salary', 'travel', 'utilities', 'vehicle', 'other']
   const DON_METHODS = ['cash', 'cheque', 'e-transfer', 'card', 'in-kind']
   const EXP_STATUSES = { submitted: 'var(--c-accent)', approved: 'var(--c-ok)', paid: 'var(--c-accent)', rejected: 'var(--c-err)' }
-  const CAT_CLR = { deity: 'purple', deity_worship: 'purple', kitchen: 'amber', sunday_feast: 'amber', annadana: 'amber', events: 'teal', festival: 'teal', travel: 'teal', admin: 'blue', office: 'blue', professional: 'blue', book_distribution: 'blue', salary: 'green', rent: 'brown', building_fund: 'brown', maintenance: 'brown', equipment: 'brown', software: 'indigo', insurance: 'indigo', utilities: 'indigo' }
+  const CAT_CLR = { deity: 'purple', deity_worship: 'purple', flowers: 'purple', bhoga: 'amber', kitchen: 'amber', sunday_feast: 'amber', annadana: 'amber', events: 'teal', festival: 'teal', travel: 'teal', vehicle: 'teal', admin: 'blue', book_distribution: 'blue', books: 'blue', salary: 'green', rent: 'brown', building_fund: 'brown', maintenance: 'brown', renovation: 'brown', equipment: 'brown', insurance: 'indigo', utilities: 'indigo' }
   const catCls = c => 'cat-' + (CAT_CLR[c] || 'gray')
   const CAT_HEX = { purple: '#6b5ce7', amber: '#b8860b', teal: '#1a7a72', blue: '#3a6098', green: '#2d7a52', brown: '#7a5c30', indigo: '#504696', gray: '#aaa' }
   const catHex = c => CAT_HEX[CAT_CLR[c]] || CAT_HEX.gray
@@ -453,14 +453,14 @@
     return 'Required: ' + names.join(', ')
   }
 
-  const emptyDonForm = () => ({ amount: '', method: 'cash', category: 'general', date_received: today, note: '', member_id: null, receipt: null })
-  const emptyExpForm = () => ({ payee: auth.can('expenses:approve') ? '' : (auth.user?.name || auth.user?.meta?.name || ''), amount: '', category: 'utilities', expense_date: today, description: '', member_id: null })
+  const emptyDonForm = () => ({ amount: '', method: '', category: '', date_received: '', note: '', member_id: null, attachment: null })
+  const emptyExpForm = () => ({ payee: '', amount: '', category: '', expense_date: '', description: '', member_id: null })
 
   function resetForm() {
     document.querySelectorAll('.field-err').forEach(el => el.classList.remove('field-err'))
     s.editId = null; s.addErr = null; s.detailExp = null
     s.receiptPreview = ''; s.receiptName = ''; s.receipts = []; s.extracting = false
-    s.memberQuery = ''; s.memberHits = []; s.vendorHits = []
+    s.memberQuery = ''; s.memberHits = []; s.vendorHits = []; s.expFull = false; s.donFull = false
     s.donHistory = []; s.actionNote = ''; s.actionRef = ''; s.actionAmt = ''
     s.delConfirm = false; s.deleting = false
     s.donForm = emptyDonForm(); s.expForm = emptyExpForm()
@@ -488,8 +488,8 @@
     const first = s.receipts.find(r => r.data)?.data
     if (!first) return
     if (!s.expForm.payee && first.vendor) s.expForm.payee = first.vendor
-    if (s.expForm.category === 'utilities' && first.category) s.expForm.category = first.category
-    if (s.expForm.expense_date === today && first.date) s.expForm.expense_date = first.date
+    if (!s.expForm.category && first.category) s.expForm.category = first.category
+    if (!s.expForm.expense_date && first.date) s.expForm.expense_date = first.date
   }
 
   const AMT_KEYS = new Set(['amount', 'tax_amount', 'eligible_amount'])
@@ -580,6 +580,7 @@
     donorsMonth: 0, donorsPrevMonth: 0,
     donorRows: [], donorTotal: 0,
     donForm: emptyDonForm(), expForm: emptyExpForm(),
+    expFull: false, donFull: false,
     donCats: DON_CATS, expCats: EXP_CATS, donMethods: DON_METHODS,
     expStatuses: Object.keys(EXP_STATUSES),
     myUid: MY_USER_ID,
@@ -832,14 +833,14 @@
         reader.readAsDataURL(file)
       } else s.receiptPreview = ''
       try {
-        const res = await api.extractDoc(file)
+        const res = await api.uploadDoc(file, 'donation')
         const d = res.extracted_data || {}
         if (d.amount) s.donForm.amount = d.amount
         if (d.method) s.donForm.method = d.method
         if (d.category) s.donForm.category = d.category
         if (d.date) s.donForm.date_received = d.date
         if (d.description) s.donForm.note = d.description
-        s.donForm.receipt = res.file_info || null
+        s.donForm.attachment = res.attachment || null
       } catch (e) { toast(e.message) }
       finally { s.extracting = false }
     },
@@ -856,7 +857,7 @@
         await Promise.all(files.map(async (file, i) => {
           const r = s.receipts[startIdx + i]
           if (file.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => { r.preview = rd.result }; rd.readAsDataURL(file) }
-          try { const res = await api.extractDoc(file); r.data = res.extracted_data || {}; r.fileInfo = res.file_info || null }
+          try { const res = await api.uploadDoc(file, 'expense'); r.data = res.extracted_data || {}; r.attachment = res.attachment || null }
           catch (e) { r.err = e.message; toast(e.message) }
           r.extracting = false
           syncExpReceipts()
@@ -871,19 +872,27 @@
 
     editDonation(d) {
       s.editId = d.id; s.addErr = null; s.detailExp = null; s.donHistory = []
-      s.donForm = { amount: rawAmt(d.amount), method: d.method || 'cash', category: d.category || 'general', date_received: (d.date_received || '').slice(0, 10), note: d.note || '', member_id: d.member_id || null, receipt: null }
+      s.donForm = { amount: rawAmt(d.amount), method: d.method || 'cash', category: d.category || 'general', date_received: (d.date_received || '').slice(0, 10), note: d.note || '', member_id: d.member_id || null, attachment: null }
       s.memberQuery = d.member_id ? (s.memberNames[d.member_id] || '') : ''
-      s.memberHits = []; s.showAdd = true
+      s.memberHits = []; s.donFull = true; s.showAdd = true
       api.getAuditLogs({ entity_type: 'donation', entity_id: d.id, limit: 20, sortBy: 'created_at', sortDesc: 'true' })
         .then(r => { s.donHistory = r.items || [] }).catch(() => {})
     },
 
     editExpense(x) {
       s.editId = x.id; s.addErr = null; s.actionNote = ''; s.actionRef = ''; s.actionAmt = ''; s.detailExp = null
-      s.expForm = { member_id: x.member_id || null, payee: x.payee || '', amount: rawAmt(x.amount), category: x.category || 'utilities', expense_date: (x.expense_date || '').slice(0, 10), description: x.description || '' }
+      const cat = x.category || 'other'
+      s.expForm = { member_id: x.member_id || null, payee: x.payee || '', amount: rawAmt(x.amount), category: cat, expense_date: (x.expense_date || '').slice(0, 10), description: x.description || '' }
       s.memberQuery = x.member_id ? (s.memberNames[x.member_id] || x.payee || '') : ''
-      s.memberHits = []
+      s.memberHits = []; s.expFull = true
       s.showAdd = true
+      if (cat && !EXP_CATS.includes(cat)) setTimeout(() => {
+        const sel = document.getElementById('exp-cat')
+        if (!sel || [...sel.options].some(o => o.value === cat)) return
+        const opt = document.createElement('option')
+        opt.value = cat; opt.textContent = fmtCat(cat)
+        sel.prepend(opt); sel.value = cat
+      })
     },
 
     async approveExp()   { await expAction(async () => { const r = await api.approveExpense(s.editId, s.actionNote); return r.status === 'approved' ? 'Expense approved' : 'Approval recorded' }) },
@@ -921,9 +930,14 @@
       if (s.extracting) { s.addErr = 'Please wait for receipt processing to complete.'; return }
       s.addErr = null; s.adding = true
       try {
-        const f = s.donForm.receipt
-        const donFiles = f && !s.editId ? [{ tmp_name: f.file_name, original_name: f.original_name, mime_type: f.mime_type, file_size: f.file_size }] : undefined
-        const data = { amount: toCents(s.donForm.amount), method: s.donForm.method, category: s.donForm.category, date_received: s.donForm.date_received, note: s.donForm.note, member_id: s.donForm.member_id || undefined, files: donFiles }
+        const attIds = s.donForm.attachment && !s.editId ? [s.donForm.attachment.id] : undefined
+        const f = s.donForm
+        const data = { amount: toCents(f.amount), attachment_ids: attIds }
+        if (f.method) data.method = f.method
+        if (f.category) data.category = f.category
+        if (f.date_received) data.date_received = f.date_received
+        if (f.note) data.note = f.note
+        if (f.member_id) data.member_id = f.member_id
         if (s.editId) await api.updateDonation(s.editId, data); else await api.createDonation(data)
         toast(s.editId ? 'Donation updated' : 'Donation saved', 'success')
         document.querySelectorAll('.field-err').forEach(el => el.classList.remove('field-err'))
@@ -936,8 +950,14 @@
       if (pendingExtracts > 0) { s.addErr = 'Please wait for receipt processing to complete.'; return }
       s.addErr = null; s.adding = true
       try {
-        const files = s.receipts.filter(r => r.fileInfo).map(r => ({ tmp_name: r.fileInfo.file_name, original_name: r.fileInfo.original_name, mime_type: r.fileInfo.mime_type, file_size: r.fileInfo.file_size }))
-        const data = { amount: toCents(s.expForm.amount), payee: s.expForm.payee, description: s.expForm.description, category: s.expForm.category, currency: 'CAD', expense_date: s.expForm.expense_date, member_id: s.expForm.member_id || undefined, files: !s.editId && files.length ? files : undefined }
+        const attIds = s.receipts.filter(r => r.attachment).map(r => r.attachment.id)
+        const f = s.expForm
+        const data = { amount: toCents(f.amount), attachment_ids: !s.editId && attIds.length ? attIds : undefined }
+        if (f.payee) data.payee = f.payee
+        if (f.description) data.description = f.description
+        if (f.category) data.category = f.category
+        if (f.expense_date) data.expense_date = f.expense_date
+        if (f.member_id) data.member_id = f.member_id
         if (s.editId) await api.updateExpense(s.editId, data); else await api.createExpense(data)
         toast(s.editId ? 'Expense updated' : 'Expense saved', 'success')
         document.querySelectorAll('.field-err').forEach(el => el.classList.remove('field-err'))

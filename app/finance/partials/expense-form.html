@@ -143,37 +143,38 @@
         </div>
 
         <form :onsubmit.prevent="saveExpense" style="display:flex;flex-direction:column;gap:var(--s-md)">
-          <div class="form-row">
-            <div :if="can('expenses:approve')" class="field autocomplete">
-              <label for="exp-vendor">Payee</label>
-              <input id="exp-vendor" type="text" :value="expForm.payee"
-                :oninput="e => filterVendors(e.target.value)"
-                :onblur="e => { vendorHits = [] }"
-                placeholder="Vendor, store, person…" required>
-              <div :if="vendorHits.length" class="autocomplete-list">
-                <div class="autocomplete-item" :each="v in vendorHits" :onmousedown.prevent="() => { expForm.payee = v; vendorHits = [] }" :text="v"></div>
-              </div>
-            </div>
-            <div class="field">
-              <label for="exp-cat">Category</label>
-              <select id="exp-cat" :value="expForm.category" :onchange="e => expForm.category = e.target.value">
-                <option :each="c in expCats" :value="c" :text="fmt(c)"></option>
-              </select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="field">
-              <label for="exp-amount">Amount ($)</label>
-              <input id="exp-amount" type="number" :value="expForm.amount" :oninput="e => expForm.amount = e.target.value" step="0.01" min="0.01" placeholder="0.01" required>
-            </div>
-            <div class="field">
-              <label for="exp-date">Date</label>
-              <input id="exp-date" type="date" :value="expForm.expense_date" :oninput="e => expForm.expense_date = e.target.value" required>
-            </div>
+          <div class="field">
+            <label for="exp-amount">Amount ($)</label>
+            <input id="exp-amount" type="number" :value="expForm.amount" :oninput="e => expForm.amount = e.target.value" step="0.01" min="0.01" placeholder="0.01" required>
           </div>
           <div class="field">
             <label for="exp-desc">Description</label>
-            <textarea id="exp-desc" rows="1" :value="expForm.description" :oninput="e => expForm.description = e.target.value" placeholder="Optional…"></textarea>
+            <textarea id="exp-desc" rows="1" :value="expForm.description" :oninput="e => expForm.description = e.target.value" placeholder="What's this for? (optional)"></textarea>
+          </div>
+          <a :if="!expFull" href="#" class="dim" style="font-size:var(--f-sm)" :onclick.prevent="expFull = true">More fields</a>
+          <div :if="expFull" style="display:flex;flex-direction:column;gap:var(--s-md)">
+            <div class="form-row">
+              <div class="field autocomplete">
+                <label for="exp-vendor">Payee</label>
+                <input id="exp-vendor" type="text" :value="expForm.payee"
+                  :oninput="e => filterVendors(e.target.value)"
+                  :onblur="e => { vendorHits = [] }"
+                  placeholder="Defaults to your name">
+                <div :if="vendorHits.length" class="autocomplete-list">
+                  <div class="autocomplete-item" :each="v in vendorHits" :onmousedown.prevent="() => { expForm.payee = v; vendorHits = [] }" :text="v"></div>
+                </div>
+              </div>
+              <div class="field">
+                <label for="exp-cat">Category</label>
+                <select id="exp-cat" :value="expForm.category" :onchange="e => expForm.category = e.target.value">
+                  <option :each="c in expCats" :value="c" :text="fmt(c)"></option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="exp-date">Date</label>
+              <input id="exp-date" type="date" :value="expForm.expense_date" :oninput="e => expForm.expense_date = e.target.value">
+            </div>
           </div>
 
           <div class="login-error" :if="addErr" :text="addErr"></div>

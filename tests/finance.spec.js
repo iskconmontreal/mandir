@@ -376,7 +376,7 @@ test.describe('finance section', () => {
     expect(download.suggestedFilename()).toBe('donations.csv')
   })
 
-  test('receipt scan: auto-fills form and files array sent to backend on save', async ({ page }) => {
+  test('receipt scan: auto-fills form and attachment_ids sent to backend on save', async ({ page }) => {
     const expenses = []
     let savedBody = null
 
@@ -385,10 +385,10 @@ test.describe('finance section', () => {
       const method = route.request().method()
       const path = url.pathname
 
-      if (path === '/api/documents/extract' && method === 'POST') {
+      if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ json: {
           extracted_data: { amount: '142.50', vendor: 'Hydro Quebec', category: 'utilities', date: '2025-01-15' },
-          file_info: { file_name: 'abc123.jpg', original_name: 'receipt.jpg', mime_type: 'image/jpeg', file_size: 1024 },
+          attachment: { id: 42, file_path: 'uploads/finance/2025/01/expense-2025-01-15-1.webp', original_name: 'receipt.jpg', mime_type: 'image/webp', file_size: 1024, intent: 'expense' },
         } })
       }
       if (path === '/api/expenses' && method === 'POST') {
@@ -436,10 +436,8 @@ test.describe('finance section', () => {
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
     expect(savedBody).not.toBeNull()
-    expect(savedBody.files).toHaveLength(1)
-    expect(savedBody.files[0].tmp_name).toBe('abc123.jpg')
-    expect(savedBody.files[0].original_name).toBe('receipt.jpg')
-    expect(savedBody.files[0].mime_type).toBe('image/jpeg')
+    expect(savedBody.attachment_ids).toHaveLength(1)
+    expect(savedBody.attachment_ids[0]).toBe(42)
   })
 
   test('save expense shows success toast', async ({ page }) => {
@@ -468,9 +466,9 @@ test.describe('finance section', () => {
     await page.route(`${API}/**`, async route => {
       const path = new URL(route.request().url()).pathname
       const method = route.request().method()
-      if (path === '/api/documents/extract' && method === 'POST') {
+      if (path === '/api/documents/upload' && method === 'POST') {
         await new Promise(r => { extractResolve = r })
-        return route.fulfill({ json: { extracted_data: { amount: '10.00' }, file_info: { file_name: 'f.jpg', original_name: 'r.jpg', mime_type: 'image/jpeg', file_size: 100 } } })
+        return route.fulfill({ json: { extracted_data: { amount: '10.00' }, attachment: { id: 99, file_path: 'uploads/finance/2026/03/expense-2026-03-05-1.jpg', original_name: 'r.jpg', mime_type: 'image/jpeg', file_size: 100, intent: 'expense' } } })
       }
       route.fulfill({ json: { items: [], total: 0 } })
     })
@@ -489,7 +487,7 @@ test.describe('finance section', () => {
     extractResolve()
   })
 
-  test('multiple receipts: all file infos sent on save', async ({ page }) => {
+  test('multiple receipts: all attachment_ids sent on save', async ({ page }) => {
     const expenses = []
     let savedBody = null
     let callCount = 0
@@ -497,11 +495,11 @@ test.describe('finance section', () => {
     await page.route(`${API}/**`, async route => {
       const path = new URL(route.request().url()).pathname
       const method = route.request().method()
-      if (path === '/api/documents/extract' && method === 'POST') {
+      if (path === '/api/documents/upload' && method === 'POST') {
         callCount++
         return route.fulfill({ json: {
           extracted_data: { amount: '50.00' },
-          file_info: { file_name: `file${callCount}.jpg`, original_name: `receipt${callCount}.jpg`, mime_type: 'image/jpeg', file_size: 512 },
+          attachment: { id: 100 + callCount, file_path: `uploads/finance/2026/03/expense-2026-03-05-${callCount}.webp`, original_name: `receipt${callCount}.jpg`, mime_type: 'image/webp', file_size: 512, intent: 'expense' },
         } })
       }
       if (path === '/api/expenses' && method === 'POST') {
@@ -527,9 +525,9 @@ test.describe('finance section', () => {
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
-    expect(savedBody.files).toHaveLength(2)
-    expect(savedBody.files[0].tmp_name).toBe('file1.jpg')
-    expect(savedBody.files[1].tmp_name).toBe('file2.jpg')
+    expect(savedBody.attachment_ids).toHaveLength(2)
+    expect(savedBody.attachment_ids[0]).toBe(101)
+    expect(savedBody.attachment_ids[1]).toBe(102)
   })
 
   test('receipt extraction failure: save proceeds without that file', async ({ page }) => {
@@ -539,7 +537,7 @@ test.describe('finance section', () => {
     await page.route(`${API}/**`, async route => {
       const path = new URL(route.request().url()).pathname
       const method = route.request().method()
-      if (path === '/api/documents/extract' && method === 'POST') {
+      if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ status: 500, json: { message: 'OCR failed' } })
       }
       if (path === '/api/expenses' && method === 'POST') {
@@ -560,21 +558,21 @@ test.describe('finance section', () => {
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
-    expect(savedBody.files).toBeUndefined()
+    expect(savedBody.attachment_ids).toBeUndefined()
     errors = []
   })
 
-  test('remove receipt after autofill: form keeps values but no files sent', async ({ page }) => {
+  test('remove receipt after autofill: form keeps values but no attachment_ids sent', async ({ page }) => {
     const expenses = []
     let savedBody = null
 
     await page.route(`${API}/**`, async route => {
       const path = new URL(route.request().url()).pathname
       const method = route.request().method()
-      if (path === '/api/documents/extract' && method === 'POST') {
+      if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ json: {
           extracted_data: { amount: '75.00', vendor: 'Removed Store' },
-          file_info: { file_name: 'kept.jpg', original_name: 'r.jpg', mime_type: 'image/jpeg', file_size: 256 },
+          attachment: { id: 77, file_path: 'uploads/finance/2026/03/expense-2026-03-05-1.webp', original_name: 'r.jpg', mime_type: 'image/webp', file_size: 256, intent: 'expense' },
         } })
       }
       if (path === '/api/expenses' && method === 'POST') {
@@ -599,20 +597,20 @@ test.describe('finance section', () => {
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
     expect(savedBody.payee).toBe('Removed Store')
-    expect(savedBody.files).toBeUndefined()
+    expect(savedBody.attachment_ids).toBeUndefined()
   })
 
-  test('donation receipt scan: file info sent to backend on save', async ({ page }) => {
+  test('donation receipt scan: attachment_ids sent to backend on save', async ({ page }) => {
     const donations = []
     let savedBody = null
 
     await page.route(`${API}/**`, async route => {
       const path = new URL(route.request().url()).pathname
       const method = route.request().method()
-      if (path === '/api/documents/extract' && method === 'POST') {
+      if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ json: {
           extracted_data: { amount: '100.00', method: 'cheque' },
-          file_info: { file_name: 'don123.jpg', original_name: 'don-receipt.jpg', mime_type: 'image/jpeg', file_size: 2048 },
+          attachment: { id: 55, file_path: 'uploads/finance/2026/03/donation-2026-03-05-1.webp', original_name: 'don-receipt.jpg', mime_type: 'image/webp', file_size: 2048, intent: 'donation' },
         } })
       }
       if (path === '/api/donations' && method === 'POST') {
@@ -635,9 +633,8 @@ test.describe('finance section', () => {
     await page.click('button:has-text("Save Donation")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
-    expect(savedBody.files).toHaveLength(1)
-    expect(savedBody.files[0].tmp_name).toBe('don123.jpg')
-    expect(savedBody.files[0].original_name).toBe('don-receipt.jpg')
+    expect(savedBody.attachment_ids).toHaveLength(1)
+    expect(savedBody.attachment_ids[0]).toBe(55)
   })
 
   test('opening + Expense always starts fresh: no leftover receipts or form data', async ({ page }) => {
@@ -670,10 +667,10 @@ test.describe('finance section', () => {
     await page.route(`${API}/**`, async route => {
       const path = new URL(route.request().url()).pathname
       const method = route.request().method()
-      if (path === '/api/documents/extract' && method === 'POST') {
+      if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ json: {
           extracted_data: { amount: '10.00' },
-          file_info: { file_name: 'f.jpg', original_name: 'r.jpg', mime_type: 'image/jpeg', file_size: 100 },
+          attachment: { id: 99, file_path: 'uploads/finance/2026/03/expense-2026-03-05-1.webp', original_name: 'r.jpg', mime_type: 'image/webp', file_size: 100, intent: 'expense' },
         } })
       }
       route.fulfill({ json: { items: [], total: 0 } })
@@ -697,10 +694,10 @@ test.describe('finance section', () => {
     await page.route(`${API}/**`, async route => {
       const path = new URL(route.request().url()).pathname
       const method = route.request().method()
-      if (path === '/api/documents/extract' && method === 'POST') {
+      if (path === '/api/documents/upload' && method === 'POST') {
         return route.fulfill({ json: {
           extracted_data: { amount: '55.00', vendor: 'Drop Store' },
-          file_info: { file_name: 'drop.jpg', original_name: 'drop.jpg', mime_type: 'image/jpeg', file_size: 512 },
+          attachment: { id: 88, file_path: 'uploads/finance/2026/03/expense-2026-03-05-1.webp', original_name: 'drop.jpg', mime_type: 'image/webp', file_size: 512, intent: 'expense' },
         } })
       }
       route.fulfill({ json: { items: [], total: 0 } })
@@ -730,11 +727,11 @@ test.describe('finance section', () => {
     await page.route(`${API}/**`, async route => {
       const path = new URL(route.request().url()).pathname
       const method = route.request().method()
-      if (path === '/api/documents/extract' && method === 'POST') {
+      if (path === '/api/documents/upload' && method === 'POST') {
         callCount++
         return route.fulfill({ json: {
           extracted_data: { amount: '25.00' },
-          file_info: { file_name: `f${callCount}.jpg`, original_name: `r${callCount}.jpg`, mime_type: 'image/jpeg', file_size: 256 },
+          attachment: { id: 200 + callCount, file_path: `uploads/finance/2026/03/expense-2026-03-05-${callCount}.webp`, original_name: `r${callCount}.jpg`, mime_type: 'image/webp', file_size: 256, intent: 'expense' },
         } })
       }
       route.fulfill({ json: { items: [], total: 0 } })
@@ -869,11 +866,11 @@ test.describe('finance section', () => {
     await page.route(`${API}/**`, async route => {
       const path = new URL(route.request().url()).pathname
       const method = route.request().method()
-      if (path === '/api/documents/extract' && method === 'POST') {
+      if (path === '/api/documents/upload' && method === 'POST') {
         callCount++
         return route.fulfill({ json: {
           extracted_data: { amount: callCount === 1 ? '10.00' : '20.00', vendor: callCount === 1 ? 'First Store' : 'Second Store' },
-          file_info: { file_name: `f${callCount}.jpg`, original_name: `r${callCount}.jpg`, mime_type: 'image/jpeg', file_size: 256 },
+          attachment: { id: 200 + callCount, file_path: `uploads/finance/2026/03/expense-2026-03-05-${callCount}.webp`, original_name: `r${callCount}.jpg`, mime_type: 'image/webp', file_size: 256, intent: 'expense' },
         } })
       }
       route.fulfill({ json: { items: [], total: 0 } })
@@ -958,6 +955,48 @@ test.describe('finance section', () => {
     await expect(donSection.locator('tr.row-link').first()).toContainText('Sunday Feast')
   })
 
+
+  test('edit expense with unknown category shows category and allows selection', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, payee: 'Old Vendor', category: 'prasadam', expense_date: '2024-03-15', status: 'submitted' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    await page.locator('tr.row-link').first().click()
+    await expect(page.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
+
+    const catSelect = page.locator('#exp-cat')
+    const selected = await catSelect.inputValue()
+    expect(selected).toBeTruthy()
+    expect(selected).not.toBe('')
+
+    await expect(async () => {
+      const opts = await catSelect.locator('option').allTextContents()
+      expect(opts.some(o => o.toLowerCase().includes('prasadam'))).toBe(true)
+    }).toPass({ timeout: 5000 })
+
+    await catSelect.selectOption('kitchen')
+    expect(await catSelect.inputValue()).toBe('kitchen')
+  })
+
+  test('edit expense with empty category falls back to valid default', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 3000, payee: 'Empty Cat Vendor', category: '', expense_date: '2024-03-11', status: 'submitted' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    await page.locator('tr.row-link').first().click()
+    await expect(page.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
+
+    const catSelect = page.locator('#exp-cat')
+    const selected = await catSelect.inputValue()
+    expect(selected).toBeTruthy()
+    expect(selected).not.toBe('')
+  })
 
   test('list view: hover card and click Edit opens modal', async ({ page }) => {
     const expenses = [{ id: 1, amount: 5000, payee: 'Costco', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]

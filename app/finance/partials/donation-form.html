@@ -34,39 +34,44 @@
         :onchange="e => { scanFile(e.target.files[0]); e.target.value = '' }">
 
       <form :onsubmit.prevent="saveDonation" style="display:flex;flex-direction:column;gap:var(--s-md)">
-        <div class="field autocomplete">
-          <label>Donor</label>
-          <div style="position:relative">
-            <input type="text" :value="memberQuery"
-              :onfocus="e => filterDonors(memberQuery)"
-              :oninput="e => { donForm.member_id = null; filterDonors(e.target.value) }"
-              :onblur="e => { memberHits = [] }"
-              :style="donForm.member_id ? 'padding-right:2rem' : ''"
-              placeholder="Search member… (optional)">
-            <button :if="donForm.member_id" type="button" class="btn-link"
-              style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%)"
-              :onclick="clearDonor()">&times;</button>
-          </div>
-          <div :if="memberHits.length" class="autocomplete-list">
-            <div class="autocomplete-item" :each="m in memberHits" :onmousedown.prevent="selectDonor(m)" :text="m.name"></div>
-          </div>
+        <div class="field">
+          <label for="don-amount">Amount ($)</label>
+          <input id="don-amount" type="number" :value="donForm.amount" :oninput="e => donForm.amount = e.target.value" step="0.01" min="0.01" required>
         </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="don-amount">Amount ($)</label>
-            <input id="don-amount" type="number" :value="donForm.amount" :oninput="e => donForm.amount = e.target.value" step="0.01" min="0.01" required>
-          </div>
-          <div class="field">
-            <label for="don-date">Date</label>
-            <input id="don-date" type="date" :value="donForm.date_received" :oninput="e => donForm.date_received = e.target.value" required>
-          </div>
+        <div class="field">
+          <label for="don-note">Note</label>
+          <textarea id="don-note" rows="1" :value="donForm.note" :oninput="e => donForm.note = e.target.value" placeholder="Optional…"></textarea>
         </div>
-        <div class="form-row">
-          <div class="field">
-            <label for="don-method">Method</label>
-            <select id="don-method" :value="donForm.method" :onchange="e => donForm.method = e.target.value">
-              <option :each="m in donMethods" :value="m" :text="fmt(m)"></option>
-            </select>
+        <a :if="!donFull" href="#" class="dim" style="font-size:var(--f-sm)" :onclick.prevent="donFull = true">More fields</a>
+        <div :if="donFull" style="display:flex;flex-direction:column;gap:var(--s-md)">
+          <div class="field autocomplete">
+            <label>Donor</label>
+            <div style="position:relative">
+              <input type="text" :value="memberQuery"
+                :onfocus="e => filterDonors(memberQuery)"
+                :oninput="e => { donForm.member_id = null; filterDonors(e.target.value) }"
+                :onblur="e => { memberHits = [] }"
+                :style="donForm.member_id ? 'padding-right:2rem' : ''"
+                placeholder="Search member… (optional)">
+              <button :if="donForm.member_id" type="button" class="btn-link"
+                style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%)"
+                :onclick="clearDonor()">&times;</button>
+            </div>
+            <div :if="memberHits.length" class="autocomplete-list">
+              <div class="autocomplete-item" :each="m in memberHits" :onmousedown.prevent="selectDonor(m)" :text="m.name"></div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="don-date">Date</label>
+              <input id="don-date" type="date" :value="donForm.date_received" :oninput="e => donForm.date_received = e.target.value">
+            </div>
+            <div class="field">
+              <label for="don-method">Method</label>
+              <select id="don-method" :value="donForm.method" :onchange="e => donForm.method = e.target.value">
+                <option :each="m in donMethods" :value="m" :text="fmt(m)"></option>
+              </select>
+            </div>
           </div>
           <div class="field">
             <label for="don-cat">Category</label>
@@ -74,10 +79,6 @@
               <option :each="c in donCats" :value="c" :text="fmt(c)"></option>
             </select>
           </div>
-        </div>
-        <div class="field">
-          <label for="don-note">Note</label>
-          <textarea id="don-note" rows="1" :value="donForm.note" :oninput="e => donForm.note = e.target.value" placeholder="Optional…"></textarea>
         </div>
 
         <!-- History -->

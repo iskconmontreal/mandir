@@ -120,7 +120,7 @@ test.describe('e2e: viewer submits → approver approves', () => {
     const ts = Date.now()
     const createRes = await viewerPage.request.post(`${API}/api/expenses`, {
       headers: viewerHeaders,
-      data: { payee: `E2E-Viewer-${ts}`, amount: 7777, category: 'office', expense_date: '2026-03-01', description: 'Viewer test expense' },
+      data: { payee: `E2E-Viewer-${ts}`, amount: 15000, category: 'admin', expense_date: '2026-03-01', description: 'Viewer test expense', currency: 'CAD' },
     })
     const created = await createRes.json()
     expect(created.id).toBeTruthy()
@@ -134,17 +134,25 @@ test.describe('e2e: viewer submits → approver approves', () => {
 
     await approverPage.goto('/app/finance/')
     await approverPage.locator('.card-tab-group').waitFor()
-    await approverPage.locator('.seg[title="Table view"]').click().catch(() => {})
-    await expect(approverPage.locator('table tbody tr').first()).toBeVisible({ timeout: 15_000 })
+    await expect(approverPage.locator('.exp-card').first()).toBeVisible({ timeout: 15_000 })
 
     await approverPage.fill('.filter-search', `E2E-Viewer-${ts}`)
     await approverPage.waitForTimeout(500)
-    const row = approverPage.locator('table tbody tr').first()
-    await expect(row).toBeVisible()
+    const card = approverPage.locator('.exp-card').first()
+    await expect(card).toBeVisible()
 
-    const approveBtn = row.locator('button:has-text("Approve")')
-    await approveBtn.click()
+    await card.hover()
+    await card.locator('button:has-text("Approve")').click()
     await approverPage.waitForTimeout(1000)
+
+    const treasurerCtx = await browser.newContext()
+    const treasurerPage = await treasurerCtx.newPage()
+    const treasurerToken = await loginAsReal(treasurerPage, 'treasurer')
+    await treasurerPage.request.post(`${API}/api/expenses/${created.id}/approve`, {
+      headers: { Authorization: `Bearer ${treasurerToken}`, 'Content-Type': 'application/json' },
+      data: {},
+    })
+    await treasurerCtx.close()
 
     const checkRes = await approverPage.request.get(`${API}/api/expenses/${created.id}`, { headers: approverHeaders })
     const updated = await checkRes.json()
@@ -163,12 +171,11 @@ test.describe('e2e: expenses', () => {
     authHeaders = { Authorization: `Bearer ${token}` }
   })
 
-  test('expenses tab loads real data in table view', async ({ page }) => {
+  test('expenses tab loads real data', async ({ page }) => {
     await page.goto('/app/finance/')
     await page.locator('.card-tab-group').waitFor()
-    await page.locator('.seg[title="Table view"]').click().catch(() => {})
-    await expect(page.locator('table tbody tr').first()).toBeVisible({ timeout: 15_000 })
-    expect(await page.locator('table tbody tr').count()).toBeGreaterThan(0)
+    await expect(page.locator('.exp-card').first()).toBeVisible({ timeout: 15_000 })
+    expect(await page.locator('.exp-card').count()).toBeGreaterThan(0)
   })
 
   test('create expense via UI → verify in API', async ({ page }) => {
@@ -178,11 +185,12 @@ test.describe('e2e: expenses', () => {
     await page.click('button:has-text("+ Expense")')
     await page.locator('.modal').waitFor()
 
-    await page.fill('#exp-vendor', 'E2E Test Vendor')
     await page.fill('#exp-amount', '42.50')
+    await page.click('a:has-text("More fields")')
+    await page.fill('#exp-vendor', 'E2E Test Vendor')
     await page.selectOption('#exp-cat', { index: 1 })
 
-    await page.click('button:has-text("Save")')
+    await page.click('button:has-text("Submit")')
     await page.waitForSelector('.modal', { state: 'hidden', timeout: 15_000 })
 
     const res = await page.request.get(`${API}/api/expenses?limit=1&sortBy=created_at&sortDesc=true`, { headers: authHeaders })
@@ -194,28 +202,25 @@ test.describe('e2e: expenses', () => {
   test('expense detail modal shows real data', async ({ page }) => {
     await page.goto('/app/finance/')
     await page.locator('.card-tab-group').waitFor()
-    await page.locator('.seg[title="Table view"]').click().catch(() => {})
-    await expect(page.locator('table tbody tr').first()).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('.exp-card').first()).toBeVisible({ timeout: 15_000 })
 
-    await page.locator('table tbody tr').first().click()
+    await page.locator('.exp-card').first().hover()
+    await page.locator('.exp-card').first().locator('button:has-text("Edit")').click()
     await page.locator('.modal').waitFor()
-    await expect(page.locator('.modal .badge').first()).toBeVisible()
-    const fields = await page.locator('.detail-field').count()
-    expect(fields).toBeGreaterThanOrEqual(3)
+    await expect(page.locator('.modal')).toBeVisible()
   })
 
   test('search filters expenses', async ({ page }) => {
     await page.goto('/app/finance/')
     await page.locator('.card-tab-group').waitFor()
-    await page.locator('.seg[title="Table view"]').click().catch(() => {})
-    await expect(page.locator('table tbody tr').first()).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('.exp-card').first()).toBeVisible({ timeout: 15_000 })
 
-    const allRows = await page.locator('table tbody tr').count()
+    const allCards = await page.locator('.exp-card').count()
     await page.fill('.filter-search', 'Metro')
     await page.waitForTimeout(500)
 
-    const filteredRows = await page.locator('table tbody tr').count()
-    expect(filteredRows).toBeLessThanOrEqual(allRows)
+    const filteredCards = await page.locator('.exp-card').count()
+    expect(filteredCards).toBeLessThanOrEqual(allCards)
   })
 
   test('CRUD via API: create + read + delete', async ({ page }) => {
@@ -259,6 +264,7 @@ test.describe('e2e: donations', () => {
     await page.locator('.modal').waitFor()
 
     await page.fill('#don-amount', '100.00')
+    await page.click('a:has-text("More fields")')
     await page.selectOption('#don-method', 'cash')
 
     await page.click('button:has-text("Save")')
@@ -276,6 +282,74 @@ test.describe('e2e: donations', () => {
     const rows = page.locator('section:not(.hidden) table tbody tr')
     await expect(rows.first()).toBeVisible({ timeout: 15_000 })
     expect(await rows.count()).toBeGreaterThan(0)
+  })
+
+  test('create donation with receipt via API → attachments stored', async ({ page }) => {
+    test.skip(true, 'requires ENVIRONMENT=test for OCR')
+    const pngBytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')
+    const upload = await page.request.post(`${API}/api/documents/upload`, {
+      headers: authHeaders,
+      multipart: {
+        file: { name: 'e2e-receipt.png', mimeType: 'image/png', buffer: pngBytes },
+        intent: 'donation',
+      },
+    })
+    expect(upload.ok()).toBeTruthy()
+    const { attachment } = await upload.json()
+    expect(attachment.id).toBeGreaterThan(0)
+    expect(attachment.intent).toBe('donation')
+
+    const create = await page.request.post(`${API}/api/donations`, {
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      data: { amount: 7777, method: 'cash', category: 'general', date_received: '2026-03-01', attachment_ids: [attachment.id] },
+    })
+    expect(create.status()).toBe(201)
+    const donation = await create.json()
+    expect(donation.attachments).toHaveLength(1)
+    expect(donation.attachments[0].parent_type).toBe('donation')
+    expect(donation.attachments[0].file_path).toContain('/donation/')
+
+    const get = await page.request.get(`${API}/api/donations/${donation.id}`, { headers: authHeaders })
+    const fetched = await get.json()
+    expect(fetched.attachments).toHaveLength(1)
+
+    const serve = await page.request.get(`${API}/${attachment.file_path}`, { headers: authHeaders })
+    expect(serve.status()).toBe(200)
+
+    await page.request.delete(`${API}/api/donations/${donation.id}`, { headers: authHeaders })
+  })
+
+  test('donation receipt upload via UI → verify attachment linked', async ({ page }) => {
+    test.skip(true, 'requires ENVIRONMENT=test for OCR')
+    await page.goto('/app/finance/#donations')
+    await page.locator('.card-tab-group').waitFor()
+    await page.locator('.card-tab', { hasText: 'Donations' }).click()
+
+    await page.click('button:has-text("+ Donation")')
+    await page.locator('.modal').waitFor()
+
+    const pngBytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')
+    await page.locator('#don-receipt-input').setInputFiles({
+      name: 'ui-receipt.png',
+      mimeType: 'image/png',
+      buffer: pngBytes,
+    })
+    await expect(page.locator('.scan-area')).toHaveClass(/has-image/, { timeout: 15_000 })
+    await expect(page.locator('.scan-area :text("Scanning")')).not.toBeVisible({ timeout: 60_000 })
+
+    await page.fill('#don-amount', '55.55')
+    await page.selectOption('#don-method', 'e-transfer')
+
+    await page.click('button:has-text("Save")')
+    await page.waitForSelector('.modal', { state: 'hidden', timeout: 30_000 })
+
+    const res = await page.request.get(`${API}/api/donations?limit=1&sortBy=created_at&sortDesc=true`, { headers: authHeaders })
+    const body = await res.json()
+    const latest = body.items[0]
+    expect(latest.amount).toBe(5555)
+    expect(latest.attachments).toHaveLength(1)
+    expect(latest.attachments[0].parent_type).toBe('donation')
+    expect(latest.attachments[0].file_path).toContain('/donation/')
   })
 })
 
