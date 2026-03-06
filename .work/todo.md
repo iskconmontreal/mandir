@@ -23,8 +23,8 @@
 
 * [x] What if user uploads expense receipt into donation form? -> don't store intent.
 * [x] Donation form should not necessarily have photos.
-  * [ ] That should not be called scan "receipt".
-* [ ] Viewer doesn't see recent activity after uploading document
+  * [x] That should not be called scan "receipt".
+* [ ] Viewer doesn't see recent activity after uploading the document
   * [ ] Viewer has no finance info - no permission
 * Treasurer doesnt see freshly added expenses because they can have old date - should sort by date submitted maybe?
 * Treasurer append expense form error on appending image

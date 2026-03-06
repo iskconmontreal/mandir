@@ -375,19 +375,11 @@
 <script type="module">
   import { init, fmtCat, fmtAmt, rawAmt, toCents, toast, auth, hl } from '../../lib/app.js'
   import { api, BASE } from '../../lib/api.js'
+  import { statusIcon } from '../../lib/icons.js'
+  import { EXP_STATUSES, STATUS_ORDER, catCls, catHex, fmtStatus, fmtDate, parseDiff, eventBadge, eventLabel, eventDetail, actorName as _actorName, parseMemberNames } from '../../lib/finance.js'
+  import { formDefaults, bindForm, expIsEditable, expGetAttachments, buildExpTimeline } from '../../lib/form.js'
 
-  const MY_USER_ID = (() => { try { return JSON.parse(atob(auth.token.split('.')[1])).user_id } catch { return null } })()
-
-  const DON_CATS = ['general', 'sunday_feast', 'book_distribution', 'deity_worship', 'building_fund', 'annadana', 'festival', 'events', 'other']
-  const EXP_CATS = ['admin', 'bhoga', 'books', 'deity', 'equipment', 'events', 'flowers', 'insurance', 'kitchen', 'maintenance', 'renovation', 'rent', 'salary', 'travel', 'utilities', 'vehicle', 'other']
-  const DON_METHODS = ['cash', 'cheque', 'e-transfer', 'card', 'in-kind']
-  const EXP_STATUSES = { submitted: 'var(--c-accent)', approved: 'var(--c-ok)', paid: 'var(--c-accent)', rejected: 'var(--c-err)' }
-  const CAT_CLR = { deity: 'purple', deity_worship: 'purple', flowers: 'purple', bhoga: 'amber', kitchen: 'amber', sunday_feast: 'amber', annadana: 'amber', events: 'teal', festival: 'teal', travel: 'teal', vehicle: 'teal', admin: 'blue', book_distribution: 'blue', books: 'blue', salary: 'green', rent: 'brown', building_fund: 'brown', maintenance: 'brown', renovation: 'brown', equipment: 'brown', insurance: 'indigo', utilities: 'indigo' }
-  const catCls = c => 'cat-' + (CAT_CLR[c] || 'gray')
-  const CAT_HEX = { purple: '#6b5ce7', amber: '#b8860b', teal: '#1a7a72', blue: '#3a6098', green: '#2d7a52', brown: '#7a5c30', indigo: '#504696', gray: '#aaa' }
-  const catHex = c => CAT_HEX[CAT_CLR[c]] || CAT_HEX.gray
-  const DON_FIELDS = { Amount: { id: 'amount', label: 'amount' }, Method: { id: 'method', label: 'method' }, Category: { id: 'cat', label: 'category' }, DateReceived: { id: 'date', label: 'date' }, Note: { id: 'note', label: 'note' } }
-  const EXP_FIELDS = { Payee: { id: 'vendor', label: 'payee' }, Amount: { id: 'amount', label: 'amount' }, Category: { id: 'cat', label: 'category' }, ExpenseDate: { id: 'date', label: 'date' }, Description: { id: 'desc', label: 'description' } }
+  const MY_USER_ID = auth.user?.id
 
   if (!auth.can('donations:view') && !auth.can('expenses:view')) {
     location.replace(new URL('../', location.href).href)
@@ -395,7 +387,6 @@
   }
 
   const now = new Date()
-  const today = now.toISOString().slice(0, 10)
   const curYear = now.getFullYear()
   const years = Array.from({ length: 3 }, (_, i) => curYear - i)
   const monthLabel = now.toLocaleString('default', { month: 'short' })
@@ -409,28 +400,6 @@
     return () => { io.disconnect(); clearInterval(timer) }
   }
 
-  const STATUS_ICONS = {
-    submitted: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3.5l2.5 1.5"/></svg>',
-    approved: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5" stroke-width="1.5"/><path d="M5 8.2l2 2.3 4-4.5" stroke-width="2"/></svg>',
-    rejected: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
-    paid: '<svg width="14" height="14" viewBox="0 0 16 16" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="7.5" fill="currentColor"/><path d="M5 8.2l2 2.3 4-4.5" stroke="#fff" stroke-width="2" fill="none"/></svg>',
-  }
-  function statusIcon(s) { return STATUS_ICONS[s] || '' }
-  const CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>'
-  const STATUS_LABELS = { submitted: 'Pending', approved: 'Approved', paid: 'Paid', rejected: 'Rejected' }
-  function fmtStatus(s) { return STATUS_LABELS[s] || fmtCat(s) }
-  const STATUS_ORDER = { submitted: 0, approved: 1, paid: 2, rejected: 3 }
-  function fmtDate(d) {
-    if (!d) return '—'
-    const dt = new Date(d)
-    const now = new Date()
-    const ms = now - dt
-    if (ms < 3600000) return Math.floor(ms / 60000) + 'm ago'
-    if (ms < 86400000) return Math.floor(ms / 3600000) + 'h ago'
-    const sameYear = dt.getFullYear() === now.getFullYear()
-    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(!sameYear && { year: 'numeric' }) })
-  }
-
   function dlCSV(rows, name) {
     const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -441,149 +410,25 @@
     URL.revokeObjectURL(a.href)
   }
 
-  function setErr(msg, prefix, fields) {
-    document.querySelectorAll('.field-err').forEach(el => el.classList.remove('field-err'))
-    const matches = [...msg.matchAll(/validation for '(\w+)'/g)]
-    if (!matches.length) return msg
-    const names = []
-    for (const [, f] of matches) {
-      const m = fields?.[f]
-      names.push(m?.label || f.toLowerCase())
-      if (m?.id) document.getElementById(`${prefix}-${m.id}`)?.classList.add('field-err')
-    }
-    return 'Required: ' + names.join(', ')
-  }
-
-  const emptyDonForm = () => ({ amount: '', method: '', category: '', date_received: '', note: '', member_id: null, attachment: null })
-  const emptyExpForm = () => ({ payee: '', amount: '', category: '', expense_date: '', description: '', member_id: null })
-
-  function resetForm() {
-    document.querySelectorAll('.field-err').forEach(el => el.classList.remove('field-err'))
-    s.editId = null; s.addErr = null; s.detailExp = null
-    s.receiptPreview = ''; s.receiptName = ''; s.receipts = []; s.extracting = false
-    s.memberQuery = ''; s.memberHits = []; s.vendorHits = []; s.expFull = false; s.donFull = false
-    s.donHistory = []; s.actionNote = ''; s.actionRef = ''; s.actionAmt = ''
-    s.delConfirm = false; s.deleting = false
-    s.donForm = emptyDonForm(); s.expForm = emptyExpForm()
-    _syncedAmt = ''
-  }
-
-  let pendingExtracts = 0
-  let _syncedAmt = ''
-
-  const AMT_MAX = 100_000
-
-  function syncExpReceipts() {
-    let total = 0
-    for (const r of s.receipts) {
-      if (!r.data) continue
-      const amt = parseFloat(r.data.amount)
-      if (amt > 0 && amt < AMT_MAX) total += amt
-    }
-    const newAmt = total ? total.toFixed(2) : ''
-    if (newAmt && (s.expForm.amount === _syncedAmt || !s.expForm.amount)) {
-      s.expForm.amount = newAmt; _syncedAmt = newAmt
-    }
-    const first = s.receipts.find(r => r.data)?.data
-    if (!first) return
-    if (first.vendor || first.category || first.date) s.expFull = true
-    if (!s.expForm.payee && first.vendor) s.expForm.payee = first.vendor
-    if (!s.expForm.category && first.category) s.expForm.category = first.category
-    if (!s.expForm.expense_date && first.date) s.expForm.expense_date = first.date
-  }
-
-  const AMT_KEYS = new Set(['amount', 'tax_amount', 'eligible_amount'])
-  const META_KEYS = new Set(['id', 'created_at', 'updated_at', 'updated_by', 'attachments', 'submitter_name', 'due_date', 'currency', 'expense_no', 'member_id', 'paid_by', 'count', 'status', 'approval'])
-
-  function parseDiff(d) {
-    if (!d) return null
-    if (typeof d === 'string') { try { return JSON.parse(d) } catch { return null } }
-    return d
-  }
-
-  function fmtFieldVal(k, v) {
-    if (v == null || v === '') return '—'
-    if (AMT_KEYS.has(k)) return '$' + fmtAmt(v)
-    return fmtCat(String(v))
-  }
-
-  function eventBadge(h) {
-    if (h.action !== 'update') return h.action
-    const d = parseDiff(h.diff)
-    if (!d) return 'update'
-    if (d.status) return d.status
-    if (d.approval) return d.approval === 'approve' ? 'approved' : d.approval
-    return 'update'
-  }
-
-  function eventLabel(h) {
-    if (h.action === 'create') return 'Created'
-    if (h.action === 'archive' || h.action === 'delete') return 'Deleted'
-    if (h.action !== 'update') return fmtCat(h.action)
-    const d = parseDiff(h.diff)
-    if (!d) return 'Updated'
-    if (d.approval) return 'Approved' + (d.count ? ` (${d.count})` : '')
-    if (d.status) return fmtStatus(d.status)
-    return 'Updated'
-  }
-
-  function eventDetail(h) {
-    if (!h.diff || h.action === 'create' || h.action === 'archive' || h.action === 'delete') return ''
-    const d = parseDiff(h.diff)
-    if (!d) return ''
-    const parts = []
-    for (const [k, v] of Object.entries(d)) {
-      if (META_KEYS.has(k)) continue
-      if (v && typeof v === 'object' && 'old' in v && 'new' in v) {
-        parts.push(fmtCat(k) + ' ' + fmtFieldVal(k, v.old) + ' → ' + fmtFieldVal(k, v.new))
-      } else if (k === 'note' && v) {
-        parts.push(v)
-      } else if (AMT_KEYS.has(k)) {
-        parts.push(fmtCat(k) + ' $' + fmtAmt(v))
-      } else if (k === 'bank_ref' && v) {
-        parts.push('Ref ' + v)
-      }
-    }
-    return parts.join(' · ')
-  }
-
-  function actorName(uid, names) {
-    if (!uid || !names[uid]) return ''
-    if (uid === MY_USER_ID) return 'you'
-    return names[uid]
-  }
-
-  const ACTIVITY_ICONS = {
-    create: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v6M5 8h6"/></svg>',
-    approved: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
-    rejected: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
-    reject: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
-    paid: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path stroke-width="1.5" d="M9 4c-.4-.6-1-.8-1.5-.8C6.2 3.2 5.5 4 5.5 5s.8 1.5 2 1.8 2 .8 2 1.7-.7 1.7-1.8 1.7c-.6 0-1.2-.2-1.7-.8"/><path stroke-width="1.5" d="M7.5 2v1.2m0 8v1.3"/><path stroke-width="2.5" d="M10 12l1.5 1.5L15 10"/></svg>',
-    submitted: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3.5l2.5 1.5"/></svg>',
-    update: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 2.5l2 2-8 8H3.5v-2l8-8z"/></svg>',
-    delete: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M6 4.5V3h4v1.5M5 4.5v8h6v-8"/></svg>',
-  }
-  function activityIcon(badge) { return ACTIVITY_ICONS[badge] || ACTIVITY_ICONS.update }
-
   const s = init({
-    year: curYear, years, monthLabel,
+    ...formDefaults(BASE, MY_USER_ID),
     activeTab: location.hash.slice(1) || 'expenses',
-    editId: null, showAdd: false, filePickerOpen: false,
-    loading: false, adding: false, deleting: false, extracting: false, actioning: false,
-    receiptPreview: '', receiptName: '', receipts: [], lightboxSrc: '',
-    loadErr: null, addErr: null, delConfirm: false,
+    actorName: (uid, names) => _actorName(uid, names, MY_USER_ID),
+    hl, observe, statusIcon, catCls, catHex,
 
-    donations: [], expenses: [], memberNames: {}, userNames: {},
+    year: curYear, years, monthLabel,
+    loading: false, loadErr: null,
+    donations: [], expenses: [],
     expTotal: 0, donTotal: 0,
     expMonth: 0, expPrevMonth: 0, donMonth: 0, donPrevMonth: 0,
     donorsMonth: 0, donorsPrevMonth: 0,
     donorRows: [], donorTotal: 0,
-    donForm: emptyDonForm(), expForm: emptyExpForm(),
-    expFull: false, donFull: false,
-    donCats: DON_CATS, expCats: EXP_CATS, donMethods: DON_METHODS,
     expStatuses: Object.keys(EXP_STATUSES),
-    myUid: MY_USER_ID,
-    fmt: fmtCat, fmtAmt, fmtDate, fmtStatus, hl, eventBadge, eventLabel, eventDetail, actorName, observe, statusIcon, activityIcon, catCls, catHex,
+    actionAmt: '',
+
+    get expEditable() { return expIsEditable(this) },
+    get expAttachments() { return expGetAttachments(this) },
+    get expTimeline() { return buildExpTimeline(this) },
     get catBreakdown() {
       const items = this.activeTab === 'donations' ? this.donations : this.expenses
       const map = {}
@@ -626,44 +471,6 @@
         this.expFilterCat = this.expFilterCat === cat ? '' : cat
         this.expPage = 1
       }
-    },
-
-    apiBase: BASE,
-    memberHits: [], memberQuery: '', vendorHits: [],
-    detailExp: null, expApprovals: [], expHistory: [], donHistory: [],
-    actionNote: '', actionRef: '', actionAmt: '',
-    get expEditable() {
-      if (!this.detailExp) return true
-      if (this.detailExp.status !== 'submitted') return false
-      return !this.can('expenses:approve')
-    },
-    get expAttachments() { return this.detailExp?.attachments || [] },
-    get expTimeline() {
-      const entries = []
-      for (const a of this.expApprovals) {
-        entries.push({
-          badge: a.action === 'approve' ? 'approved' : a.action,
-          label: a.action === 'approve' ? 'Approved' : a.action === 'reject' ? 'Rejected' : fmtCat(a.action),
-          actor: this.memberNames[a.approved_by] || '',
-          uid: null,
-          detail: a.note || '',
-          date: a.created_at,
-        })
-      }
-      for (const h of this.expHistory) {
-        const d = parseDiff(h.diff)
-        if (d?.approval) continue
-        entries.push({
-          badge: eventBadge(h),
-          label: eventLabel(h),
-          actor: actorName(h.user_id, this.userNames),
-          uid: h.user_id,
-          detail: eventDetail(h),
-          date: h.created_at,
-        })
-      }
-      entries.sort((a, b) => new Date(b.date) - new Date(a.date))
-      return entries
     },
 
     get net() { return this.donMonth - this.expMonth },
@@ -802,122 +609,13 @@
       if (location.hash.slice(1) !== tab) history.pushState(null, '', '#' + tab)
     },
 
-    openAdd() { resetForm(); s.showAdd = true },
-    cancelAdd() { resetForm(); s.showAdd = false },
-
-    filterDonors(q) {
-      s.memberQuery = q
-      const topDonors = s.donorRows.filter(d => d.member_id).map(d => ({ id: d.member_id, name: d.name }))
-      const allMembers = Object.entries(s.memberNames).map(([id, name]) => ({ id: +id, name }))
-      s.memberHits = (q ? allMembers.filter(m => m.name.toLowerCase().includes(q.toLowerCase())) : (topDonors.length ? topDonors : allMembers)).slice(0, 5)
-    },
     filterMembers(q) {
       s.memberQuery = q
       const all = Object.entries(s.memberNames).map(([id, name]) => ({ id: +id, name }))
       s.memberHits = (q ? all.filter(m => m.name.toLowerCase().includes(q.toLowerCase())) : all).slice(0, 5)
     },
-    filterVendors(q) {
-      s.expForm.payee = q
-      if (!q) { s.vendorHits = []; return }
-      const seen = new Set()
-      s.vendorHits = s.expenses.map(x => x.payee).filter(v => v && !seen.has(v) && (seen.add(v), v.toLowerCase().includes(q.toLowerCase()))).slice(0, 5)
-    },
     selectExpMember(m) { s.expForm.member_id = m.id; s.expForm.payee = m.name; s.memberQuery = m.name; s.memberHits = [] },
     clearExpMember()   { s.expForm.member_id = null; s.expForm.payee = ''; s.memberQuery = ''; s.memberHits = [] },
-    selectDonor(m)     { s.donForm.member_id = m.id; s.memberQuery = m.name; s.memberHits = [] },
-    clearDonor()       { s.donForm.member_id = null; s.memberQuery = ''; s.memberHits = [] },
-
-    async scanFile(file) {
-      if (!file) return
-      s.extracting = true; s.addErr = null; s.receiptName = file.name
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader()
-        reader.onload = () => { s.receiptPreview = reader.result }
-        reader.readAsDataURL(file)
-      } else s.receiptPreview = ''
-      try {
-        let res = await api.uploadDoc(file, 'donation')
-        let isDup = false
-        if (res.duplicate) {
-          if (!res.can_claim) { isDup = true; toast('Possible duplicate — this receipt was uploaded before', 'warn') }
-          else res = await api.claimAttachment(res.attachment.id)
-        }
-        const d = res.extracted_data || res.attachment?.extracted_data || {}
-        const amt = parseFloat(d.amount)
-        if (amt > 0 && amt < AMT_MAX) s.donForm.amount = d.amount
-        if (d.method) s.donForm.method = d.method
-        if (d.category) s.donForm.category = d.category
-        if (d.date) s.donForm.date_received = d.date
-        s.donForm.attachment = isDup ? null : (res.attachment || null)
-      } catch (e) { toast(e.message) }
-      finally { s.extracting = false }
-    },
-
-    async addReceipts(fileList) {
-      if (!fileList?.length) return
-      const fingerprints = new Set(s.receipts.map(r => r.name + ':' + r.size))
-      const files = [...fileList].filter(f => !fingerprints.has(f.name + ':' + f.size))
-      if (!files.length) { toast('Receipt already added'); return }
-      s.addErr = null; pendingExtracts++; s.extracting = true
-      const startIdx = s.receipts.length
-      s.receipts.push(...files.map(f => ({ name: f.name, size: f.size, preview: '', data: null, extracting: true, err: null })))
-      try {
-        await Promise.all(files.map(async (file, i) => {
-          const r = s.receipts[startIdx + i]
-          if (file.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => { r.preview = rd.result }; rd.readAsDataURL(file) }
-          try {
-            let res = await api.uploadDoc(file, 'expense')
-            if (res.duplicate) {
-              if (!res.can_claim) {
-                r.duplicate = true
-                r.data = res.extracted_data || res.attachment?.extracted_data || {}
-                r.extracting = false
-                syncExpReceipts()
-                return
-              }
-              res = await api.claimAttachment(res.attachment.id)
-            }
-            r.data = res.extracted_data || res.attachment?.extracted_data || {}; r.attachment = res.attachment || null
-          } catch (e) { r.err = e.message; toast(e.message) }
-          r.extracting = false
-          syncExpReceipts()
-        }))
-      } finally {
-        pendingExtracts--
-        s.extracting = false
-      }
-    },
-
-    removeReceipt(r) { const i = s.receipts.indexOf(r); if (i >= 0) s.receipts.splice(i, 1); syncExpReceipts() },
-
-    editDonation(d) {
-      s.editId = d.id; s.addErr = null; s.detailExp = null; s.donHistory = []
-      s.donForm = { amount: rawAmt(d.amount), method: d.method || 'cash', category: d.category || 'general', date_received: (d.date_received || '').slice(0, 10), note: d.note || '', member_id: d.member_id || null, attachment: null }
-      s.memberQuery = d.member_id ? (s.memberNames[d.member_id] || '') : ''
-      s.memberHits = []; s.donFull = true; s.showAdd = true
-      api.getAuditLogs({ entity_type: 'donation', entity_id: d.id, limit: 20, sortBy: 'created_at', sortDesc: 'true' })
-        .then(r => { s.donHistory = r.items || [] }).catch(() => {})
-    },
-
-    editExpense(x) {
-      s.editId = x.id; s.addErr = null; s.actionNote = ''; s.actionRef = ''; s.actionAmt = ''; s.detailExp = null
-      const cat = x.category || 'other'
-      s.expForm = { member_id: x.member_id || null, payee: x.payee || '', amount: rawAmt(x.amount), category: cat, expense_date: (x.expense_date || '').slice(0, 10), description: x.description || '' }
-      s.memberQuery = x.member_id ? (s.memberNames[x.member_id] || x.payee || '') : ''
-      s.memberHits = []; s.expFull = true
-      s.showAdd = true
-      if (cat && !EXP_CATS.includes(cat)) setTimeout(() => {
-        const sel = document.getElementById('exp-cat')
-        if (!sel || [...sel.options].some(o => o.value === cat)) return
-        const opt = document.createElement('option')
-        opt.value = cat; opt.textContent = fmtCat(cat)
-        sel.prepend(opt); sel.value = cat
-      })
-    },
-
-    async approveExp()   { await expAction(async () => { const r = await api.approveExpense(s.editId, s.actionNote); const exp = r.expense || r; return exp.status === 'approved' ? 'Expense approved' : `Approval recorded (${r.approval_count}/${r.approvals_required})` }) },
-    async rejectExp()    { if (!s.actionNote.trim()) { s.addErr = 'Note is required'; return }; await expAction(async () => { await api.rejectExpense(s.editId, s.actionNote); return 'Expense rejected' }) },
-    async payExp()       { await expAction(async () => { await api.payExpense(s.editId, s.actionRef); return 'Expense marked as paid' }) },
 
     _hoverCat: null,
     quickLoading: {}, myApprovals: {},
@@ -948,60 +646,6 @@
       }
       catch (e) { toast(e.message) }
       finally { const l = { ...s.quickLoading }; delete l[x.id]; s.quickLoading = l }
-    },
-
-    async saveDonation() {
-      if (s.extracting) { s.addErr = 'Please wait for receipt processing to complete.'; return }
-      s.addErr = null; s.adding = true
-      try {
-        const attIds = s.donForm.attachment && !s.editId ? [s.donForm.attachment.id] : undefined
-        const f = s.donForm
-        const data = { amount: toCents(f.amount), attachment_ids: attIds }
-        if (f.method) data.method = f.method
-        if (f.category) data.category = f.category
-        if (f.date_received) data.date_received = f.date_received
-        if (f.note) data.note = f.note
-        if (f.member_id) data.member_id = f.member_id
-        if (s.editId) await api.updateDonation(s.editId, data); else await api.createDonation(data)
-        toast(s.editId ? 'Donation updated' : 'Donation saved', 'success')
-        document.querySelectorAll('.field-err').forEach(el => el.classList.remove('field-err'))
-        s.donForm = emptyDonForm(); s.editId = null; s.showAdd = false; loadAll()
-      } catch (e) { s.addErr = setErr(e.message, 'don', DON_FIELDS) }
-      finally { s.adding = false }
-    },
-
-    async saveExpense() {
-      if (pendingExtracts > 0) { s.addErr = 'Please wait for receipt processing to complete.'; return }
-      s.addErr = null; s.adding = true
-      try {
-        const attIds = s.receipts.filter(r => r.attachment).map(r => r.attachment.id)
-        const f = s.expForm
-        const data = { amount: toCents(f.amount), attachment_ids: !s.editId && attIds.length ? attIds : undefined }
-        if (f.payee) data.payee = f.payee
-        if (f.description) data.description = f.description
-        if (f.category) data.category = f.category
-        if (f.expense_date) data.expense_date = f.expense_date
-        if (f.member_id) data.member_id = f.member_id
-        if (s.editId) await api.updateExpense(s.editId, data); else await api.createExpense(data)
-        toast(s.editId ? 'Expense updated' : 'Expense saved', 'success')
-        document.querySelectorAll('.field-err').forEach(el => el.classList.remove('field-err'))
-        s.expForm = emptyExpForm(); s.editId = null; s.showAdd = false; loadAll()
-      } catch (e) { s.addErr = setErr(e.message, 'exp', EXP_FIELDS) }
-      finally { s.adding = false }
-    },
-
-    async delDonation() {
-      s.deleting = true
-      try { await api.deleteDonation(s.editId); resetForm(); s.showAdd = false; loadAll() }
-      catch (e) { s.addErr = e.message }
-      finally { s.deleting = false }
-    },
-
-    async delExpense() {
-      s.deleting = true
-      try { await api.deleteExpense(s.editId); resetForm(); s.showAdd = false; loadAll() }
-      catch (e) { s.addErr = e.message }
-      finally { s.deleting = false }
     },
 
     exportCSV() {
@@ -1038,12 +682,7 @@
     loadAll,
   })
 
-  async function expAction(fn) {
-    s.actioning = true
-    try { const msg = await fn(); s.showAdd = false; toast(msg, 'success'); loadAll() }
-    catch (e) { s.addErr = e.message }
-    finally { s.actioning = false }
-  }
+  bindForm(s, { api, onSave: loadAll })
 
   async function loadExpInlineHistory(id) {
     s.expInlineLoading = { ...s.expInlineLoading, [id]: true }
@@ -1117,13 +756,7 @@
       s.donorsPrevMonth = summary.donors_prev_month || 0
       s.donorRows = (donors.items || []).map(d => ({ ...d, lastDate: d.last_date }))
       s.donorTotal = donors.total || 0
-      const names = {}, unames = {}
-      for (const c of mem.items || []) {
-        const d = typeof c.data === 'string' ? JSON.parse(c.data) : c.data
-        const nm = d.spiritual_name || d.name || d.email || 'Unknown'
-        names[c.id] = nm
-        if (c.user_id) unames[c.user_id] = nm
-      }
+      const { names, unames } = parseMemberNames(mem.items || [])
       s.memberNames = names
       s.userNames = unames
     } catch (e) {

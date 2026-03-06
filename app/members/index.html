@@ -93,7 +93,7 @@
 </section>
 
 <script type="module">
-  import { init, ROLES, SERVICES, auth, fmtCat, toast, hl } from '../../lib/app.js'
+  import { init, SERVICES, auth, fmtCat, toast, hl, loadSystemRoles } from '../../lib/app.js'
   import { api, BASE } from '../../lib/api.js'
 
   if (!auth.can('members:view')) {
@@ -108,8 +108,8 @@
   const userRolesByUserId = new Map()
   let userRoleLookupDenied = false
 
-  const emptyForm = () => ({
-    name: '', spiritual_name: '', email: '', phone: '', role: 'Devotee', joined: today,
+  const emptyForm = (role = '') => ({
+    name: '', spiritual_name: '', email: '', phone: '', role, joined: today,
     address: '', notes: '', status: '',
     diksa_guru: '', guiding_devotee: '', services: [],
     rounds: '', rounds_years: '', four_regs_years: '',
@@ -259,7 +259,7 @@
     sysRoles: [],
     members: [],
     total: 0,
-    roles: ROLES,
+    roles: [],
     SERVICES, hl,
 
     toggleService(sv) {
@@ -303,7 +303,7 @@
 
     openAdd() {
       s.editing = null
-      s.form = emptyForm()
+      s.form = emptyForm(s.roles[0] || '')
       s.formErr = null
       s.showEdit = true
     },
@@ -318,8 +318,7 @@
         catch {}
         if (auth.can('roles:update') && !s.sysRoles.length) {
           try {
-            const res = await api.getRoles()
-            s.sysRoles = res.roles || []
+            s.sysRoles = await loadSystemRoles()
           } catch {}
         }
       }
@@ -350,7 +349,7 @@
     closeEdit() {
       s.showEdit = false
       s.editing = null
-      s.form = emptyForm()
+      s.form = emptyForm(s.roles[0] || '')
       s.formErr = null
       s.photoFile = null
       s.photoErr = null
@@ -515,12 +514,12 @@
     s.detailHTML = d
   }).catch(e => { s.loadErr = e.message || 'Failed to load page templates' })
   load()
-  api.getRoles().then(res => {
-    if (res.roles?.length) {
-      s.roles = res.roles.map(r => r.name)
-      roleNameById.clear()
-      for (const r of res.roles) roleNameById.set(+r.id, r.name)
-      load()
-    }
+  loadSystemRoles().then(roles => {
+    if (!roles.length) return
+    s.roles = roles.map(r => r.name)
+    roleNameById.clear()
+    for (const r of roles) roleNameById.set(+r.id, r.name)
+    if (!s.form.role) s.form.role = s.roles[0] || ''
+    load()
   }).catch(() => {})
 </script>
