@@ -5,11 +5,6 @@
     <h1>Finance</h1>
     <div style="font-size:var(--f-sm)" class="dim"><span :class="net > 0 ? 'stat-ok' : net < 0 ? 'stat-err' : ''" :text="(net >= 0 ? '+' : '−') + '$' + fmtAmt(Math.abs(net))"></span> this month</div>
   </div>
-  <div style="display:flex; align-items:center; gap:var(--s-md)">
-    <select class="year-select" :onchange="e => setYear(+e.target.value)">
-      <option :each="y in years" :value="y" :text="y" :selected="y === year"></option>
-    </select>
-  </div>
 </div>
 
 <!-- Stat cards as tabs -->
@@ -50,6 +45,13 @@
         <button class="btn btn-filter filter-search-btn" :class="{'filter-search-btn-active': showFilter || expFilterCat || expFilterStatus || expDateFrom || expDateTo}" :onclick="showFilter = !showFilter">Filter</button>
         <div :if="showFilter" class="filter-dropdown">
           <div class="field">
+            <label>Category</label>
+            <select :value="expFilterCat" :onchange="e => patchState({ expFilterCat: e.target.value, expPage: 1 })">
+              <option value="" :selected="!expFilterCat">All categories</option>
+              <option :each="cat in expCats" :value="cat" :selected="expFilterCat === cat" :text="fmtCat(cat)"></option>
+            </select>
+          </div>
+          <div class="field">
             <label>Status</label>
             <select :value="expFilterStatus" :onchange="e => patchState({ expFilterStatus: e.target.value, expPage: 1 })">
               <option value="" :selected="!expFilterStatus">All statuses</option>
@@ -69,7 +71,7 @@
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">
             <button class="btn-link" :if="expFilterCat || expFilterStatus || expDateFrom || expDateTo"
-              :onclick="clearExpenseFilters()">Clear all</button>
+              :onclick="patchState({ expFilterCat: '', expFilterStatus: '', expDateFrom: '', expDateTo: '', expPage: 1 }); showFilter = false" :text="'Clear all'"></button>
             <span :if="!expFilterCat && !expFilterStatus && !expDateFrom && !expDateTo"></span>
             <button class="btn btn-primary btn-sm" :onclick="showFilter = false"
               :text="'Show ' + expFiltered.length + ' results'"></button>
@@ -88,21 +90,12 @@
       <button class="btn btn-primary filter-bar-create" :onclick="openAdd()">+ Expense</button>
     </div>
     <div class="seg-group" hidden>
-      <span class="seg" :class="{'seg-active': expView === 'list'}" :onclick="expView = 'list'" title="List view" style="display:flex;align-items:center">
+      <span class="seg" :class="{'seg-active': expView === 'list'}" :onclick="setExpView('list')" title="List view" style="display:flex;align-items:center">
         <span :html="icon('view_list')"></span>
       </span>
-      <span class="seg" :class="{'seg-active': expView === 'table'}" :onclick="expView = 'table'" title="Table view" style="display:flex;align-items:center">
+      <span class="seg" :class="{'seg-active': expView === 'table'}" :onclick="setExpView('table')" title="Table view" style="display:flex;align-items:center">
         <span :html="icon('view_grid')"></span>
       </span>
-    </div>
-  </div>
-
-  <div class="cat-pill-bar" :if="expenses.length">
-    <div :each="seg in catBreakdown" class="cat-pill-seg"
-      :class="{dim: expFilterCat && expFilterCat !== seg.cat, active: expFilterCat === seg.cat}"
-      :style="{width: Math.max(seg.pct, 0.5) + '%', background: seg.color}"
-      :onclick="patchState({ expFilterCat: expFilterCat === seg.cat ? '' : seg.cat, expPage: 1 })">
-      <span class="cat-pill-tip" :text="fmt(seg.cat) + ' ' + Math.round(seg.pct) + '%'"></span>
     </div>
   </div>
 
@@ -159,15 +152,27 @@
     <div :if="loading" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</div>
     <div :if="!loading && !expenses.length" class="dim" style="text-align:center;padding:var(--s-xl)">No expenses yet</div>
     <div :if="!loading && expenses.length && !expFiltered.length" class="dim" style="text-align:center;padding:var(--s-lg)">No expenses match filters</div>
-    <div :each="g in expGrouped">
-      <button type="button" class="exp-group-header" :class="{'exp-group-header-open': isExpMonthOpen(g.key)}" :onclick="toggleExpMonth(g.key)">
-        <span class="exp-group-label" :text="fmtMonth(g.key)"></span>
-        <span class="exp-group-count" :text="g.items.length"></span>
-        <span class="exp-group-total" :text="'$' + fmtAmt(g.total)"></span>
-        <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
-      </button>
-      <div :if="isExpMonthOpen(g.key)" class="recent-exp-list finance-exp-list">
-        {% include finance/recent-expense-row.html each="x in g.items" row_class="finance-exp-item" show_expense_no=true %}
+    <div :each="yr in expYearGroups" class="finance-year-section">
+      <div class="finance-year-sticky" :if="yr.key !== 'unknown'" :text="yr.key"></div>
+      <div class="finance-year-months">
+        <div :each="g in yr.items" :class="{'finance-month-wrap-open': isExpMonthOpen(g.key), 'finance-month-wrap-divider': isExpMonthDividerVisible(g.key)}">
+          <button type="button" class="exp-group-header" :class="{'exp-group-header-open': isExpMonthOpen(g.key)}" :aria-expanded="isExpMonthOpen(g.key) ? 'true' : 'false'" :data-month-key="g.key" :onpointerdown="e => primeExpMonthFromEvent(e)" :onclick="e => toggleExpMonthFromEvent(e)">
+            <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
+            <span class="exp-group-heading">
+              <span class="exp-group-label">
+              <span class="finance-month-label-desktop" :text="fmtMonthShort(g.key)"></span>
+              <span class="finance-month-label-mobile" :text="fmtMonth(g.key)"></span>
+              </span>
+              <span :if="expMonthHasVisibleData(g.key)" class="exp-group-count" :text="g.count"></span>
+            </span>
+            <span :if="expMonthBreakdown(g.key).length && !hasExpFilterState" class="exp-group-breakdown" :style="expBreakdownStyle(g.key)" :title="expMonthBreakdownTooltip(g.key)" aria-hidden="true"></span>
+            <span :if="expMonthHasVisibleData(g.key)" class="exp-group-total" :text="'$' + fmtAmt(g.total)"></span>
+          </button>
+          <div class="recent-exp-list finance-exp-list" :class="{'finance-exp-list-open': isExpMonthOpen(g.key), 'finance-exp-list-loading': isExpMonthOpen(g.key) && isExpMonthLoading(g.key), 'finance-exp-list-fx': expMonthFxKey === g.key}" :aria-hidden="isExpMonthOpen(g.key) ? 'false' : 'true'">
+            <div :if="isExpMonthOpen(g.key) && isExpMonthLoading(g.key)" class="finance-exp-list-loader dim"><span class="load-spinner"></span><span>Loading…</span></div>
+            {% include finance/recent-expense-row.html each="x in g.items" row_class="finance-exp-item" show_expense_no=true %}
+          </div>
+        </div>
       </div>
     </div>
     <div :if="expHasMore" class="scroll-sentinel" :ref="el => observe(el, () => expPage++)">
@@ -184,28 +189,43 @@
     <div class="filter-search-wrap" :onclick.outside="showFilter = false">
       <input class="filter-search filter-search-input" type="search" placeholder="Search source or note…"
         :value="donSearch" :oninput.debounce-150="e => patchState({ donSearch: e.target.value, donPage: 1 })">
-      <div :if="donFilterType || donFilterMethod || donDateFrom || donDateTo" class="filter-inline-chips">
+      <div :if="donFilterType || donFilterMethods.length || donDateFrom || donDateTo" class="filter-inline-chips">
         <span :if="donFilterType" class="chip filter-inline-chip" :onclick="patchState({ donFilterType: '', donPage: 1 })" :text="fmtCat(donFilterType) + ' ×'"></span>
-        <span :if="donFilterMethod" class="chip filter-inline-chip" :onclick="patchState({ donFilterMethod: '', donPage: 1 })" :text="fmtCat(donFilterMethod) + ' ×'"></span>
+        <span :each="method in donFilterMethods" class="chip filter-inline-chip" :onclick="patchState({ donFilterMethods: donFilterMethods.filter(x => x !== method), donPage: 1 })" :text="fmtCat(method) + ' ×'"></span>
         <span :if="donDateFrom" class="chip filter-inline-chip" :onclick="patchState({ donDateFrom: '', donPage: 1 })" :text="'From ' + donDateFrom + ' ×'"></span>
         <span :if="donDateTo" class="chip filter-inline-chip" :onclick="patchState({ donDateTo: '', donPage: 1 })" :text="'To ' + donDateTo + ' ×'"></span>
       </div>
       <div class="filter-search-seg">
-        <button class="btn btn-filter filter-search-btn" :class="{'filter-search-btn-active': showFilter || donFilterCat || donFilterType || donFilterMethod || donDateFrom || donDateTo}" :onclick="showFilter = !showFilter">Filter</button>
+        <button class="btn btn-filter filter-search-btn" :class="{'filter-search-btn-active': showFilter || donFilterCat || donFilterType || donFilterMethods.length || donDateFrom || donDateTo}" :onclick="showFilter = !showFilter">Filter</button>
         <div :if="showFilter" class="filter-dropdown">
           <div class="field">
             <label>Type</label>
-            <select :value="donFilterType" :onchange="e => patchState({ donFilterType: e.target.value, donPage: 1 })">
+            <select :onchange="e => patchState({ donFilterType: e.target.value, donPage: 1 })">
               <option value="" :selected="!donFilterType">All income</option>
-              <option :each="type in incomeTypes" :value="type" :selected="donFilterType === type" :text="fmtCat(type)"></option>
+              <option value="donation" :selected="donFilterType === 'donation'">Donation</option>
+              <option value="sale" :selected="donFilterType === 'sale'">Sale</option>
+              <option value="grant" :selected="donFilterType === 'grant'">Grant</option>
+              <option value="interest" :selected="donFilterType === 'interest'">Interest</option>
+              <option value="refund" :selected="donFilterType === 'refund'">Refund</option>
+              <option value="rebate" :selected="donFilterType === 'rebate'">Rebate</option>
+              <option value="other" :selected="donFilterType === 'other'">Other</option>
             </select>
           </div>
           <div class="field">
             <label>Method</label>
-            <select :value="donFilterMethod" :onchange="e => patchState({ donFilterMethod: e.target.value, donPage: 1 })">
-              <option value="" :selected="!donFilterMethod">All methods</option>
-              <option :each="method in donMethods" :value="method" :selected="donFilterMethod === method" :text="fmtCat(method)"></option>
+            <select class="filter-multi-select" multiple :size="Math.min(Math.max(incomeMethodOptions.length, 3), 8)"
+              :onchange="e => patchState({ donFilterMethods: [...e.target.selectedOptions].map(o => o.value), donPage: 1 })">
+              <option value="cash" :if="incomeMethodCount('cash') || donFilterMethods.includes('cash')" :selected="donFilterMethods.includes('cash')" :text="fmtCat('cash') + ' · ' + incomeMethodCount('cash')"></option>
+              <option value="cheque" :if="incomeMethodCount('cheque') || donFilterMethods.includes('cheque')" :selected="donFilterMethods.includes('cheque')" :text="fmtCat('cheque') + ' · ' + incomeMethodCount('cheque')"></option>
+              <option value="e-transfer" :if="incomeMethodCount('e-transfer') || donFilterMethods.includes('e-transfer')" :selected="donFilterMethods.includes('e-transfer')" :text="fmtCat('e-transfer') + ' · ' + incomeMethodCount('e-transfer')"></option>
+              <option value="card" :if="incomeMethodCount('card') || donFilterMethods.includes('card')" :selected="donFilterMethods.includes('card')" :text="fmtCat('card') + ' · ' + incomeMethodCount('card')"></option>
+              <option value="direct-deposit" :if="incomeMethodCount('direct-deposit') || donFilterMethods.includes('direct-deposit')" :selected="donFilterMethods.includes('direct-deposit')" :text="fmtCat('direct-deposit') + ' · ' + incomeMethodCount('direct-deposit')"></option>
+              <option value="bank-deposit" :if="incomeMethodCount('bank-deposit') || donFilterMethods.includes('bank-deposit')" :selected="donFilterMethods.includes('bank-deposit')" :text="fmtCat('bank-deposit') + ' · ' + incomeMethodCount('bank-deposit')"></option>
+              <option value="wire" :if="incomeMethodCount('wire') || donFilterMethods.includes('wire')" :selected="donFilterMethods.includes('wire')" :text="fmtCat('wire') + ' · ' + incomeMethodCount('wire')"></option>
+              <option value="in-kind" :if="incomeMethodCount('in-kind') || donFilterMethods.includes('in-kind')" :selected="donFilterMethods.includes('in-kind')" :text="fmtCat('in-kind') + ' · ' + incomeMethodCount('in-kind')"></option>
+              <option value="other" :if="incomeMethodCount('other') || donFilterMethods.includes('other')" :selected="donFilterMethods.includes('other')" :text="fmtCat('other') + ' · ' + incomeMethodCount('other')"></option>
             </select>
+            <div class="dim filter-help">None selected = all methods. Use ⌘/Ctrl-click for multiple.</div>
           </div>
           <div class="field">
             <label>Date range</label>
@@ -216,9 +236,9 @@
             </div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">
-            <button class="btn-link" :if="donFilterCat || donFilterType || donFilterMethod || donDateFrom || donDateTo"
-              :onclick="clearIncomeFilters()">Clear all</button>
-            <span :if="!donFilterCat && !donFilterType && !donFilterMethod && !donDateFrom && !donDateTo"></span>
+            <button class="btn-link" :if="donFilterCat || donFilterType || donFilterMethods.length || donDateFrom || donDateTo"
+              :onclick="showFilter = false; clearIncomeFilters()" :text="'Clear all'"></button>
+            <span :if="!donFilterCat && !donFilterType && !donFilterMethods.length && !donDateFrom && !donDateTo"></span>
             <button class="btn btn-primary btn-sm" :onclick="showFilter = false"
               :text="'Show ' + donFiltered.length + ' results'"></button>
           </div>
@@ -248,8 +268,8 @@
 
   <div class="card">
     <div :if="loadErr" class="login-error" :text="loadErr" style="margin:var(--s-md)"></div>
-    <div :if="donPaged.length" class="recent-inc-list">
-      <div :each="d in donPaged" class="recent-inc-item row-link" :onclick="editDonation(d)">
+    <div class="recent-inc-list">
+      <div :each="d in (donSortBy ? _doSort(donFiltered, donSortBy, donSortDir) : donFiltered).slice(0, Math.max(donPage || 1, 1) * pageSize)" class="recent-inc-item row-link" :onclick="editDonation(d)">
         <span class="recent-inc-icon-col" :class="'recent-inc-icon-' + recentIncMethod(d)">
           <span class="recent-inc-icon" :html="methodIcon(recentIncMethod(d))"></span>
         </span>
@@ -351,7 +371,7 @@
   import { init, fmtCat, fmtAmt, rawAmt, toCents, toast, auth, hl } from '../../lib/app.js'
   import { api, BASE } from '../../lib/api.js'
   import { actionIcon, statusIcon } from '../../lib/icons.js'
-  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, catCls, catHex, fmtStatus, fmtDate, changedAt, parseMemberNames } from '../../lib/finance.js'
+  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, catCls, catHex, fmtStatus, fmtDate, changedAt, parseMemberNames } from '../../lib/finance.js'
   import { formDefaults, bindForm, expIsEditable, expEditPolicy as getExpEditPolicy, expGetAttachments, buildExpTimeline } from '../../lib/form.js'
 
   const MY_USER_ID = auth.user?.id || auth.user?.user_id || (() => {
@@ -366,6 +386,12 @@
   const now = new Date()
   const curYear = now.getFullYear()
   const years = Array.from({ length: 3 }, (_, i) => curYear - i)
+  const todayIso = `${curYear}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const currentExpenseMonthKey = todayIso.slice(0, 7)
+  const expenseMonthKeys = years.flatMap(year => {
+    const lastMonth = year === curYear ? now.getMonth() + 1 : 12
+    return Array.from({ length: lastMonth }, (_, i) => `${year}-${String(lastMonth - i).padStart(2, '0')}`)
+  })
   const monthLabel = now.toLocaleString('default', { month: 'short' })
   const perPage = 20
   const normTab = tab => tab === 'donations' ? 'income' : (tab || 'expenses')
@@ -375,6 +401,10 @@
     const method = String(value || '').toLowerCase()
     return DON_METHODS.includes(method) ? method : ''
   }
+  const normIncomeMethods = value => {
+    const list = Array.isArray(value) ? value : String(value || '').split(',')
+    return [...new Set(list.map(normIncomeMethod).filter(Boolean))]
+  }
   const bucketOf = x => (x.type || 'donation') === 'donation' ? (x.category || 'general') : (x.type || 'other')
   const labelOf = x => (x.type || 'donation') === 'donation' ? (x.category || 'general') : (x.type || 'other')
   const sourceOf = (x, names) => x.member_id ? (names[x.member_id] || x.source_name || '—') : (x.source_name || 'Anonymous')
@@ -382,7 +412,7 @@
     const url = new URL(location.href)
     return {
       activeTab: normTab(url.searchParams.get('tab') || url.hash.slice(1) || 'expenses'),
-      year: normYear(url.searchParams.get('year')),
+      year: curYear,
       expSearch: url.searchParams.get('exp_q') || '',
       expFilterCat: url.searchParams.get('exp_cat') || '',
       expFilterStatus: url.searchParams.get('exp_status') || '',
@@ -391,7 +421,7 @@
       donSearch: url.searchParams.get('inc_q') || '',
       donFilterCat: url.searchParams.get('inc_cat') || '',
       donFilterType: normIncomeType(url.searchParams.get('inc_type') || ''),
-      donFilterMethod: normIncomeMethod(url.searchParams.get('inc_method') || ''),
+      donFilterMethods: normIncomeMethods(url.searchParams.get('inc_method') || ''),
       donDateFrom: url.searchParams.get('inc_from') || '',
       donDateTo: url.searchParams.get('inc_to') || '',
       donorSearch: url.searchParams.get('donor_q') || '',
@@ -402,8 +432,13 @@
     const type = row?.type || 'donation'
     return !filter || type === filter
   }
-  const incomeMethodMatch = (row, filter) => !filter || normIncomeMethod(row?.method || 'cash') === filter
+  const incomeMethodMatch = (row, filters) => !filters?.length || filters.includes(normIncomeMethod(row?.method || 'cash'))
   const expenseMonthKey = x => x.expense_date?.slice(0, 7) || 'unknown'
+  const expenseMonthRange = key => {
+    const [year, month] = key.split('-').map(Number)
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+    return { dateFrom: `${key}-01`, dateTo: `${key}-${String(lastDay).padStart(2, '0')}` }
+  }
   const expenseSortDate = x => changedAt(x) || x?.expense_date || ''
   const sortExpenses = list => [...list].sort((a, b) => {
     const st = (STATUS_ORDER[a?.status || 'submitted'] ?? 9) - (STATUS_ORDER[b?.status || 'submitted'] ?? 9)
@@ -421,7 +456,6 @@
     const url = new URL(location.href)
     const params = new URLSearchParams()
     params.set('tab', normTab(state.activeTab || 'expenses'))
-    if (+state.year !== curYear) params.set('year', String(state.year))
     if (state.expSearch) params.set('exp_q', state.expSearch)
     if (state.expFilterCat) params.set('exp_cat', state.expFilterCat)
     if (state.expFilterStatus) params.set('exp_status', state.expFilterStatus)
@@ -430,7 +464,7 @@
     if (state.donSearch) params.set('inc_q', state.donSearch)
     if (state.donFilterCat) params.set('inc_cat', state.donFilterCat)
     if (state.donFilterType) params.set('inc_type', state.donFilterType)
-    if (state.donFilterMethod) params.set('inc_method', state.donFilterMethod)
+    if (state.donFilterMethods?.length) params.set('inc_method', state.donFilterMethods.join(','))
     if (state.donDateFrom) params.set('inc_from', state.donDateFrom)
     if (state.donDateTo) params.set('inc_to', state.donDateTo)
     if (state.donorSearch) params.set('donor_q', state.donorSearch)
@@ -480,15 +514,24 @@
     rejectIcon: actionIcon('reject'),
     payIcon: actionIcon('pay'),
 
-    year: initUrl.year, years, monthLabel,
+    year: initUrl.year, years, curYear, monthLabel,
     loading: false, loadErr: null,
     donations: [], expenses: [],
     expTotal: 0, donTotal: 0,
     expMonth: 0, expPrevMonth: 0, incMonth: 0, incPrevMonth: 0,
     donorsMonth: 0, donorsPrevMonth: 0,
     donorRows: [], donorTotal: 0,
+    pageSize: perPage,
     expStatuses: Object.keys(EXP_STATUSES),
-    expMonthOpen: {},
+    expCats: EXP_CATS,
+    expMonthMeta: {},
+    expMonthKeys: expenseMonthKeys,
+    expMonthItems: {},
+    expMonthLoaded: {},
+    expMonthLoading: {},
+    expMonthFxKey: '',
+    expRangeLoaded: false,
+    expMonthOpen: { [currentExpenseMonthKey]: true },
     actionAmt: '',
 
     get expEditable() { return expIsEditable(this) },
@@ -512,7 +555,7 @@
         ? this.donations.filter(r => {
           const dt = r.date_received?.slice(0, 10) || ''
           if (!incomeTypeMatch(r, this.donFilterType)) return false
-          if (!incomeMethodMatch(r, this.donFilterMethod)) return false
+          if (!incomeMethodMatch(r, this.donFilterMethods)) return false
           if (this.donDateFrom && dt < this.donDateFrom) return false
           if (this.donDateTo && dt > this.donDateTo) return false
           return true
@@ -557,6 +600,27 @@
       const who = this.userNames?.[uid]
       return who ? `by ${who}` : ''
     },
+    get incomeMethodCounts() {
+      const counts = {}
+      for (const r of this.donations) {
+        const dt = r.date_received?.slice(0, 10) || ''
+        if (!incomeTypeMatch(r, this.donFilterType)) continue
+        if (this.donFilterCat && bucketOf(r) !== this.donFilterCat) continue
+        if (this.donDateFrom && dt < this.donDateFrom) continue
+        if (this.donDateTo && dt > this.donDateTo) continue
+        const q = this.donSearch.toLowerCase()
+        if (q && ![r.note, r.method, r.type, bucketOf(r), sourceOf(r, this.memberNames)].filter(Boolean).join(' ').toLowerCase().includes(q)) continue
+        const method = normIncomeMethod(r?.method || 'cash') || 'cash'
+        counts[method] = (counts[method] || 0) + 1
+      }
+      return counts
+    },
+    get incomeMethodOptions() {
+      return DON_METHODS.filter(method => this.incomeMethodCounts[method] || (this.donFilterMethods || []).includes(method))
+    },
+    incomeMethodCount(method) {
+      return this.incomeMethodCounts[method] || 0
+    },
     expenseCanQuickApprove(x) {
       return this.can('expenses:approve') && (x?.status || 'submitted') === 'submitted' && !this.myApprovals[x.id] && !this.quickLoading[x.id]
     },
@@ -580,6 +644,17 @@
     },
     expenseQuickPay(x) {
       return this.quickPay(x)
+    },
+    expenseMatches(r, q = this.expSearch.toLowerCase()) {
+      const dt = r.expense_date?.slice(0, 10) || ''
+      if (this.expFilterStatus && r.status !== this.expFilterStatus) return false
+      if (this.expFilterCat && r.category !== this.expFilterCat) return false
+      if (this.expDateFrom && dt < this.expDateFrom) return false
+      if (this.expDateTo && dt > this.expDateTo) return false
+      return !q || [r.payee, r.note || r.description, r.expense_no, String(r.id || ''), r.expense_date?.slice(0, 10), r.member_id ? this.memberNames[r.member_id] : '', fmtCat(r.category)].filter(Boolean).join(' ').toLowerCase().includes(q)
+    },
+    get hasExpFilterState() {
+      return !!(this.expSearch || this.expFilterCat || this.expFilterStatus || this.expDateFrom || this.expDateTo)
     },
 
     get _filterCat() { return this.activeTab === 'income' ? this.donFilterCat : this.expFilterCat },
@@ -659,39 +734,163 @@
     _sortCls(prefix, col) { return this[prefix + 'SortBy'] === col ? (this[prefix + 'SortDir'] === 'asc' ? 'th-sort-asc' : 'th-sort-desc') : '' },
     get expFiltered() {
       const q = this.expSearch.toLowerCase()
-      return this.expenses.filter(r => {
-        const dt = r.expense_date?.slice(0, 10) || ''
-        if (this.expFilterStatus && r.status !== this.expFilterStatus) return false
-        if (this.expFilterCat && r.category !== this.expFilterCat) return false
-        if (this.expDateFrom && dt < this.expDateFrom) return false
-        if (this.expDateTo && dt > this.expDateTo) return false
-        return !q || [r.payee, r.note || r.description, r.expense_no, String(r.id || ''), r.expense_date?.slice(0, 10), r.member_id ? this.memberNames[r.member_id] : '', fmtCat(r.category)].filter(Boolean).join(' ').toLowerCase().includes(q)
-      })
+      return this.expenses.filter(r => this.expenseMatches(r, q))
     },
     get expGrouped() {
-      const map = {}
-      for (const x of this.expFiltered) {
-        const d = x.expense_date?.slice(0, 7) || 'unknown'
-        if (!map[d]) map[d] = { key: d, items: [], total: 0 }
-        map[d].items.push(x)
-        map[d].total += x.amount || 0
+      const q = this.expSearch.toLowerCase()
+      return this.expMonthKeys.map(key => {
+        const items = sortExpenses((this.expMonthItems[key] || []).filter(r => this.expenseMatches(r, q)))
+        const meta = this.expMonthMeta[key] || { count: 0, total: 0, categories: [] }
+        const count = this.hasExpFilterState ? items.length : meta.count
+        const total = this.hasExpFilterState ? items.reduce((sum, item) => sum + (item.amount || 0), 0) : meta.total
+        return { key, items, count, total }
+      })
+    },
+    get expYearGroups() {
+      const groups = []
+      for (const month of this.expGrouped) {
+        const key = month.key.slice(0, 4)
+        const prev = groups[groups.length - 1]
+        if (!prev || prev.key !== key) groups.push({ key, items: [month] })
+        else prev.items.push(month)
       }
-      const groups = Object.values(map).sort((a, b) => b.key.localeCompare(a.key))
-      for (const g of groups) g.items = sortExpenses(g.items)
       return groups
     },
     fmtMonth(key) {
-      if (key === 'unknown') return 'No date'
       const [y, m] = key.split('-')
       return new Date(+y, +m - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
+    },
+    fmtMonthShort(key) {
+      const [y, m] = key.split('-')
+      return new Date(+y, +m - 1).toLocaleString('default', { month: 'long' })
     },
     isExpMonthOpen(key) {
       return !!this.expMonthOpen[key]
     },
-    toggleExpMonth(key) {
-      this.expMonthOpen = { ...this.expMonthOpen, [key]: !this.isExpMonthOpen(key) }
+    isExpMonthLoaded(key) {
+      return !!this.expMonthLoaded[key]
     },
-    get expHasMore() { return this.expPage * perPage < this.expFiltered.length || this.expenses.length < this.expTotal },
+    isExpMonthLoading(key) {
+      return !!this.expMonthLoading[key]
+    },
+    isExpMonthDividerVisible(key) {
+      const idx = this.expMonthKeys.indexOf(key)
+      if (idx <= 0) return false
+      const prevKey = this.expMonthKeys[idx - 1]
+      return !this.isExpMonthOpen(prevKey)
+    },
+    expMonthTopCats(key) {
+      const meta = this.expMonthMeta[key] || { categories: [] }
+      const list = this.hasExpFilterState
+        ? Object.entries((this.expMonthItems[key] || []).reduce((map, item) => {
+          const cat = item.category || 'other'
+          map[cat] = (map[cat] || 0) + (item.amount || 0)
+          return map
+        }, {})).map(([category, total]) => ({ category, total }))
+        : (meta.categories || [])
+      return [...list].sort((a, b) => (b.total || 0) - (a.total || 0)).slice(0, 2)
+    },
+    expMonthBreakdown(key) {
+      const meta = this.expMonthMeta[key] || { total: 0, categories: [] }
+      const total = this.hasExpFilterState
+        ? (this.expMonthItems[key] || []).reduce((sum, item) => sum + (item.amount || 0), 0)
+        : (meta.total || 0)
+      if (!total) return []
+      const top = this.expMonthTopCats(key)
+      const used = top.reduce((sum, item) => sum + (item.total || 0), 0)
+      const items = top.map(item => ({
+        category: item.category,
+        total: item.total || 0,
+        pct: ((item.total || 0) / total) * 100,
+        color: catHex(item.category || 'other'),
+      }))
+      const other = total - used
+      if (other > 0) {
+        items.push({
+          category: 'other',
+          total: other,
+          pct: (other / total) * 100,
+          color: 'var(--c-text-dim)',
+          isOther: true,
+        })
+      }
+      return items.filter(item => item.total > 0)
+    },
+    expMonthBreakdownTooltip(key) {
+      const meta = this.expMonthMeta[key] || { categories: [] }
+      const list = this.hasExpFilterState
+        ? Object.entries((this.expMonthItems[key] || []).reduce((map, item) => {
+          const cat = item.category || 'other'
+          map[cat] = (map[cat] || 0) + (item.amount || 0)
+          return map
+        }, {})).map(([category, total]) => ({ category, total }))
+        : (meta.categories || [])
+      return [...list]
+        .filter(item => (item.total || 0) > 0)
+        .sort((a, b) => (b.total || 0) - (a.total || 0))
+        .map(item => `${fmtCat(item.category)} · $${fmtAmt(item.total || 0)}`)
+        .join('\n')
+    },
+    expBreakdownTone(seg) {
+      return seg.isOther
+        ? 'color-mix(in srgb, var(--c-text-dim) 12%, var(--c-surface))'
+        : `color-mix(in srgb, ${seg.color} 14%, var(--c-surface))`
+    },
+    expBreakdownStyle(key) {
+      const parts = this.expMonthBreakdown(key)
+      const gradient = parts.length
+        ? `linear-gradient(90deg, ${parts.map((seg, idx, arr) => {
+          const start = arr.slice(0, idx).reduce((sum, item) => sum + item.pct, 0)
+          const end = start + seg.pct
+          const tone = this.expBreakdownTone(seg)
+          return `${tone} ${start}%, ${tone} ${end}%`
+        }).join(', ')})`
+        : 'none'
+      return {
+        background: gradient,
+      }
+    },
+    expMonthHasVisibleData(key) {
+      const meta = this.expMonthMeta[key] || { count: 0, total: 0, categories: [] }
+      return this.hasExpFilterState ? !!(this.expMonthItems[key] || []).length : !!(meta.count || meta.total)
+    },
+    primeExpMonth(key) {
+      if (this.isExpMonthLoaded(key) || this.isExpMonthLoading(key) || expMonthPrimeReq[key]) return
+      expMonthPrimeReq[key] = fetchExpenseMonthItems(key).catch(error => {
+        delete expMonthPrimeReq[key]
+        throw error
+      })
+    },
+    primeExpMonthFromEvent(event) {
+      const key = event?.currentTarget?.dataset?.monthKey
+      if (!key) return
+      this.primeExpMonth(key)
+    },
+    async toggleExpMonth(key, event) {
+      event?.preventDefault?.()
+      event?.currentTarget?.blur?.()
+      const scrollY = window.scrollY
+      const next = !this.isExpMonthOpen(key)
+      if (next) setExpMonthFx(key)
+      else if (this.expMonthFxKey === key) this.expMonthFxKey = ''
+      this.expMonthOpen = { ...this.expMonthOpen, [key]: next }
+      stabilizeExpMonthScroll(scrollY)
+      if (next && !this.isExpMonthLoaded(key)) {
+        await loadExpenseMonth(key)
+        stabilizeExpMonthScroll(scrollY)
+      }
+      if (next) clearExpMonthFxAfter(key)
+    },
+    toggleExpMonthFromEvent(event) {
+      const key = event?.currentTarget?.dataset?.monthKey
+      if (!key) return
+      return this.toggleExpMonth(key, event)
+    },
+    async setExpView(view) {
+      this.expView = view
+      if (view === 'table' && !this.expRangeLoaded) await loadExpenseRange()
+    },
+    get expHasMore() { return this.expView === 'table' && this.expPage * perPage < this.expFiltered.length },
     get expPaged() {
       const k = this.expSortBy
       const resolve = k === '_submitter' ? r => this.memberNames[r.member_id] || ''
@@ -701,13 +900,13 @@
       return arr.slice(0, this.expPage * perPage)
     },
 
-    donSearch: initUrl.donSearch, donFilterCat: initUrl.donFilterCat, donFilterType: initUrl.donFilterType, donFilterMethod: initUrl.donFilterMethod, donDateFrom: initUrl.donDateFrom, donDateTo: initUrl.donDateTo, donPage: 1, donSortBy: '', donSortDir: 'asc',
+    donSearch: initUrl.donSearch, donFilterCat: initUrl.donFilterCat, donFilterType: initUrl.donFilterType, donFilterMethods: initUrl.donFilterMethods, donDateFrom: initUrl.donDateFrom, donDateTo: initUrl.donDateTo, donPage: 1, donSortBy: '', donSortDir: 'asc',
     get donFiltered() {
       const q = this.donSearch.toLowerCase()
       return this.donations.filter(r => {
         const dt = r.date_received?.slice(0, 10) || ''
         if (!incomeTypeMatch(r, this.donFilterType)) return false
-        if (!incomeMethodMatch(r, this.donFilterMethod)) return false
+        if (!incomeMethodMatch(r, this.donFilterMethods)) return false
         if (this.donFilterCat && bucketOf(r) !== this.donFilterCat) return false
         if (this.donDateFrom && dt < this.donDateFrom) return false
         if (this.donDateTo && dt > this.donDateTo) return false
@@ -716,8 +915,9 @@
     },
     get donHasMore() { return this.donPage * perPage < this.donFiltered.length || this.donations.length < this.donTotal },
     get donPaged() {
+      const page = Math.max(this.donPage || 1, 1)
       const arr = this.donSortBy ? this._doSort(this.donFiltered, this.donSortBy, this.donSortDir) : this.donFiltered
-      return arr.slice(0, this.donPage * perPage)
+      return arr.slice(0, page * perPage)
     },
 
     donorSearch: initUrl.donorSearch, donorPage: 1, donorSortBy: 'total', donorSortDir: 'desc',
@@ -733,6 +933,7 @@
 
     patchState(patch) {
       Object.assign(this, patch)
+      if (Object.keys(patch).some(k => k === 'expSearch' || k === 'expFilterCat' || k === 'expFilterStatus' || k === 'expDateFrom' || k === 'expDateTo')) refreshExpMonthOpen()
       writeUrl(this)
     },
     setYear(year) {
@@ -746,7 +947,7 @@
       this.patchState({ expFilterCat: '', expFilterStatus: '', expDateFrom: '', expDateTo: '', expPage: 1 })
     },
     clearIncomeFilters() {
-      this.patchState({ donFilterCat: '', donFilterType: '', donFilterMethod: '', donDateFrom: '', donDateTo: '', donPage: 1 })
+      this.patchState({ donFilterCat: '', donFilterType: '', donFilterMethods: [], donDateFrom: '', donDateTo: '', donPage: 1 })
     },
     switchTab(tab) {
       s.cancelAdd()
@@ -835,6 +1036,32 @@
     loadAll,
   })
 
+  s.patchState = patch => {
+    Object.assign(s, patch)
+    if (Object.keys(patch).some(k => k === 'expSearch' || k === 'expFilterCat' || k === 'expFilterStatus' || k === 'expDateFrom' || k === 'expDateTo')) refreshExpMonthOpen()
+    writeUrl(s)
+  }
+  s.setYear = year => {
+    const next = normYear(year)
+    if (next === s.year) return
+    s.year = next
+    writeUrl(s)
+    loadAll()
+  }
+  s.clearExpenseFilters = () => {
+    s.patchState({ expFilterCat: '', expFilterStatus: '', expDateFrom: '', expDateTo: '', expPage: 1 })
+  }
+  s.clearIncomeFilters = () => {
+    s.donFilterCat = ''
+    s.donFilterType = ''
+    s.donFilterMethods = []
+    s.donDateFrom = ''
+    s.donDateTo = ''
+    s.donPage = 1
+    writeUrl(s)
+    loadAll()
+  }
+
   bindForm(s, { api, onSave: loadAll })
 
   function refreshIncomeStats() {
@@ -850,6 +1077,8 @@
   }
 
   const BATCH = 200
+  const expMonthPrimeReq = {}
+  let expMonthFxTimer = 0
 
   async function loadRemaining(fn, params, key, totalKey) {
     let page = 2
@@ -864,22 +1093,98 @@
     }
   }
 
+  function syncLoadedExpenses() {
+    s.expenses = s.expMonthKeys.flatMap(key => s.expMonthItems[key] || [])
+  }
+
+  function monthMetaMap(items) {
+    const map = Object.fromEntries(s.expMonthKeys.map(key => [key, { count: 0, total: 0, categories: [] }]))
+    for (const item of items || []) map[item.month] = { count: item.count || 0, total: item.total || 0, categories: item.categories || [] }
+    return map
+  }
+
+  async function fetchExpenseMonthItems(key) {
+    const params = expenseMonthRange(key)
+    let page = 1
+    let items = []
+    let total = 0
+    while (true) {
+      const res = await api.getExpenses({ ...params, limit: BATCH, page })
+      const batch = res.items || []
+      total = res.total ?? (items.length + batch.length)
+      items = items.concat(batch)
+      if (!batch.length || items.length >= total) break
+      page++
+    }
+    return items
+  }
+
+  async function loadExpenseMonth(key) {
+    if (s.expMonthLoaded[key] || s.expMonthLoading[key]) return
+    s.expMonthLoading = { ...s.expMonthLoading, [key]: true }
+    try {
+      const items = await (expMonthPrimeReq[key] || fetchExpenseMonthItems(key))
+      s.expMonthItems = { ...s.expMonthItems, [key]: items }
+      s.expMonthLoaded = { ...s.expMonthLoaded, [key]: true }
+      syncLoadedExpenses()
+      refreshExpMonthOpen()
+    } finally {
+      delete expMonthPrimeReq[key]
+      s.expMonthLoading = { ...s.expMonthLoading, [key]: false }
+    }
+  }
+
+  async function loadExpenseRange() {
+    if (s.expRangeLoaded) return
+    const params = { dateFrom: `${years[years.length - 1]}-01-01`, dateTo: todayIso, limit: BATCH, page: 1 }
+    let res = await api.getExpenses(params)
+    let items = res.items || []
+    let total = res.total ?? items.length
+    let page = 2
+    while (items.length < total) {
+      const next = await api.getExpenses({ ...params, page })
+      const batch = next.items || []
+      if (!batch.length) break
+      items = items.concat(batch)
+      total = next.total ?? total
+      page++
+    }
+    const nextItems = {}
+    for (const key of s.expMonthKeys) nextItems[key] = []
+    for (const item of items) {
+      const key = expenseMonthKey(item)
+      if (!nextItems[key]) nextItems[key] = []
+      nextItems[key].push(item)
+    }
+    s.expMonthItems = nextItems
+    s.expMonthLoaded = Object.fromEntries(s.expMonthKeys.map(key => [key, true]))
+    s.expRangeLoaded = true
+    syncLoadedExpenses()
+    refreshExpMonthOpen()
+  }
+
   async function loadAll() {
     s.loading = true; s.loadErr = null
     s.expPage = 1; s.donPage = 1; s.donorPage = 1
-    const dateP = { dateFrom: `${s.year}-01-01`, dateTo: `${s.year}-12-31` }
+    const dateP = { dateFrom: `${curYear}-01-01`, dateTo: `${curYear}-12-31` }
     try {
-      const [inc, exp, mem, summary, donors] = await Promise.all([
+      const [inc, mem, summary, donors] = await Promise.all([
         api.getIncome({ ...dateP, limit: BATCH, page: 1 }),
-        api.getExpenses({ ...dateP, limit: BATCH, page: 1 }),
         api.getMembers({ limit: 500 }),
-        api.getFinanceSummary({ year: s.year }),
-        api.getDonorsSummary({ year: s.year, limit: 500 }),
+        api.getFinanceSummary({ year: curYear }),
+        api.getDonorsSummary({ year: curYear, limit: 500 }),
       ])
       s.donations = inc.items || []
-      s.expenses = exp.items || []
       s.donTotal = inc.total ?? s.donations.length
-      s.expTotal = exp.total ?? s.expenses.length
+      s.expenses = []
+      s.expMonthMeta = monthMetaMap(summary.exp_months || [])
+      s.expMonthItems = {}
+      s.expMonthLoaded = {}
+      s.expMonthLoading = {}
+      s.expMonthFxKey = ''
+      s.expRangeLoaded = false
+      s.expMonthOpen = { [currentExpenseMonthKey]: true }
+      s.expTotal = 0
       s.expMonth = summary.exp_month || 0
       s.expPrevMonth = summary.exp_prev_month || 0
       s.donorsMonth = summary.donors_month || 0
@@ -889,17 +1194,17 @@
       const { names, unames } = parseMemberNames(mem.items || [])
       s.memberNames = names
       s.userNames = unames
+      await loadExpenseMonth(currentExpenseMonthKey)
       refreshExpMonthOpen()
       refreshIncomeStats()
     } catch (e) {
       s.loadErr = e.message || 'Failed to load finance data'
     } finally { s.loading = false }
     loadRemaining(api.getIncome, dateP, 'donations', 'donTotal').then(refreshIncomeStats)
-    loadRemaining(api.getExpenses, dateP, 'expenses', 'expTotal').then(refreshExpMonthOpen)
   }
 
   function refreshExpMonthOpen() {
-    const keys = [...new Set(sortExpenses(s.expFiltered).map(expenseMonthKey))]
+    const keys = s.expMonthKeys
     if (!keys.length) {
       s.expMonthOpen = {}
       return
@@ -910,10 +1215,30 @@
     s.expMonthOpen = next
   }
 
+  function setExpMonthFx(key) {
+    clearTimeout(expMonthFxTimer)
+    s.expMonthFxKey = key
+  }
+
+  function clearExpMonthFxAfter(key, delay = 220) {
+    clearTimeout(expMonthFxTimer)
+    expMonthFxTimer = setTimeout(() => {
+      if (s.expMonthFxKey === key) s.expMonthFxKey = ''
+    }, delay)
+  }
+
+  function stabilizeExpMonthScroll(scrollY) {
+    if (typeof scrollY !== 'number') return
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (Math.abs(window.scrollY - scrollY) <= 1) return
+      window.scrollTo({ top: scrollY, behavior: 'auto' })
+    }))
+  }
+
   function applyUrlStateFromLocation() {
     const next = urlState()
-    const yearChanged = next.year !== s.year
     s.activeTab = next.activeTab
+    s.year = curYear
     s.expPage = 1
     s.donPage = 1
     s.donorPage = 1
@@ -925,14 +1250,11 @@
     s.donSearch = next.donSearch
     s.donFilterCat = next.donFilterCat
     s.donFilterType = next.donFilterType
+    s.donFilterMethods = next.donFilterMethods
     s.donDateFrom = next.donDateFrom
     s.donDateTo = next.donDateTo
     s.donorSearch = next.donorSearch
     refreshExpMonthOpen()
-    if (yearChanged) {
-      s.year = next.year
-      loadAll()
-    }
   }
 
   window.addEventListener('hashchange', applyUrlStateFromLocation)

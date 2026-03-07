@@ -400,6 +400,41 @@ test.describe('e2e: income', () => {
     expect(body.items[0].amount).toBe(10000)
   })
 
+  test('income filter clear all restores rows after empty result', async ({ page }) => {
+    const create = await page.request.post(`${API}/api/income`, {
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
+      data: { amount: 4321, type: 'donation', method: 'cash', category: 'general', date_received: '2026-03-07', note: 'e2e clear all regression' },
+    })
+    expect(create.ok()).toBeTruthy()
+
+    await page.goto('/app/finance/?tab=income#income')
+    await page.locator('.card-tab-group').waitFor()
+    const section = page.locator('section').nth(1)
+    await expect(section.locator('.recent-inc-item').first()).toBeVisible({ timeout: 15_000 })
+
+    const before = await section.locator('.recent-inc-item').count()
+    expect(before).toBeGreaterThan(0)
+
+    await section.locator('.btn-filter').click()
+    await section.locator('.filter-dropdown select').first().selectOption('sale')
+    await page.waitForTimeout(150)
+
+    if (await section.locator('.recent-inc-item').count()) {
+      const nextYear = String(new Date().getFullYear() + 1)
+      await section.locator('.filter-dropdown input[type="date"]').first().fill(`${nextYear}-01-01`)
+    }
+
+    await expect(section.locator('.recent-inc-item')).toHaveCount(0)
+    await expect(section).toContainText('No income matches filters')
+
+    await expect(section.locator('.filter-dropdown')).toBeVisible()
+    await section.locator('.filter-dropdown .btn-link', { hasText: 'Clear all' }).click()
+
+    await expect(page).toHaveURL(/\?tab=income#income$/)
+    await expect(section.locator('.recent-inc-item').first()).toBeVisible({ timeout: 15_000 })
+    expect(await section.locator('.recent-inc-item').count()).toBeGreaterThan(0)
+  })
+
   test('donors tab loads real data', async ({ page }) => {
     await page.goto('/app/finance/#donors')
     await page.locator('.card-tab-group').waitFor()

@@ -1,6 +1,43 @@
 import { test, expect } from '@playwright/test'
 import { loginAs, API } from './fixtures.js'
 
+function isoMonthDate(offsetMonths = 0, day = '01') {
+  const d = new Date()
+  d.setDate(1)
+  d.setMonth(d.getMonth() + offsetMonths)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${day}`
+}
+
+function summarizeExpenses(expenses = []) {
+  const monthMap = new Map()
+  for (const expense of expenses) {
+    const month = expense.expense_date?.slice(0, 7)
+    if (!month) continue
+    const prev = monthMap.get(month) || { month, count: 0, total: 0, categories: new Map() }
+    prev.count += 1
+    prev.total += expense.amount || 0
+    const category = expense.category || 'other'
+    prev.categories.set(category, (prev.categories.get(category) || 0) + (expense.amount || 0))
+    monthMap.set(month, prev)
+  }
+  const now = new Date()
+  const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`
+  return {
+    exp_month: monthMap.get(curMonth)?.total || 0,
+    exp_prev_month: monthMap.get(prevMonth)?.total || 0,
+    donors_month: 0,
+    donors_prev_month: 0,
+    exp_months: [...monthMap.values()].sort((a, b) => b.month.localeCompare(a.month)).map(item => ({
+      month: item.month,
+      count: item.count,
+      total: item.total,
+      categories: [...item.categories.entries()].sort((a, b) => b[1] - a[1]).map(([category, total]) => ({ category, total })),
+    })),
+  }
+}
+
 function mockFinance(page, { donations = [], expenses = [], members = [], auditLogs = [] } = {}) {
   return page.route(`${API}/**`, async route => {
     const url = new URL(route.request().url())
@@ -45,10 +82,20 @@ function mockFinance(page, { donations = [], expenses = [], members = [], auditL
         expenses.push(e)
         return route.fulfill({ json: e })
       }
-      return route.fulfill({ json: { items: [...expenses], total: expenses.length } })
+      const dateFrom = url.searchParams.get('dateFrom') || ''
+      const dateTo = url.searchParams.get('dateTo') || ''
+      const items = expenses.filter(e => {
+        const dt = e.expense_date?.slice(0, 10) || ''
+        if (dateFrom && dt < dateFrom) return false
+        if (dateTo && dt > dateTo) return false
+        return true
+      })
+      return route.fulfill({ json: { items, total: items.length } })
     }
 
     if (path === '/api/members') return route.fulfill({ json: { items: members, total: members.length } })
+    if (path === '/api/finance/summary' && method === 'GET') return route.fulfill({ json: summarizeExpenses(expenses) })
+    if (path === '/api/donors/summary' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
     if (path.startsWith('/api/expenses/') && method === 'DELETE') {
       const id = +path.split('/').at(-1)
       const i = expenses.findIndex(e => e.id === id)
@@ -156,6 +203,8 @@ test.describe('finance section', () => {
 
     await page.click('button:has-text("+ Income")')
     await expect(page.getByRole('heading', { name: 'Add Income' })).toBeVisible()
+    await expect(page.locator('#don-type')).toBeVisible()
+    await expect(page.locator('#don-type option')).toHaveCount(7)
 
     await page.locator('#don-amount').waitFor({ timeout: 5000 })
     await page.fill('#don-amount', '50.00')
@@ -254,13 +303,15 @@ test.describe('finance section', () => {
     await page.locator('tr.row-link').first().waitFor()
 
     const section = page.locator('section').first()
-    await section.locator('.cat-pill-seg').filter({ hasText: 'Kitchen' }).click({ force: true })
+    await section.locator('.btn-filter').click()
+    await section.locator('label', { hasText: 'Category' }).locator('..').locator('select').selectOption('kitchen')
+    await section.locator('.filter-dropdown .btn-primary').click()
 
     await expect(section.locator('tr.row-link')).toHaveCount(1)
     await expect(section.locator('tr.row-link').first()).toContainText('Kitchen')
   })
 
-  test('expense category pill toggles filter on and off', async ({ page }) => {
+  test('expense category filter toggles on and off', async ({ page }) => {
     const expenses = [
       { id: 1, amount: 1000, payee: 'A', category: 'kitchen', expense_date: '2025-01-01', status: 'submitted' },
       { id: 2, amount: 2000, payee: 'B', category: 'utilities', expense_date: '2025-01-02', status: 'submitted' },
@@ -270,11 +321,15 @@ test.describe('finance section', () => {
     await page.locator('tr.row-link').first().waitFor()
 
     const section = page.locator('section').first()
-    const pill = section.locator('.cat-pill-seg').filter({ hasText: 'Kitchen' })
-    await pill.click({ force: true })
+    await section.locator('.btn-filter').click()
+    const category = section.locator('label', { hasText: 'Category' }).locator('..').locator('select')
+    await category.selectOption('kitchen')
+    await section.locator('.filter-dropdown .btn-primary').click()
     await expect(section.locator('tr.row-link')).toHaveCount(1)
 
-    await pill.click({ force: true })
+    await section.locator('.btn-filter').click()
+    await category.selectOption('')
+    await section.locator('.filter-dropdown .btn-primary').click()
     await expect(section.locator('tr.row-link')).toHaveCount(2)
   })
 
@@ -290,7 +345,7 @@ test.describe('finance section', () => {
 
     const section = page.locator('section').first()
     await section.locator('.btn-filter').click()
-    await section.locator('.filter-dropdown select').first().selectOption('approved')
+    await section.locator('label', { hasText: 'Status' }).locator('..').locator('select').selectOption('approved')
     await section.locator('.filter-dropdown .btn-primary').click()
 
     await expect(section.locator('tr.row-link')).toHaveCount(2)
@@ -308,7 +363,7 @@ test.describe('finance section', () => {
     await section.locator('.btn-filter').click()
     await expect(section.locator('.filter-dropdown')).toBeVisible()
 
-    await section.locator('.filter-dropdown select').first().selectOption('submitted')
+    await section.locator('label', { hasText: 'Status' }).locator('..').locator('select').selectOption('submitted')
     await expect(section.locator('.filter-dropdown')).toBeVisible()
 
     await section.locator('.filter-dropdown input[type="date"]').first().fill('2025-01-01')
@@ -363,14 +418,45 @@ test.describe('finance section', () => {
     const section = page.locator('section').nth(1)
     await section.locator('.recent-inc-item').first().waitFor()
     await expect(section.locator('.recent-inc-item')).toHaveCount(1)
-    await expect(section.locator('.recent-inc-item').first()).toContainText('Wire')
+    await expect(section.locator('.recent-inc-item').first()).toContainText(/wire/i)
     await expect(page).toHaveURL(/inc_method=wire/)
 
-    await expect(section.locator('.chip')).toContainText([/Wire/])
-    await section.locator('.chip').filter({ hasText: /Wire/ }).click()
+    await expect(section.locator('.chip')).toContainText([/wire/i])
+    await section.locator('.chip').filter({ hasText: /wire/i }).click()
 
     await expect(section.locator('.recent-inc-item')).toHaveCount(2)
     await expect(page).not.toHaveURL(/inc_method=wire/)
+  })
+
+  test('income method filter hides empty methods and supports multi-select', async ({ page }) => {
+    const donations = [
+      { id: 1, type: 'donation', amount: 5000, method: 'cash', category: 'general', date_received: '2025-01-01', note: 'cash gift' },
+      { id: 2, type: 'sale', amount: 7000, method: 'wire', category: 'other', date_received: '2025-01-02', note: 'wire sale' },
+      { id: 3, type: 'grant', amount: 9000, method: 'bank-deposit', category: 'other', date_received: '2025-01-03', note: 'grant deposit' },
+    ]
+    await mockFinance(page, { donations })
+    await openFinance(page, 'income')
+
+    const section = page.locator('section').nth(1)
+    await section.locator('.recent-inc-item').first().waitFor()
+    await section.locator('.btn-filter').click()
+
+    const typeSelect = section.locator('.filter-dropdown select').first()
+    await expect(typeSelect).toBeVisible()
+
+    const methodSelect = section.locator('.filter-dropdown .filter-multi-select')
+    await expect(methodSelect).toBeVisible()
+    const methodOptions = await methodSelect.locator('option').allTextContents()
+    expect(methodOptions).toEqual(expect.arrayContaining(['Cash · 1', 'Wire · 1', 'Bank-Deposit · 1']))
+    expect(methodOptions.some(text => /Cheque/i.test(text))).toBe(false)
+
+    await methodSelect.selectOption(['cash', 'wire'])
+
+    await expect(section.locator('.recent-inc-item')).toHaveCount(2)
+    await expect(page).toHaveURL(/inc_method=/)
+    await expect(page).toHaveURL(/cash/)
+    await expect(page).toHaveURL(/wire/)
+    await expect(section.locator('.filter-inline-chip')).toContainText(['Cash ×', 'Wire ×'])
   })
 
   test('donation search filter reduces results', async ({ page }) => {
@@ -402,7 +488,7 @@ test.describe('finance section', () => {
 
     const section = page.locator('section').first()
     await section.locator('.btn-filter').click()
-    await section.locator('.filter-dropdown select').first().selectOption('approved')
+    await section.locator('label', { hasText: 'Status' }).locator('..').locator('select').selectOption('approved')
     await section.locator('.filter-dropdown input[type="date"]').first().fill('2025-01-03')
     await section.locator('.filter-dropdown .btn-primary').click()
 
@@ -419,8 +505,101 @@ test.describe('finance section', () => {
     await expect(section.locator('tr.row-link').first()).toContainText('C')
 
     await section.locator('.btn-filter').click()
-    await expect(section.locator('.filter-dropdown select').first()).toHaveValue('approved')
+    await expect(section.locator('label', { hasText: 'Status' }).locator('..').locator('select')).toHaveValue('approved')
     await expect(section.locator('.filter-dropdown input[type="date"]').first()).toHaveValue('2025-01-03')
+  })
+
+  test('expenses list groups months under sticky year rails without a year selector', async ({ page }) => {
+    const curYear = String(new Date().getFullYear())
+    const prevYear = String(new Date().getFullYear() - 1)
+    const oldestYear = String(new Date().getFullYear() - 2)
+    const expenses = [
+      { id: 1, amount: 1000, payee: 'Current Year Expense', category: 'kitchen', expense_date: `${curYear}-03-01`, status: 'submitted' },
+      { id: 2, amount: 1000, payee: 'Temple Supplies', category: 'kitchen', expense_date: `${prevYear}-03-01`, status: 'submitted' },
+    ]
+    await mockFinance(page, { expenses })
+    await page.goto('/app/finance/#expenses')
+    await page.locator('.card-tab-group').waitFor()
+    await page.locator('.finance-exp-item').first().waitFor()
+
+    await expect(page.locator('.page-header .year-select')).toHaveCount(0)
+
+    const section = page.locator('section').first()
+    await section.locator('.btn-filter').click()
+    await expect(section.locator('.filter-dropdown .year-select')).toHaveCount(0)
+    await expect(section.locator('.finance-year-sticky')).toHaveText([curYear, prevYear, oldestYear])
+  })
+
+  test('expenses list lazy-loads previous months only when expanded', async ({ page }) => {
+    const currentExpenseDate = isoMonthDate(0, '05')
+    const previousExpenseDate = isoMonthDate(-1, '06')
+    const currentMonthStart = `${currentExpenseDate.slice(0, 7)}-01`
+    const previousMonthStart = `${previousExpenseDate.slice(0, 7)}-01`
+    const expenseRequests = []
+    const summary = {
+      exp_month: 5000,
+      exp_prev_month: 3000,
+      donors_month: 0,
+      donors_prev_month: 0,
+      exp_months: [
+        { month: currentExpenseDate.slice(0, 7), count: 1, total: 5000 },
+        { month: previousExpenseDate.slice(0, 7), count: 1, total: 3000 },
+      ],
+    }
+
+    await page.route(`${API}/**`, async route => {
+      const url = new URL(route.request().url())
+      const method = route.request().method()
+      const path = url.pathname
+
+      if (path === '/api/expenses' && method === 'GET') {
+        const dateFrom = url.searchParams.get('dateFrom')
+        expenseRequests.push({ dateFrom, level: url.searchParams.get('level') })
+        const items = dateFrom === currentMonthStart
+          ? [{ id: 1, amount: 5000, payee: 'Current Expense', category: 'kitchen', expense_date: currentExpenseDate, status: 'submitted' }]
+          : dateFrom === previousMonthStart
+            ? [{ id: 2, amount: 3000, payee: 'Previous Expense', category: 'travel', expense_date: previousExpenseDate, status: 'approved' }]
+            : []
+        return route.fulfill({ json: { items, total: items.length } })
+      }
+
+      if (path === '/api/income' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
+      if (path === '/api/members' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
+      if (path === '/api/finance/summary' && method === 'GET') return route.fulfill({ json: summary })
+      if (path === '/api/donors/summary' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
+      if (method !== 'GET') return route.fulfill({ status: 404, json: { error: 'Unexpected mutation in mock: ' + path } })
+      return route.fulfill({ json: { items: [], total: 0 } })
+    })
+
+    await page.goto('/app/finance/#expenses')
+    await page.locator('.card-tab-group').waitFor()
+    await expect(page.locator('.finance-exp-item').filter({ hasText: 'Current Expense' })).toBeVisible()
+    expect(expenseRequests.filter(req => req.dateFrom === currentMonthStart)).toHaveLength(1)
+    expect(expenseRequests.every(req => req.level === 'compact')).toBe(true)
+    expect(expenseRequests.map(req => req.dateFrom)).not.toContain(previousMonthStart)
+
+    await page.locator('.exp-group-header').nth(1).click()
+    await expect(page.locator('.finance-exp-item').filter({ hasText: 'Previous Expense' })).toBeVisible()
+    expect(expenseRequests.map(req => req.dateFrom)).toContain(previousMonthStart)
+  })
+
+  test('expense month header shows thin category breakdown next to total', async ({ page }) => {
+    const currentMonthDate = isoMonthDate(0, '05')
+    const expenses = [
+      { id: 1, amount: 340000, payee: 'Florist', category: 'flowers', expense_date: currentMonthDate, status: 'submitted' },
+      { id: 2, amount: 120000, payee: 'Temple Store', category: 'deity', expense_date: currentMonthDate, status: 'approved' },
+      { id: 3, amount: 45000, payee: 'Kitchen Goods', category: 'kitchen', expense_date: currentMonthDate, status: 'approved' },
+      { id: 4, amount: 15000, payee: 'More Flowers', category: 'flowers', expense_date: currentMonthDate, status: 'approved' },
+    ]
+    await mockFinance(page, { expenses })
+
+    await page.goto('/app/finance/#expenses')
+    await page.locator('.card-tab-group').waitFor()
+
+    const header = page.locator('.exp-group-header').first()
+    await expect(header.locator('.exp-group-count')).toHaveText('4')
+    await expect(header.locator('.exp-group-breakdown')).toHaveAttribute('title', /Flowers · \$3,550\.00\nDeity · \$1,200\.00\nKitchen · \$450\.00/)
+    await expect(header.locator('.exp-group-total')).toHaveText('$5,200.00')
   })
 
 
@@ -771,19 +950,15 @@ test.describe('finance section', () => {
     await page.locator('tr.row-link').first().waitFor()
 
     await page.locator('tr.row-link').filter({ hasText: 'Receipt Expense' }).click()
-    await page.click('button:has-text("Edit")')
     const firstEdit = page.locator('.modal-overlay:visible').first()
     await expect(firstEdit.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
     await expect(firstEdit.getByText('Receipts')).toBeVisible()
     await expect(firstEdit.locator('.receipt-thumb')).toHaveCount(1)
 
     await page.click('button:has-text("Cancel")')
-    await expect(page.getByRole('heading', { name: 'Expense' })).toBeVisible()
-    await page.click('button:has-text("Close")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible()
 
     await page.locator('tr.row-link').filter({ hasText: 'Plain Expense' }).click()
-    await page.click('button:has-text("Edit")')
     const secondEdit = page.locator('.modal-overlay:visible').first()
     await expect(secondEdit.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
     await expect(secondEdit.getByText('Receipts')).toHaveCount(0)
@@ -791,12 +966,9 @@ test.describe('finance section', () => {
     await expect(page.locator('.lightbox')).not.toBeVisible()
 
     await page.click('button:has-text("Cancel")')
-    await expect(page.getByRole('heading', { name: 'Expense' })).toBeVisible()
-    await page.click('button:has-text("Close")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible()
 
     await page.locator('tr.row-link').filter({ hasText: 'Receipt Expense' }).click()
-    await page.click('button:has-text("Edit")')
     const reopenedFirstEdit = page.locator('.modal-overlay:visible').first()
     await expect(reopenedFirstEdit.getByText('Receipts')).toBeVisible()
     await expect(reopenedFirstEdit.locator('.receipt-thumb')).toHaveCount(1)
@@ -927,7 +1099,6 @@ test.describe('finance section', () => {
     await page.locator('tr.row-link').first().waitFor()
 
     await page.locator('tr.row-link').first().click()
-    await page.click('button:has-text("Edit")')
     const amount = page.locator('#exp-amount:visible')
     await amount.waitFor({ timeout: 5000 })
     await amount.evaluate((el, v) => {
@@ -973,7 +1144,7 @@ test.describe('finance section', () => {
     await expect(page.locator('.modal')).toContainText('#1')
     await expect(page.locator('.modal')).toContainText('History')
     await expect(page.locator('.modal')).toContainText('Updated')
-    await expect(page.locator('.modal')).toContainText('invoice paid')
+    await expect(page.locator('#don-note')).toHaveValue('invoice paid')
   })
 
   test('edit expense: member payee stays populated in modal', async ({ page }) => {
@@ -1039,11 +1210,11 @@ test.describe('finance section', () => {
     await expect(row2.locator('.btn-quick-pay')).toBeVisible()
     await expect(row2.locator('.btn-quick-pay')).toHaveText('Paid')
 
-    await row1.locator('.btn-quick-approve').click()
+    await row1.locator('.btn-quick-approve').click({ force: true })
     await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
     expect(expenses[0].status).toBe('approved')
 
-    await row2.locator('.btn-quick-pay').click()
+    await row2.locator('.btn-quick-pay').click({ force: true })
     await expect(page.locator('.toast-success').filter({ hasText: 'paid' })).toBeVisible({ timeout: 5000 })
     expect(expenses[1].status).toBe('paid')
   })
@@ -1071,7 +1242,7 @@ test.describe('finance section', () => {
     const btn = page.locator('.btn-quick-approve')
     await expect(btn).toBeVisible()
 
-    await btn.click()
+    await btn.click({ force: true })
     await expect(btn).toHaveClass(/btn-loading/, { timeout: 3000 })
 
     resolveApproval()
@@ -1097,7 +1268,7 @@ test.describe('finance section', () => {
     await openFinance(page)
     await page.locator('tr.row-link').first().waitFor()
     const btn = page.locator('.btn-quick-approve')
-    await btn.click()
+    await btn.click({ force: true })
 
     await expect(page.locator('.toast-success')).toContainText('Approval recorded', { timeout: 5000 })
     await expect(page.locator('.btn-quick-approve')).toHaveCount(0)
@@ -1212,7 +1383,6 @@ test.describe('finance section', () => {
     await page.locator('tr.row-link').first().waitFor()
 
     await page.locator('tr.row-link').first().click()
-    await page.click('button:has-text("Edit")')
     await expect(page.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
 
     const catSelect = page.locator('#exp-cat')
@@ -1238,7 +1408,6 @@ test.describe('finance section', () => {
     await page.locator('tr.row-link').first().waitFor()
 
     await page.locator('tr.row-link').first().click()
-    await page.click('button:has-text("Edit")')
     await expect(page.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
 
     const catSelect = page.locator('#exp-cat')
@@ -1248,7 +1417,7 @@ test.describe('finance section', () => {
   })
 
   test('list view: hover card shows approve and reject quick actions', async ({ page }) => {
-    const expenses = [{ id: 1, amount: 5000, payee: 'Costco', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+    const expenses = [{ id: 1, amount: 5000, payee: 'Costco', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'submitted' }]
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
     await page.locator('.card-tab-group').waitFor()
@@ -1260,7 +1429,7 @@ test.describe('finance section', () => {
   })
 
   test('list view: clicking expense row opens same edit modal as quick action', async ({ page }) => {
-    const expenses = [{ id: 1, amount: 5000, payee: 'Costco', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+    const expenses = [{ id: 1, amount: 5000, payee: 'Costco', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'submitted' }]
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
     await page.locator('.card-tab-group').waitFor()
@@ -1273,11 +1442,12 @@ test.describe('finance section', () => {
   })
 
   test('list view: expenses within month are ordered by status then latest update', async ({ page }) => {
+    const expDate = isoMonthDate(0, '03')
     const expenses = [
-      { id: 1, amount: 5000, payee: 'Submitted New', category: 'kitchen', expense_date: '2025-03-03', status: 'submitted', created_at: '2025-03-03T09:00:00Z', updated_at: '2025-03-05T10:00:00Z' },
-      { id: 2, amount: 4000, payee: 'Approved New', category: 'travel', expense_date: '2025-03-03', status: 'approved', created_at: '2025-03-03T09:00:00Z', updated_at: '2025-03-06T10:00:00Z' },
-      { id: 3, amount: 3000, payee: 'Submitted Old', category: 'rent', expense_date: '2025-03-03', status: 'submitted', created_at: '2025-03-03T09:00:00Z', updated_at: '2025-03-04T10:00:00Z' },
-      { id: 4, amount: 2000, payee: 'Paid New', category: 'utilities', expense_date: '2025-03-03', status: 'paid', created_at: '2025-03-03T09:00:00Z', updated_at: '2025-03-07T10:00:00Z' },
+      { id: 1, amount: 5000, payee: 'Submitted New', category: 'kitchen', expense_date: expDate, status: 'submitted', created_at: `${expDate}T09:00:00Z`, updated_at: `${expDate.slice(0, 8)}05T10:00:00Z` },
+      { id: 2, amount: 4000, payee: 'Approved New', category: 'travel', expense_date: expDate, status: 'approved', created_at: `${expDate}T09:00:00Z`, updated_at: `${expDate.slice(0, 8)}06T10:00:00Z` },
+      { id: 3, amount: 3000, payee: 'Submitted Old', category: 'rent', expense_date: expDate, status: 'submitted', created_at: `${expDate}T09:00:00Z`, updated_at: `${expDate.slice(0, 8)}04T10:00:00Z` },
+      { id: 4, amount: 2000, payee: 'Paid New', category: 'utilities', expense_date: expDate, status: 'paid', created_at: `${expDate}T09:00:00Z`, updated_at: `${expDate.slice(0, 8)}07T10:00:00Z` },
     ]
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
@@ -1293,9 +1463,11 @@ test.describe('finance section', () => {
   })
 
   test('list view: expense months are collapsible', async ({ page }) => {
+    const currentMonthDate = isoMonthDate(0, '03')
+    const previousMonthDate = isoMonthDate(-1, '10')
     const expenses = [
-      { id: 1, amount: 5000, payee: 'March Expense', category: 'kitchen', expense_date: '2025-03-03', status: 'submitted' },
-      { id: 2, amount: 3000, payee: 'February Expense', category: 'travel', expense_date: '2025-02-10', status: 'approved' },
+      { id: 1, amount: 5000, payee: 'Current Expense', category: 'kitchen', expense_date: currentMonthDate, status: 'submitted' },
+      { id: 2, amount: 3000, payee: 'Previous Expense', category: 'travel', expense_date: previousMonthDate, status: 'approved' },
     ]
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
@@ -1303,15 +1475,26 @@ test.describe('finance section', () => {
     await page.locator('.finance-exp-item').first().waitFor()
 
     const headers = page.locator('.exp-group-header')
-    await expect(headers).toHaveCount(2)
-    await expect(page.locator('.finance-exp-item').filter({ hasText: 'March Expense' })).toBeVisible()
-    await expect(page.locator('.finance-exp-item').filter({ hasText: 'February Expense' })).toHaveCount(0)
+    const current = page.locator('.finance-exp-item').filter({ hasText: 'Current Expense' })
+    const previous = page.locator('.finance-exp-item').filter({ hasText: 'Previous Expense' })
+    await expect(headers.first()).toContainText(new Date(currentMonthDate).toLocaleString('default', { month: 'long' }))
+    await expect(current).toBeVisible()
+    await expect(previous).toBeHidden()
 
     await headers.nth(1).click()
-    await expect(page.locator('.finance-exp-item').filter({ hasText: 'February Expense' })).toBeVisible()
+    await expect(previous).toBeVisible()
 
     await headers.nth(0).click()
-    await expect(page.locator('.finance-exp-item').filter({ hasText: 'March Expense' })).toHaveCount(0)
+    await expect(current).toBeHidden()
+
+    await headers.nth(0).click()
+    await expect(current).toBeVisible()
+
+    await headers.nth(1).click()
+    await expect(previous).toBeHidden()
+
+    await headers.nth(1).click()
+    await expect(previous).toBeVisible()
   })
 
   test('submitted expense edit shows single note label and status actions in history', async ({ page }) => {
@@ -1362,7 +1545,7 @@ test.describe('finance section', () => {
       if (path === '/api/expenses/1/approvals' && method === 'GET') return route.fulfill({ json: approvals })
       if (path === '/api/members' && method === 'GET') return route.fulfill({ json: { items: members, total: members.length } })
       if (path === '/api/income' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
-      if (path === '/api/finance/summary' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
+      if (path === '/api/finance/summary' && method === 'GET') return route.fulfill({ json: { exp_month: 5000, exp_prev_month: 0, donors_month: 0, donors_prev_month: 0, exp_months: [{ month: expense.expense_date.slice(0, 7), count: 1, total: expense.amount }] } })
       if (path === '/api/expenses/1/reject' && method === 'POST') {
         expense.status = 'rejected'
         return route.fulfill({ json: { ...expense, updated_by: 9 } })

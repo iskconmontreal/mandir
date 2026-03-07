@@ -22,7 +22,13 @@
   <div class="field" :if="location.pathname.includes('/app/finance')">
     <label for="don-type">Type</label>
     <select id="don-type" :oninput="e => { donForm.type = e.target.value; if (e.target.value !== 'donation') donForm.category = ''; else if (!donForm.category) donForm.category = 'general' }" :onchange="e => { donForm.type = e.target.value; if (e.target.value !== 'donation') donForm.category = ''; else if (!donForm.category) donForm.category = 'general' }">
-      <option :each="t in incomeTypes" :value="t" :selected="donForm.type === t" :text="fmt(t)"></option>
+      <option value="donation" :selected="donForm.type === 'donation'" :text="fmt('donation')"></option>
+      <option value="sale" :selected="donForm.type === 'sale'" :text="fmt('sale')"></option>
+      <option value="grant" :selected="donForm.type === 'grant'" :text="fmt('grant')"></option>
+      <option value="interest" :selected="donForm.type === 'interest'" :text="fmt('interest')"></option>
+      <option value="refund" :selected="donForm.type === 'refund'" :text="fmt('refund')"></option>
+      <option value="rebate" :selected="donForm.type === 'rebate'" :text="fmt('rebate')"></option>
+      <option value="other" :selected="donForm.type === 'other'" :text="fmt('other')"></option>
     </select>
   </div>
   <div class="field">
@@ -32,7 +38,15 @@
   <div class="field">
     <label for="don-method">Method</label>
     <select id="don-method" :oninput="e => donForm.method = e.target.value" :onchange="e => donForm.method = e.target.value">
-      <option :each="m in donMethods" :value="m" :selected="donForm.method === m" :text="fmt(m)"></option>
+      <option value="cash" :selected="donForm.method === 'cash'" :text="fmt('cash')"></option>
+      <option value="cheque" :selected="donForm.method === 'cheque'" :text="fmt('cheque')"></option>
+      <option value="e-transfer" :selected="donForm.method === 'e-transfer'" :text="fmt('e-transfer')"></option>
+      <option value="card" :selected="donForm.method === 'card'" :text="fmt('card')"></option>
+      <option value="direct-deposit" :selected="donForm.method === 'direct-deposit'" :text="fmt('direct-deposit')"></option>
+      <option value="bank-deposit" :selected="donForm.method === 'bank-deposit'" :text="fmt('bank-deposit')"></option>
+      <option value="wire" :selected="donForm.method === 'wire'" :text="fmt('wire')"></option>
+      <option value="in-kind" :selected="donForm.method === 'in-kind'" :text="fmt('in-kind')"></option>
+      <option value="other" :selected="donForm.method === 'other'" :text="fmt('other')"></option>
     </select>
   </div>
 </div>

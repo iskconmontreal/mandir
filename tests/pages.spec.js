@@ -273,8 +273,6 @@ test.describe('overview donations', () => {
 
     await donationRow.click()
     await expect(page.locator('.modal')).toBeVisible()
-    await expect(page.locator('.modal')).toContainText('Radhika Dasi')
-    await expect(page.locator('.modal')).toContainText('E-Transfer')
     await expect(page.getByRole('button', { name: 'Print' })).toBeVisible()
     await expect(page.locator('#don-donor')).toHaveValue('Radhika Dasi')
     await expect(page.locator('#don-amount')).toHaveValue('100.50')
