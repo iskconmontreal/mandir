@@ -85,7 +85,7 @@
   min-height: 4.5rem;
   max-width: var(--w-max);
   margin: 0 auto;
-  padding: var(--s-md) var(--s-2xl) var(--s-sm);
+  padding: var(--s-lg) var(--s-2xl) var(--s-sm);
   width: 100%;
   box-sizing: border-box;
 }
@@ -1244,16 +1244,16 @@ form {
   transition: opacity .12s ease;
 }
 .recent-exp-item:hover .recent-row-actions,
-.recent-exp-item:focus-within .recent-row-actions,
+.recent-exp-item:has(.recent-row-action:focus-visible) .recent-row-actions,
 .recent-inc-item:hover .recent-row-actions,
-.recent-inc-item:focus-within .recent-row-actions {
+.recent-inc-item:has(.recent-row-action:focus-visible) .recent-row-actions {
   opacity: 1;
   pointer-events: auto;
 }
 .recent-exp-item:hover .recent-exp-value,
-.recent-exp-item:focus-within .recent-exp-value,
+.recent-exp-item:has(.recent-row-action:focus-visible) .recent-exp-value,
 .recent-inc-item:hover .recent-inc-value,
-.recent-inc-item:focus-within .recent-inc-value {
+.recent-inc-item:has(.recent-row-action:focus-visible) .recent-inc-value {
   opacity: 0;
 }
 .recent-row-action,
@@ -1283,23 +1283,35 @@ form {
   cursor: pointer;
   transition: color .12s ease, background-color .12s ease, opacity .12s ease;
 }
-.recent-row-action:hover,
-.recent-row-action:focus-visible {
+.recent-row-action:hover {
   color: var(--c-accent);
   background: var(--c-accent-hover);
 }
-.recent-row-action-accent:hover,
-.recent-row-action-accent:focus-visible {
+.recent-row-action:focus-visible {
+  color: var(--c-accent);
+  background: transparent;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-accent) 24%, transparent);
+}
+.recent-row-action-accent:hover {
   color: var(--c-ok);
   background: var(--c-ok-active);
+}
+.recent-row-action-accent:focus-visible {
+  color: var(--c-ok);
+  background: transparent;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-ok) 26%, transparent);
 }
 .recent-row-action-ok {
   color: var(--c-text-dim);
 }
-.recent-row-action-ok:hover,
-.recent-row-action-ok:focus-visible {
+.recent-row-action-ok:hover {
   color: var(--c-accent);
   background: var(--c-accent-hover);
+}
+.recent-row-action-ok:focus-visible {
+  color: var(--c-accent);
+  background: transparent;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-accent) 24%, transparent);
 }
 .recent-row-action-static {
   font-size: var(--f-sm);

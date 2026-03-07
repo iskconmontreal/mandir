@@ -176,7 +176,7 @@ test.describe('e2e: viewer restrictions', () => {
     const ts = Date.now()
     const createRes = await viewerPage.request.post(`${API}/api/expenses`, {
       headers: viewerHeaders,
-      data: { payee: `E2E-readonly-${ts}`, amount: 500, category: 'admin', expense_date: '2026-03-01', description: 'readonly test', currency: 'CAD' },
+      data: { payee: `E2E-readonly-${ts}`, amount: 500, category: 'admin', expense_date: '2026-03-01', note: 'readonly test', currency: 'CAD' },
     })
     const created = await createRes.json()
 
@@ -246,7 +246,7 @@ test.describe('e2e: viewer submits → approver approves', () => {
     const ts = Date.now()
     const createRes = await viewerPage.request.post(`${API}/api/expenses`, {
       headers: viewerHeaders,
-      data: { payee: `E2E-Viewer-${ts}`, amount: 15000, category: 'admin', expense_date: '2026-03-01', description: 'Viewer test expense', currency: 'CAD' },
+      data: { payee: `E2E-Viewer-${ts}`, amount: 15000, category: 'admin', expense_date: '2026-03-01', note: 'Viewer test expense', currency: 'CAD' },
     })
     const created = await createRes.json()
     expect(created.id).toBeTruthy()

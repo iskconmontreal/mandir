@@ -81,6 +81,23 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--c-accent);
   box-shadow: var(--focus-ring);
 }
+input:disabled,
+select:disabled,
+textarea:disabled {
+  color: var(--c-text-dim);
+  border-color: color-mix(in srgb, var(--c-border) 78%, var(--c-text-dim));
+  background: color-mix(in srgb, var(--c-surface) 62%, var(--c-neutral-active));
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 1;
+}
+input:disabled::placeholder,
+textarea:disabled::placeholder {
+  color: var(--c-text-dim);
+}
+select:disabled {
+  background-image: none;
+}
 
 label {
   display: block;

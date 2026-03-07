@@ -93,7 +93,7 @@
           </div>
         </div>
 
-        <div class="login-error" :if="addErr" :text="addErr"></div>
+        <div class="form-warn" :if="addErr" :text="addErr"></div>
 
         <div style="display:flex; justify-content:flex-end; gap:var(--s-sm)">
           <button :if="editId && !delConfirm" type="button" class="btn btn-danger btn-sm" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
@@ -102,7 +102,8 @@
           <button :if="editId && delConfirm" type="button" class="btn btn-outline btn-sm" :onclick="delConfirm = false">No</button>
           <button :if="editId && donMode === 'edit'" type="button" class="btn btn-outline" :onclick="cancelDonationEdit()">Cancel</button>
           <button :if="!editId" type="button" class="btn btn-outline" :onclick="cancelAdd()">Cancel</button>
-          <button type="submit" class="btn btn-primary" :class="{'btn-loading': adding}" :text="editId ? 'Update' : 'Save'"></button>
+          <button :if="editId" type="submit" :class="donSaving ? 'btn btn-primary btn-loading' : 'btn btn-primary'">Update</button>
+          <button :if="!editId" type="submit" :class="donSaving ? 'btn btn-primary btn-loading' : 'btn btn-primary'">Save</button>
         </div>
       </form>
     </div>

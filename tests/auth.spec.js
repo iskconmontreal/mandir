@@ -27,6 +27,10 @@ test.describe('auth guard', () => {
 })
 
 test.describe('login page', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok' } }))
+  })
+
   test('renders email-first form', async ({ page }) => {
     await page.goto('/login.html')
     await expect(page.locator('h1')).toHaveText('Sign in')
@@ -267,7 +271,7 @@ test.describe('otp flow', () => {
     await expect(resendBtn).toBeVisible()
     await expect(resendBtn).toHaveText('Resend code')
     await resendBtn.click()
-    expect(loginCount).toBe(2)
+    await expect.poll(() => loginCount).toBe(2)
     await expect(page.locator('.otp-meta button')).toContainText('Resend in')
   })
 

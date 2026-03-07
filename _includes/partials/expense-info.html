@@ -19,14 +19,14 @@
     <div :text="fmt(detailExp?.category)"></div>
   </div>
 </div>
-<div class="form-row" :if="detailExp?.tax_amount || detailExp?.reference || detailExp?.bank_ref">
+<div class="form-row" :if="detailExp?.tax_amount || detailExp?.reference">
   <div class="detail-field" :if="detailExp?.tax_amount">
     <div class="stat-label">Tax</div>
     <div :text="'$' + fmtAmt(detailExp?.tax_amount)"></div>
   </div>
-  <div class="detail-field" :if="detailExp?.reference || detailExp?.bank_ref">
+  <div class="detail-field" :if="detailExp?.reference">
     <div class="stat-label">Reference</div>
-    <div :text="detailExp?.reference || detailExp?.bank_ref"></div>
+    <div :text="detailExp?.reference"></div>
   </div>
 </div>
 <div class="detail-field" :if="detailExp?.member_id && memberNames[detailExp?.member_id]">

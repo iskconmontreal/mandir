@@ -63,9 +63,9 @@
         <div class="recent-exp-amount">
           <div class="recent-exp-value stat-err" :text="'-$' + fmtAmt(x.amount || 0)"></div>
           <div class="recent-row-actions" :onclick.stop="">
-            <button type="button" class="recent-row-action recent-row-action-edit" title="Quick revise expense" aria-label="Quick revise expense" :onclick="editExpense(x)" :html="editIcon"></button>
-            <button :if="can('expenses:approve') && (x.status || 'submitted') === 'submitted' && !quickExpenseAction[x.id]" type="button" class="recent-row-action recent-row-action-accent" title="Quick approve expense" aria-label="Quick approve expense" :onclick="approveRecentExpense(x)" :html="approveIcon"></button>
-            <button :if="can('expenses:approve') && (x.status || 'submitted') === 'approved' && !quickExpenseAction[x.id]" type="button" class="recent-row-action recent-row-action-ok" title="Quick pay expense" aria-label="Quick pay expense" :onclick="payRecentExpense(x)" :html="payIcon"></button>
+            <button :if="can('expenses:approve') && (x.status || 'submitted') === 'submitted' && !quickExpenseAction[x.id]" type="button" class="recent-row-action recent-row-action-accent" title="Quick approve expense" aria-label="Quick approve expense" :onclick.stop="approveRecentExpense(x)" :html="approveIcon"></button>
+            <button :if="can('expenses:approve') && (x.status || 'submitted') === 'approved' && !quickExpenseAction[x.id]" type="button" class="recent-row-action recent-row-action-ok" title="Quick pay expense" aria-label="Quick pay expense" :onclick.stop="payRecentExpense(x)" :html="payIcon"></button>
+            <button type="button" class="recent-row-action recent-row-action-edit" title="Quick revise expense" aria-label="Quick revise expense" :onclick.stop="editExpense(x)" :html="editIcon"></button>
             <span :if="can('expenses:approve') && quickExpenseAction[x.id]" class="recent-row-action recent-row-action-static" aria-label="Working">…</span>
           </div>
         </div>
@@ -102,8 +102,8 @@
         <div class="recent-inc-amount">
           <div class="recent-inc-value stat-ok" :text="'+$' + fmtAmt(d.amount || 0)"></div>
           <div class="recent-row-actions" :onclick.stop="">
-            <button type="button" class="recent-row-action recent-row-action-edit" title="Quick revise donation" aria-label="Quick revise donation" :onclick="editDonation(d)" :html="editIcon"></button>
-            <button type="button" class="recent-row-action" title="Quick receipt" aria-label="Quick receipt" :onclick="printDonation(d)" :html="printIcon"></button>
+            <button type="button" class="recent-row-action" title="Quick receipt" aria-label="Quick receipt" :onclick.stop="printDonation(d)" :html="printIcon"></button>
+            <button type="button" class="recent-row-action recent-row-action-edit" title="Quick revise donation" aria-label="Quick revise donation" :onclick.stop="editDonation(d)" :html="editIcon"></button>
           </div>
         </div>
       </div>
@@ -214,7 +214,7 @@
   import { greeting } from '../lib/greeting.js'
   import { catCls, changedAt, fmtDate, fmtStatus, parseMemberNames } from '../lib/finance.js'
   import { actionIcon, methodIcon, statusIcon } from '../lib/icons.js'
-  import { formDefaults, bindForm, expIsEditable, expGetAttachments, buildExpTimeline } from '../lib/form.js'
+  import { formDefaults, bindForm, expIsEditable, expEditPolicy as getExpEditPolicy, expGetAttachments, buildExpTimeline } from '../lib/form.js'
 
   const now = new Date()
   const y = now.getFullYear()
@@ -248,14 +248,17 @@
     approveIcon: actionIcon('approve'),
     payIcon: actionIcon('pay'),
     showOwnExpenses: !auth.can('income:create') && !auth.can('expenses:approve'),
-    recentExpReporter(x) {
-      if (!x?.created_by) return ''
-      if (x.created_by === MY_USER_ID) return 'you'
-      return this.userNames?.[x.created_by] || ''
-    },
     recentExpStatus(x) {
       const st = x?.status || 'submitted'
       return st === 'submitted' ? `Pending ${x?.approval_count || 0}/${x?.approvals_required || '?'}` : fmtStatus(st)
+    },
+    recentExpReporter(x) {
+      const st = x?.status || 'submitted'
+      const uid = st === 'submitted' ? (x?.created_by || x?.updated_by) : (x?.updated_by || x?.created_by)
+      if (!uid) return ''
+      if (uid === MY_USER_ID) return 'by you'
+      const who = this.userNames?.[uid]
+      return who ? `by ${who}` : ''
     },
     recentIncSource(d) {
       if (d?.member_id && this.memberNames?.[d.member_id]) return this.memberNames[d.member_id]
@@ -327,6 +330,7 @@
       }
     },
     get expEditable() { return expIsEditable(this) },
+    get expEditPolicy() { return getExpEditPolicy(this) },
     get expAttachments() { return expGetAttachments(this) },
     get expTimeline() { return buildExpTimeline(this) },
   })

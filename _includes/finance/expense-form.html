@@ -1,5 +1,6 @@
 <!-- Expense detail modal -->
-<div class="modal-overlay" :if="showAdd && activeTab === 'expenses' && expMode === 'detail'" :onkeydown.esc.document="e => { if (lightboxSrc || filePickerOpen) return; cancelAdd() }">
+<template id="exp-detail-modal-template">
+<div class="modal-overlay" :onkeydown.esc.document="e => { if (lightboxSrc || filePickerOpen) return; cancelAdd() }">
   <div class="modal" :onclick.outside="e => { if (lightboxSrc || filePickerOpen) return; cancelAdd() }">
     <div class="modal-header">
       <h2 style="display:flex;align-items:center;gap:var(--s-sm)">
@@ -54,13 +55,13 @@
           </div>
         </div>
 
-        <div class="login-error" :if="addErr" :text="addErr"></div>
+        <div class="form-warn" :if="addErr" :text="addErr"></div>
 
         <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); align-items:center">
           <button :if="detailExp?.status === 'submitted' && can('expenses:approve')" class="btn btn-danger btn-sm" :class="{'btn-loading': actioning}" :onclick="rejectExp()" style="margin-right:auto">Reject</button>
           <button :if="detailExp?.status === 'submitted' && can('expenses:approve')" class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="approveExp()">Approve</button>
           <button :if="detailExp?.status === 'approved' && can('expenses:approve')" class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="payExp()">Done</button>
-          <button :if="detailExp?.status === 'submitted' && can('expenses:create')" class="btn btn-outline btn-sm" :onclick="editExpense(detailExp)">Edit</button>
+          <button :if="detailExp?.status === 'submitted' && can('expenses:create')" class="btn btn-outline btn-sm" :onclick="editExpense(detailExp, 'detail')">Edit</button>
           <button class="btn btn-outline btn-sm" :onclick="cancelAdd()">Close</button>
         </div>
       </div>
@@ -68,17 +69,119 @@
     </div>
   </div>
 </div>
+</template>
 
-<!-- Expense add/edit modal -->
-<div class="modal-overlay" :if="showAdd && activeTab === 'expenses' && expMode !== 'detail'" :onkeydown.esc.document="e => { if (lightboxSrc || filePickerOpen) return; cancelAdd() }">
+<!-- Expense edit modal -->
+<template id="exp-edit-modal-template">
+<div class="modal-overlay" :onkeydown.esc.document="e => { if (lightboxSrc || filePickerOpen) return; cancelAdd() }">
   <div class="modal" :onclick.outside="e => { if (lightboxSrc || filePickerOpen) return; cancelAdd() }">
     <div class="modal-header">
-      <h2 :text="editId ? 'Edit Expense' : 'Add Expense'"></h2>
+      <h2>Edit Expense</h2>
       <button class="modal-close" :onclick="cancelAdd()">&times;</button>
     </div>
     <div class="modal-body">
       <div style="display:flex;flex-direction:column;gap:var(--s-md)">
-        <div :if="!editId" class="receipt-strip"
+        <div :if="editId && expAttachments.length">
+          <div class="stat-label" style="margin-bottom:var(--s-sm)">Receipts</div>
+          <div class="receipt-strip" style="flex-wrap:wrap;cursor:default">
+            <div :each="a in expAttachments" class="receipt-thumb"
+              :onclick="a.mime_type?.startsWith('image/') ? (lightboxSrc = apiBase + '/' + a.file_path) : window.open(apiBase + '/' + a.file_path, '_blank')">
+              <img :if="a.mime_type?.startsWith('image/')" :src="apiBase + '/' + a.file_path" :alt="a.original_name">
+              <div :if="!a.mime_type?.startsWith('image/')" class="receipt-placeholder" :text="a.original_name?.split('.').pop()?.toUpperCase() || 'FILE'"></div>
+            </div>
+          </div>
+        </div>
+
+        <form :onsubmit.prevent="saveExpense" style="display:flex;flex-direction:column;gap:var(--s-md)">
+          <div :if="can('expenses:approve')" class="form-row">
+            <div class="field autocomplete">
+              <label>Payee</label>
+              <div style="position:relative">
+                <input :id="location.pathname.includes('/app/finance') ? 'exp-vendor' : 'home-exp-vendor'" type="text" :value="expForm.member_id ? memberQuery : expForm.payee"
+                :onfocus="e => filterExpensePayees(expForm.member_id ? memberQuery : expForm.payee)"
+                :oninput="e => { expDirty = true; expForm.member_id = null; filterExpensePayees(e.target.value) }"
+                :onblur="e => { vendorHits = []; memberHits = [] }"
+                placeholder="Vendor, store, person…" :required="!editId" :disabled="expEditPolicy.payeeLocked">
+                <button :if="expForm.member_id && !expEditPolicy.payeeLocked" type="button" class="btn-link"
+                  style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%)"
+                  :onclick="clearExpMember()">&times;</button>
+              </div>
+              <div :if="memberHits.length || vendorHits.length" class="autocomplete-list">
+                <div :if="memberHits.length" class="autocomplete-group-label">Members</div>
+                <div class="autocomplete-item" :each="m in memberHits" :onmousedown.prevent="selectExpMember(m)" :text="m.name"></div>
+                <div :if="vendorHits.length" class="autocomplete-group-label">Recent payees</div>
+                <div class="autocomplete-item" :each="v in vendorHits" :onmousedown.prevent="selectExpVendor(v)" :text="v"></div>
+              </div>
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <select :id="location.pathname.includes('/app/finance') ? 'exp-cat' : 'home-exp-cat'" :value="expForm.category" :onchange="e => { expDirty = true; expForm.category = e.target.value }" :disabled="expEditPolicy.lockedAll">
+                <option value="" disabled hidden :selected="!(expForm.category || '')">Select…</option>
+                {% include partials/expense-category-options.html %}
+              </select>
+            </div>
+          </div>
+          <div :if="can('expenses:approve')" class="form-row">
+            <div class="field">
+              <label>Amount ($)</label>
+              <input :id="location.pathname.includes('/app/finance') ? 'exp-amount' : 'home-exp-amount'" type="number" :value="expForm.amount" :oninput="e => { expDirty = true; expForm.amount = e.target.value }" step="0.01" min="0.01" placeholder="0.01" required :disabled="expEditPolicy.amountLocked">
+            </div>
+            <div class="field">
+              <label>Date</label>
+              <input :id="location.pathname.includes('/app/finance') ? 'exp-date' : 'home-exp-date'" type="date" :value="expForm.expense_date" :oninput="e => { expDirty = true; expForm.expense_date = e.target.value }" required :disabled="expEditPolicy.dateLocked">
+            </div>
+          </div>
+          <div :if="can('expenses:approve')" class="field">
+            <label>Note</label>
+            <textarea :id="location.pathname.includes('/app/finance') ? 'exp-desc' : 'home-exp-desc'" rows="1" style="field-sizing:content;resize:none" :value="expForm.note" :oninput="e => { expDirty = true; expForm.note = e.target.value }" placeholder="Optional…" :disabled="expEditPolicy.lockedAll"></textarea>
+          </div>
+          <div :if="!can('expenses:approve')" class="form-row">
+            <div class="field">
+              <label>Amount ($)</label>
+              <input :id="location.pathname.includes('/app/finance') ? 'exp-amount' : 'home-exp-amount'" type="number" :value="expForm.amount" :oninput="e => expForm.amount = e.target.value" step="0.01" min="0.01" placeholder="0.01" required :disabled="expEditPolicy.amountLocked">
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <select :id="location.pathname.includes('/app/finance') ? 'exp-cat' : 'home-exp-cat'" :value="expForm.category" :onchange="e => { expDirty = true; expForm.category = e.target.value }" :disabled="expEditPolicy.lockedAll">
+                <option value="" disabled hidden :selected="!(expForm.category || '')">Select…</option>
+                {% include partials/expense-category-options.html %}
+              </select>
+            </div>
+          </div>
+          <div :if="!can('expenses:approve')" class="field">
+            <label>Note</label>
+            <textarea :id="location.pathname.includes('/app/finance') ? 'exp-desc' : 'home-exp-desc'" rows="1" style="field-sizing:content;resize:none" :value="expForm.note" :oninput="e => expForm.note = e.target.value" placeholder="Optional…" :disabled="expEditPolicy.lockedAll"></textarea>
+          </div>
+
+          <div :if="receipts.some(r => r.duplicate)" class="form-warn">Possible duplicate — a receipt was previously uploaded for another expense</div>
+          <div class="form-warn" :if="addErr" :text="addErr"></div>
+
+          <div style="display:flex; justify-content:flex-end; gap:var(--s-sm)">
+            <button :if="editId && detailExp?.status === 'submitted' && !delConfirm" type="button" class="btn btn-danger btn-sm" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
+            <span :if="delConfirm" class="dim" style="font-size:var(--f-sm); margin-right:auto; align-self:center">Delete permanently?</span>
+            <button :if="delConfirm" type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': deleting}" :onclick="delExpense()">Yes</button>
+            <button :if="delConfirm" type="button" class="btn btn-outline btn-sm" :onclick="delConfirm = false">No</button>
+            <button :if="!delConfirm" type="button" class="btn btn-outline" :onclick="editId && expMode === 'edit' ? cancelExpenseEdit() : cancelAdd()">Cancel</button>
+            <button :if="!delConfirm" type="submit" class="btn btn-primary" :disabled="expEditPolicy.lockedAll || expSaving">Update</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+</template>
+
+<!-- Expense create modal -->
+<template id="exp-create-modal-template">
+<div class="modal-overlay" :onkeydown.esc.document="e => { if (lightboxSrc || filePickerOpen) return; cancelAdd() }">
+  <div class="modal" :onclick.outside="e => { if (lightboxSrc || filePickerOpen) return; cancelAdd() }">
+    <div class="modal-header">
+      <h2>Add Expense</h2>
+      <button class="modal-close" :onclick="cancelAdd()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:var(--s-md)">
+        <div class="receipt-strip"
           :ondragover="e => e.preventDefault()"
           :ondrop="e => { e.preventDefault(); addReceipts(e.dataTransfer.files) }">
           <div :if="!receipts.length" style="flex:1;text-align:center;cursor:pointer"
@@ -104,17 +207,6 @@
           :oncancel="() => filePickerOpen = false"
           :onchange="e => { filePickerOpen = false; addReceipts(e.target.files); e.target.value = '' }">
 
-        <div :if="editId && expAttachments.length">
-          <div class="stat-label" style="margin-bottom:var(--s-sm)">Receipts</div>
-          <div class="receipt-strip" style="flex-wrap:wrap;cursor:default">
-            <div :each="a in expAttachments" class="receipt-thumb"
-              :onclick="a.mime_type?.startsWith('image/') ? (lightboxSrc = apiBase + '/' + a.file_path) : window.open(apiBase + '/' + a.file_path, '_blank')">
-              <img :if="a.mime_type?.startsWith('image/')" :src="apiBase + '/' + a.file_path" :alt="a.original_name">
-              <div :if="!a.mime_type?.startsWith('image/')" class="receipt-placeholder" :text="a.original_name?.split('.').pop()?.toUpperCase() || 'FILE'"></div>
-            </div>
-          </div>
-        </div>
-
         <form :onsubmit.prevent="saveExpense" style="display:flex;flex-direction:column;gap:var(--s-md)">
           <div :if="can('expenses:approve')" class="form-row">
             <div class="field autocomplete">
@@ -124,8 +216,8 @@
                 :onfocus="e => filterExpensePayees(expForm.member_id ? memberQuery : expForm.payee)"
                 :oninput="e => { expForm.member_id = null; filterExpensePayees(e.target.value) }"
                 :onblur="e => { vendorHits = []; memberHits = [] }"
-                placeholder="Vendor, store, person…" :required="!editId">
-                <button :if="expForm.member_id" type="button" class="btn-link"
+                placeholder="Vendor, store, person…" :required="!editId" :disabled="expEditPolicy.payeeLocked">
+                <button :if="expForm.member_id && !expEditPolicy.payeeLocked" type="button" class="btn-link"
                   style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%)"
                   :onclick="clearExpMember()">&times;</button>
               </div>
@@ -138,60 +230,66 @@
             </div>
             <div class="field">
               <label>Category</label>
-              <select :id="location.pathname.includes('/app/finance') ? 'exp-cat' : 'home-exp-cat'" :value="expForm.category" :onchange="e => expForm.category = e.target.value">
-                <option value="" disabled hidden>Select…</option>
-                <option :each="c in expCats" :value="c" :text="fmt(c)"></option>
+              <select :id="location.pathname.includes('/app/finance') ? 'exp-cat' : 'home-exp-cat'" :value="expForm.category" :onchange="e => expForm.category = e.target.value" :disabled="expEditPolicy.lockedAll">
+                <option value="" disabled hidden :selected="!(expForm.category || '')">Select…</option>
+                {% include partials/expense-category-options.html %}
               </select>
             </div>
           </div>
           <div :if="can('expenses:approve')" class="form-row">
             <div class="field">
               <label>Amount ($)</label>
-              <input :id="location.pathname.includes('/app/finance') ? 'exp-amount' : 'home-exp-amount'" type="number" :value="expForm.amount" :oninput="e => expForm.amount = e.target.value" step="0.01" min="0.01" placeholder="0.01" required>
+              <input :id="location.pathname.includes('/app/finance') ? 'exp-amount' : 'home-exp-amount'" type="number" :value="expForm.amount" :oninput="e => { expDirty = true; expForm.amount = e.target.value }" step="0.01" min="0.01" placeholder="0.01" required :disabled="expEditPolicy.amountLocked">
             </div>
             <div class="field">
               <label>Date</label>
-              <input :id="location.pathname.includes('/app/finance') ? 'exp-date' : 'home-exp-date'" type="date" :value="expForm.expense_date" :oninput="e => expForm.expense_date = e.target.value" required>
+              <input :id="location.pathname.includes('/app/finance') ? 'exp-date' : 'home-exp-date'" type="date" :value="expForm.expense_date" :oninput="e => { expDirty = true; expForm.expense_date = e.target.value }" required :disabled="expEditPolicy.dateLocked">
             </div>
           </div>
           <div :if="can('expenses:approve')" class="field">
             <label>Note</label>
-            <textarea :id="location.pathname.includes('/app/finance') ? 'exp-desc' : 'home-exp-desc'" rows="1" style="field-sizing:content;resize:none" :value="expForm.note" :oninput="e => expForm.note = e.target.value" placeholder="Optional…"></textarea>
+            <textarea :id="location.pathname.includes('/app/finance') ? 'exp-desc' : 'home-exp-desc'" rows="1" style="field-sizing:content;resize:none" :value="expForm.note" :oninput="e => { expDirty = true; expForm.note = e.target.value }" placeholder="Optional…" :disabled="expEditPolicy.lockedAll"></textarea>
           </div>
           <div :if="!can('expenses:approve')" class="form-row">
             <div class="field">
               <label>Amount ($)</label>
-              <input :id="location.pathname.includes('/app/finance') ? 'exp-amount' : 'home-exp-amount'" type="number" :value="expForm.amount" :oninput="e => expForm.amount = e.target.value" step="0.01" min="0.01" placeholder="0.01" required>
+              <input :id="location.pathname.includes('/app/finance') ? 'exp-amount' : 'home-exp-amount'" type="number" :value="expForm.amount" :oninput="e => expForm.amount = e.target.value" step="0.01" min="0.01" placeholder="0.01" required :disabled="expEditPolicy.amountLocked">
             </div>
             <div class="field">
               <label>Category</label>
-              <select :id="location.pathname.includes('/app/finance') ? 'exp-cat' : 'home-exp-cat'" :value="expForm.category" :onchange="e => expForm.category = e.target.value">
-                <option value="" disabled hidden>Select…</option>
-                <option :each="c in expCats" :value="c" :text="fmt(c)"></option>
+              <select :id="location.pathname.includes('/app/finance') ? 'exp-cat' : 'home-exp-cat'" :value="expForm.category" :onchange="e => expForm.category = e.target.value" :disabled="expEditPolicy.lockedAll">
+                <option value="" disabled hidden :selected="!(expForm.category || '')">Select…</option>
+                {% include partials/expense-category-options.html %}
               </select>
             </div>
           </div>
           <div :if="!can('expenses:approve')" class="field">
             <label>Note</label>
-            <textarea :id="location.pathname.includes('/app/finance') ? 'exp-desc' : 'home-exp-desc'" rows="1" style="field-sizing:content;resize:none" :value="expForm.note" :oninput="e => expForm.note = e.target.value" placeholder="Optional…"></textarea>
+            <textarea :id="location.pathname.includes('/app/finance') ? 'exp-desc' : 'home-exp-desc'" rows="1" style="field-sizing:content;resize:none" :value="expForm.note" :oninput="e => expForm.note = e.target.value" placeholder="Optional…" :disabled="expEditPolicy.lockedAll"></textarea>
           </div>
 
           <div :if="receipts.some(r => r.duplicate)" class="form-warn">Possible duplicate — a receipt was previously uploaded for another expense</div>
-          <div class="login-error" :if="addErr" :text="addErr"></div>
+          <div class="form-warn" :if="addErr" :text="addErr"></div>
 
           <div style="display:flex; justify-content:flex-end; gap:var(--s-sm)">
-            <button :if="editId && detailExp?.status === 'submitted' && !delConfirm" type="button" class="btn btn-danger btn-sm" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
-            <span :if="delConfirm" class="dim" style="font-size:var(--f-sm); margin-right:auto; align-self:center">Delete permanently?</span>
-            <button :if="delConfirm" type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': deleting}" :onclick="delExpense()">Yes</button>
-            <button :if="delConfirm" type="button" class="btn btn-outline btn-sm" :onclick="delConfirm = false">No</button>
-            <button :if="!editId && !delConfirm" type="button" class="btn btn-outline" :onclick="cancelAdd()">Cancel</button>
-            <button :if="!delConfirm" type="submit" class="btn btn-primary" :class="{'btn-loading': adding}" :text="editId ? 'Update' : 'Submit'"></button>
+            <button type="button" class="btn btn-outline" :onclick="cancelAdd()">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="expEditPolicy.lockedAll || expSaving">Submit</button>
           </div>
         </form>
       </div>
     </div>
   </div>
 </div>
+</template>
+<div :html="showAdd && activeTab === 'expenses'
+  ? document.getElementById(
+      expMode === 'detail'
+        ? 'exp-detail-modal-template'
+        : expMode === 'edit'
+          ? 'exp-edit-modal-template'
+          : 'exp-create-modal-template'
+    )
+  : ''"></div>
 <div :if="lightboxSrc" class="lightbox" :onclick="lightboxSrc = ''" :onkeydown.esc.document="lightboxSrc = ''">
   <img :src="lightboxSrc">
   <button class="lightbox-close" :onclick="lightboxSrc = ''">&times;</button>

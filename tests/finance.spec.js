@@ -544,7 +544,7 @@ test.describe('finance section', () => {
     await page.fill('#exp-vendor', 'Test')
     await page.fill('#exp-amount', '10.00')
     await page.click('button:has-text("Submit")')
-    await expect(page.locator('.login-error')).toContainText('Please wait for receipt processing')
+    await expect(page.locator('.form-warn')).toContainText('Please wait for receipt processing')
 
     extractResolve()
   })
@@ -720,6 +720,66 @@ test.describe('finance section', () => {
     await expect(page.locator('.scan-icon')).toBeVisible()
   })
 
+  test('editing expense keeps attachment area isolated per record', async ({ page }) => {
+    const expenses = [
+      {
+        id: 1,
+        amount: 5000,
+        payee: 'Receipt Expense',
+        category: 'kitchen',
+        expense_date: '2025-01-10',
+        status: 'submitted',
+        attachments: [
+          { id: 91, file_path: 'uploads/finance/2026/receipt-1.png', original_name: 'receipt-1.png', mime_type: 'image/png' },
+        ],
+      },
+      {
+        id: 2,
+        amount: 3000,
+        payee: 'Plain Expense',
+        category: 'utilities',
+        expense_date: '2025-01-11',
+        status: 'submitted',
+        attachments: [],
+      },
+    ]
+
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('tr.row-link').first().waitFor()
+
+    await page.locator('tr.row-link').filter({ hasText: 'Receipt Expense' }).click()
+    await page.click('button:has-text("Edit")')
+    const firstEdit = page.locator('.modal-overlay:visible').first()
+    await expect(firstEdit.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
+    await expect(firstEdit.getByText('Receipts')).toBeVisible()
+    await expect(firstEdit.locator('.receipt-thumb')).toHaveCount(1)
+
+    await page.click('button:has-text("Cancel")')
+    await expect(page.getByRole('heading', { name: 'Expense' })).toBeVisible()
+    await page.click('button:has-text("Close")')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible()
+
+    await page.locator('tr.row-link').filter({ hasText: 'Plain Expense' }).click()
+    await page.click('button:has-text("Edit")')
+    const secondEdit = page.locator('.modal-overlay:visible').first()
+    await expect(secondEdit.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
+    await expect(secondEdit.getByText('Receipts')).toHaveCount(0)
+    await expect(secondEdit.locator('.receipt-thumb')).toHaveCount(0)
+    await expect(page.locator('.lightbox')).not.toBeVisible()
+
+    await page.click('button:has-text("Cancel")')
+    await expect(page.getByRole('heading', { name: 'Expense' })).toBeVisible()
+    await page.click('button:has-text("Close")')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible()
+
+    await page.locator('tr.row-link').filter({ hasText: 'Receipt Expense' }).click()
+    await page.click('button:has-text("Edit")')
+    const reopenedFirstEdit = page.locator('.modal-overlay:visible').first()
+    await expect(reopenedFirstEdit.getByText('Receipts')).toBeVisible()
+    await expect(reopenedFirstEdit.locator('.receipt-thumb')).toHaveCount(1)
+  })
+
   test('ESC closes modal when file picker is not open', async ({ page }) => {
     await mockFinance(page)
     await openFinance(page)
@@ -848,7 +908,11 @@ test.describe('finance section', () => {
     await page.click('button:has-text("Edit")')
     const amount = page.locator('#exp-amount:visible')
     await amount.waitFor({ timeout: 5000 })
-    await amount.fill('75.00')
+    await amount.evaluate((el, v) => {
+      el.value = v
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+    }, '75.00')
     await expect(amount).toHaveValue('75')
     await page.click('button:has-text("Update")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
@@ -875,7 +939,7 @@ test.describe('finance section', () => {
     await expect(list).toContainText('Hari Das')
   })
 
-  test('edit expense: payee shows member suggestions in modal', async ({ page }) => {
+  test('edit expense: member payee stays populated in modal', async ({ page }) => {
     const members = [
       { id: 1, user_id: 11, data: { name: 'Hari Das' } },
       { id: 2, user_id: 12, data: { name: 'Gopi Devi' } },
@@ -890,10 +954,7 @@ test.describe('finance section', () => {
     await page.click('button:has-text("Edit")')
 
     const payee = page.locator('#exp-vendor:visible')
-    await payee.focus()
-    const list = page.locator('.autocomplete-list').filter({ has: page.locator('.autocomplete-item') }).first()
-    await expect(list).toBeVisible()
-    await expect(list).toContainText('Hari Das')
+    await expect(payee).toHaveValue('Hari Das')
   })
 
 

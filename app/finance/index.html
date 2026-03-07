@@ -386,7 +386,7 @@
   import { api, BASE } from '../../lib/api.js'
   import { statusIcon } from '../../lib/icons.js'
   import { EXP_STATUSES, STATUS_ORDER, catCls, catHex, fmtStatus, fmtDate, eventBadge, eventLabel, eventDetail, actorName as _actorName, parseMemberNames, buildMetaHistory } from '../../lib/finance.js'
-  import { formDefaults, bindForm, expIsEditable, expGetAttachments, buildExpTimeline } from '../../lib/form.js'
+  import { formDefaults, bindForm, expIsEditable, expEditPolicy as getExpEditPolicy, expGetAttachments, buildExpTimeline } from '../../lib/form.js'
 
   const MY_USER_ID = auth.user?.id
 
@@ -505,6 +505,7 @@
     actionAmt: '',
 
     get expEditable() { return expIsEditable(this) },
+    get expEditPolicy() { return getExpEditPolicy(this) },
     get expAttachments() { return expGetAttachments(this) },
     get expTimeline() { return buildExpTimeline(this) },
     incomeBucket: bucketOf,
@@ -709,14 +710,6 @@
       s.activeTab = tab
       writeUrl(s, 'pushState')
     },
-
-    filterMembers(q) {
-      s.memberQuery = q
-      const all = Object.entries(s.memberNames).map(([id, name]) => ({ id: +id, name }))
-      s.memberHits = (q ? all.filter(m => m.name.toLowerCase().includes(q.toLowerCase())) : all).slice(0, 5)
-    },
-    selectExpMember(m) { s.expForm.member_id = m.id; s.expForm.payee = m.name; s.memberQuery = m.name; s.memberHits = [] },
-    clearExpMember()   { s.expForm.member_id = null; s.expForm.payee = ''; s.memberQuery = ''; s.memberHits = [] },
 
     _hoverCat: null,
     quickLoading: {}, myApprovals: {},
