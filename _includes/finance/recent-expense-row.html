@@ -1,0 +1,27 @@
+<div :each="{{ include.each }}" class="recent-exp-item row-link{% if include.row_class %} {{ include.row_class }}{% endif %}" :onclick="viewExpense(x)">
+  <span class="recent-exp-icon-col">
+    <span class="status-icon" :class="'status-' + (x.status || 'submitted')" :html="statusIcon(x.status || 'submitted')"></span>
+  </span>
+  <div class="recent-exp-main">
+    <div class="recent-exp-title-row">
+      <div class="recent-exp-title" :text="expenseRowTitle(x)"></div>
+    </div>
+    <div class="recent-exp-meta-row">
+      <span class="recent-exp-status-text" :class="'status-' + (x.status || 'submitted')" :text="recentExpStatus(x)"></span>
+      <span :if="recentExpReporter(x)" class="recent-exp-meta" :text="recentExpReporter(x)"></span>
+      <span class="recent-exp-time" :text="expenseRowTime(x)"></span>
+    </div>
+  </div>
+  <div class="recent-exp-cat">
+    <span class="badge" :class="catCls(x.category || 'other')" :text="expenseRowCategory(x)"></span>
+  </div>
+  <div class="recent-exp-amount">
+    <div class="recent-exp-value stat-err" :text="'-$' + fmtAmt(x.amount || 0)"></div>
+    <div class="recent-row-actions" :onclick.stop="">
+      <button :if="expenseCanQuickApprove(x)" type="button" class="recent-row-action recent-row-action-accent" title="Quick approve expense" aria-label="Quick approve expense" :onclick.stop="expenseQuickApprove(x)" :html="approveIcon"></button>
+      <button :if="expenseCanQuickPay(x)" type="button" class="recent-row-action recent-row-action-ok" title="Quick pay expense" aria-label="Quick pay expense" :onclick.stop="expenseQuickPay(x)" :html="payIcon"></button>
+      <button type="button" class="recent-row-action recent-row-action-edit" title="Quick revise expense" aria-label="Quick revise expense" :onclick.stop="editExpense(x)" :html="editIcon"></button>
+      <span :if="expenseActionBusy(x)" class="recent-row-action recent-row-action-static" aria-label="Working">…</span>
+    </div>
+  </div>
+</div>

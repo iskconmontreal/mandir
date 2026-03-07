@@ -161,55 +161,8 @@
         <span class="exp-group-count" :text="g.items.length"></span>
         <span class="exp-group-total" :text="'$' + fmtAmt(g.total)"></span>
       </div>
-      <div class="exp-list">
-        <div :each="x in g.items">
-          <div class="exp-card" :class="{open: expExpandId === x.id}" :onclick="toggleExpand(x.id)">
-            <div class="exp-card-icon" :class="'status-' + (x.status || 'submitted')" :html="expIcon(x)"></div>
-            <strong class="exp-card-title"><span :html="hl(x.payee || '—', expSearch)"></span><span :if="memberNames[x.member_id]" class="dim" style="font-weight:400" :html="' by ' + hl(memberNames[x.member_id], expSearch)"></span></strong>
-            <span class="badge" :class="catCls(x.category)" :html="hl(fmt(x.category), expSearch)"></span>
-            <span class="exp-card-date" :text="fmtDate(x.created_at || x.expense_date)"></span>
-            <div class="exp-card-status" :class="'status-' + (x.status || 'submitted')" :text="expMeta(x)"></div>
-            <div class="exp-card-actions">
-              <button class="btn btn-outline btn-sm" :onclick.stop="editExpense(x)">Edit</button>
-              <button :if="can('expenses:approve') && x.status === 'submitted' && !myApprovals[x.id]" class="btn btn-primary btn-sm" :class="{'btn-loading': quickLoading[x.id]}" :onclick.stop="quickApprove(x)">Approve</button>
-              <span :if="can('expenses:approve') && x.status === 'submitted' && myApprovals[x.id]" class="dim" style="font-size:var(--f-sm)">Approved ✓</span>
-              <button :if="can('expenses:approve') && x.status === 'approved'" class="btn btn-primary btn-sm" :class="{'btn-loading': quickLoading[x.id]}" :onclick.stop="quickPay(x)">Paid</button>
-            </div>
-            <div class="exp-card-amount" :text="'$' + fmtAmt(x.amount)"></div>
-          </div>
-          <div class="exp-detail-panel" :class="{open: expExpandId === x.id}">
-            <div class="exp-detail-inner">
-              <div class="exp-detail-fields">
-                <div>
-                  <div class="stat-label">ID</div>
-                  <div class="mono" :text="x.expense_no || ('#' + x.id)"></div>
-                </div>
-                <div :if="x.note || x.description">
-                  <div class="stat-label">Note</div>
-                  <div :html="hl(x.note || x.description, expSearch)"></div>
-                </div>
-                <div :if="x.attachments?.length">
-                  <div class="stat-label">Receipts</div>
-                  <div class="exp-detail-receipts">
-                    <img :each="a in x.attachments.filter(a => a.mime_type?.startsWith('image/'))" class="exp-detail-receipt-img" :src="apiBase + '/' + a.file_path" :alt="a.original_name" :onclick.stop="lightboxSrc = apiBase + '/' + a.file_path">
-                  </div>
-                </div>
-              </div>
-              <div :if="expInlineLoading[x.id]" class="dim" style="font-size:var(--f-sm)">Loading…</div>
-              <div :if="!expInlineLoading[x.id] && expInlineHistory[x.id]">
-              <div class="stat-label">History</div>
-              <div class="timeline">
-                <div class="timeline-step" :each="h in (expInlineHistory[x.id] || [])" :class="'timeline-' + eventBadge(h)">
-                  <div class="timeline-dot"></div>
-                  <div class="timeline-body">
-                    <span class="timeline-label"><span :text="eventLabel(h)"></span><span :if="actorName(h.user_id, userNames)"> by <a :if="h.user_id !== myUid" href="{{ '/app/members/' | relative_url }}" :text="actorName(h.user_id, userNames)"></a><span :if="h.user_id === myUid">you</span></span><span :if="h.created_at" :text="' ' + fmtDate(h.created_at)"></span><span :if="eventDetail(h)" class="dim" :text="' · ' + eventDetail(h)"></span></span>
-                  </div>
-                </div>
-              </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div class="recent-exp-list finance-exp-list">
+        {% include finance/recent-expense-row.html each="x in g.items" row_class="finance-exp-item" %}
       </div>
     </div>
     <div :if="expHasMore" class="scroll-sentinel" :ref="el => observe(el, () => expPage++)">
@@ -384,11 +337,13 @@
 <script type="module">
   import { init, fmtCat, fmtAmt, rawAmt, toCents, toast, auth, hl } from '../../lib/app.js'
   import { api, BASE } from '../../lib/api.js'
-  import { statusIcon } from '../../lib/icons.js'
-  import { EXP_STATUSES, STATUS_ORDER, catCls, catHex, fmtStatus, fmtDate, eventBadge, eventLabel, eventDetail, actorName as _actorName, parseMemberNames, buildMetaHistory } from '../../lib/finance.js'
+  import { actionIcon, statusIcon } from '../../lib/icons.js'
+  import { EXP_STATUSES, STATUS_ORDER, catCls, catHex, fmtStatus, fmtDate, changedAt, parseMemberNames } from '../../lib/finance.js'
   import { formDefaults, bindForm, expIsEditable, expEditPolicy as getExpEditPolicy, expGetAttachments, buildExpTimeline } from '../../lib/form.js'
 
-  const MY_USER_ID = auth.user?.id
+  const MY_USER_ID = auth.user?.id || auth.user?.user_id || (() => {
+    try { return JSON.parse(atob(auth.token.split('.')[1])).user_id || null } catch { return null }
+  })()
 
   if (!auth.can('income:view') && !auth.can('expenses:view')) {
     location.replace(new URL('../', location.href).href)
@@ -474,10 +429,6 @@
     return () => { io.disconnect(); clearInterval(timer) }
   }
 
-  function expenseMetaHistory(x) {
-    return buildMetaHistory(x).sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
-  }
-
   function dlCSV(rows, name) {
     const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -491,8 +442,10 @@
   const s = init({
     ...formDefaults(BASE, MY_USER_ID),
     activeTab: initUrl.activeTab,
-    actorName: (uid, names) => _actorName(uid, names, MY_USER_ID),
-    hl, observe, statusIcon, catCls, catHex,
+    hl, observe, statusIcon, catCls, catHex, changedAt,
+    editIcon: actionIcon('edit'),
+    approveIcon: actionIcon('approve'),
+    payIcon: actionIcon('pay'),
 
     year: initUrl.year, years, monthLabel,
     loading: false, loadErr: null,
@@ -531,19 +484,43 @@
         return seg
       })
     },
-    expMeta(x) {
-      const st = x.status || 'submitted'
-      if (st === 'submitted') {
-        const cnt = x.approval_count || 0, req = x.approvals_required || '?'
-        return `Pending approval ${cnt}/${req}`
-      }
-      return fmtStatus(st)
+    expenseRowTitle(x) {
+      return x?.payee || '—'
     },
-    expIcon(x) { return statusIcon(x.status || 'submitted') },
-    toggleExpand(id) {
-      if (this.expExpandId === id) { this.expExpandId = null; return }
-      this.expExpandId = id
-      if (!this.expInlineHistory[id]) loadExpInlineHistory(id)
+    expenseRowCategory(x) {
+      return fmtCat(x?.category || 'other')
+    },
+    expenseRowTime(x) {
+      return fmtDate(changedAt(x) || x?.created_at || x?.expense_date)
+    },
+    expenseActorId(x) {
+      return x?.updated_by || x?.created_by || null
+    },
+    recentExpStatus(x) {
+      const st = x?.status || 'submitted'
+      return st === 'submitted' ? `Pending ${x?.approval_count || 0}/${x?.approvals_required || '?'}` : fmtStatus(st)
+    },
+    recentExpReporter(x) {
+      const uid = this.expenseActorId(x)
+      if (!uid) return ''
+      if (uid === MY_USER_ID) return 'by you'
+      const who = this.userNames?.[uid]
+      return who ? `by ${who}` : ''
+    },
+    expenseCanQuickApprove(x) {
+      return this.can('expenses:approve') && (x?.status || 'submitted') === 'submitted' && !this.myApprovals[x.id] && !this.quickLoading[x.id]
+    },
+    expenseCanQuickPay(x) {
+      return this.can('expenses:approve') && (x?.status || 'submitted') === 'approved' && !this.quickLoading[x.id]
+    },
+    expenseActionBusy(x) {
+      return this.can('expenses:approve') && !!this.quickLoading[x.id]
+    },
+    expenseQuickApprove(x) {
+      return this.quickApprove(x)
+    },
+    expenseQuickPay(x) {
+      return this.quickPay(x)
     },
 
     get _filterCat() { return this.activeTab === 'income' ? this.donFilterCat : this.expFilterCat },
@@ -575,7 +552,7 @@
     },
 
     expSearch: initUrl.expSearch, expFilterCat: initUrl.expFilterCat, expFilterStatus: initUrl.expFilterStatus, expDateFrom: initUrl.expDateFrom, expDateTo: initUrl.expDateTo, expPage: 1,
-    expView: 'list', expExpandId: null, expInlineHistory: {}, expInlineLoading: {},
+    expView: 'list',
     expSortBy: 'created_at', expSortDir: 'desc',
     expCols: [
       { key: 'created_at', label: 'Date' },
@@ -720,6 +697,7 @@
         const res = await api.approveExpense(x.id, '')
         const exp = res.expense || res
         x.status = exp.status
+        x.updated_by = exp.updated_by || x.updated_by || MY_USER_ID
         x.approval_count = res.approval_count ?? x.approval_count
         x.approvals_required = res.approvals_required ?? x.approvals_required
         s.myApprovals = { ...s.myApprovals, [x.id]: true }
@@ -735,6 +713,7 @@
       try {
         const res = await api.payExpense(x.id, '')
         x.status = res.status
+        x.updated_by = res.updated_by || x.updated_by || MY_USER_ID
         s.expenses = [...s.expenses]
         toast('Marked paid', 'success')
       }
@@ -790,31 +769,6 @@
     s.incPrevMonth = prevAmt
   }
 
-  async function loadExpInlineHistory(id) {
-    s.expInlineLoading = { ...s.expInlineLoading, [id]: true }
-    try {
-      const exp = await api.getExpense(id).catch(() => s.expenses.find(e => e.id === id) || null)
-      s.expInlineHistory = { ...s.expInlineHistory, [id]: expenseMetaHistory(exp) }
-    } catch {
-      const exp = s.expenses.find(e => e.id === id)
-      s.expInlineHistory = { ...s.expInlineHistory, [id]: expenseMetaHistory(exp) }
-    }
-    finally {
-      const l = { ...s.expInlineLoading }; delete l[id]; s.expInlineLoading = l
-    }
-  }
-
-  async function loadExpenseDetail(id) {
-    s.expApprovals = []; s.expHistory = []
-    const [exp, approvals] = await Promise.all([
-      api.getExpense(id).catch(() => null),
-      api.getExpenseApprovals(id).catch(() => ({ items: [] })),
-    ])
-    if (exp) s.detailExp = exp
-    s.expApprovals = approvals.items || approvals || []
-    s.expHistory = buildMetaHistory(exp)
-  }
-
   const BATCH = 200
 
   async function loadRemaining(fn, params, key, totalKey) {
@@ -833,7 +787,6 @@
   async function loadAll() {
     s.loading = true; s.loadErr = null
     s.expPage = 1; s.donPage = 1; s.donorPage = 1
-    s.expInlineHistory = {}
     const dateP = { dateFrom: `${s.year}-01-01`, dateTo: `${s.year}-12-31` }
     try {
       const [inc, exp, mem, summary, donors] = await Promise.all([

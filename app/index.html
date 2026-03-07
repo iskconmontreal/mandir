@@ -26,7 +26,7 @@
       </a>
       <div class="finance-pulse-stat">
         <div class="stat-label" :text="fin.net >= 0 ? 'Surplus' : 'Deficit'"></div>
-        <div class="stat-value" :class="fin.net >= 0 ? 'stat-ok' : 'stat-err'" :text="'$' + fmtAmt(Math.abs(fin.net))"></div>
+        <div class="stat-value" :class="fin.net >= 0 ? 'stat-ok' : 'stat-err'" :text="'=$' + fmtAmt(Math.abs(fin.net))"></div>
         <div class="stat-sub" :text="fin.net >= 0 ? 'After income and expenses' : 'Needs attention this month'"></div>
       </div>
     </div>
@@ -43,33 +43,7 @@
       <button :if="can('expenses:create')" class="btn btn-primary" :onclick="openAdd()">+ Expense</button>
     </div>
     <div :if="recentExpenses.length" class="recent-exp-list">
-      <div :each="x in recentExpenses" class="recent-exp-item row-link" :onclick="viewExpense(x)">
-        <span class="recent-exp-icon-col">
-          <span class="status-icon" :class="'status-' + (x.status || 'submitted')" :html="statusIcon(x.status || 'submitted')"></span>
-        </span>
-        <div class="recent-exp-main">
-          <div class="recent-exp-title-row">
-            <div class="recent-exp-title" :text="x.payee || '—'"></div>
-          </div>
-          <div class="recent-exp-meta-row">
-            <span class="recent-exp-status-text" :class="'status-' + (x.status || 'submitted')" :text="recentExpStatus(x)"></span>
-            <span :if="recentExpReporter(x)" class="recent-exp-meta" :text="recentExpReporter(x)"></span>
-            <span class="recent-exp-time" :text="fmtDate(changedAt(x) || x.created_at || x.expense_date)"></span>
-          </div>
-        </div>
-        <div class="recent-exp-cat">
-          <span class="badge" :class="catCls(x.category || 'other')" :text="fmtCat(x.category || 'other')"></span>
-        </div>
-        <div class="recent-exp-amount">
-          <div class="recent-exp-value stat-err" :text="'-$' + fmtAmt(x.amount || 0)"></div>
-          <div class="recent-row-actions" :onclick.stop="">
-            <button :if="can('expenses:approve') && (x.status || 'submitted') === 'submitted' && !quickExpenseAction[x.id]" type="button" class="recent-row-action recent-row-action-accent" title="Quick approve expense" aria-label="Quick approve expense" :onclick.stop="approveRecentExpense(x)" :html="approveIcon"></button>
-            <button :if="can('expenses:approve') && (x.status || 'submitted') === 'approved' && !quickExpenseAction[x.id]" type="button" class="recent-row-action recent-row-action-ok" title="Quick pay expense" aria-label="Quick pay expense" :onclick.stop="payRecentExpense(x)" :html="payIcon"></button>
-            <button type="button" class="recent-row-action recent-row-action-edit" title="Quick revise expense" aria-label="Quick revise expense" :onclick.stop="editExpense(x)" :html="editIcon"></button>
-            <span :if="can('expenses:approve') && quickExpenseAction[x.id]" class="recent-row-action recent-row-action-static" aria-label="Working">…</span>
-          </div>
-        </div>
-      </div>
+      {% include finance/recent-expense-row.html each="x in recentExpenses" %}
     </div>
     <div :if="!recentExpenses.length" class="dim" style="font-size:var(--f-sm); padding:var(--s-sm) 0">No recent expenses</div>
   </div>
@@ -226,7 +200,9 @@
   localStorage.setItem('mandala_last_visit', Date.now())
   const vis = prev ? (Date.now() - prev) / 3600000 : Infinity
 
-  const MY_USER_ID = auth.user?.id
+  const MY_USER_ID = auth.user?.id || auth.user?.user_id || (() => {
+    try { return JSON.parse(atob(auth.token.split('.')[1])).user_id || null } catch { return null }
+  })()
 
   const s = init({
     ...formDefaults(BASE, MY_USER_ID),
@@ -241,6 +217,7 @@
     giving: { total: 0, count: 0, byCategory: {}, receipts: [] },
     myExpenses: [],
     recentExpenses: [],
+    recentExpenseActors: {},
     recentIncome: [],
     quickExpenseAction: {},
     editIcon: actionIcon('edit'),
@@ -248,17 +225,46 @@
     approveIcon: actionIcon('approve'),
     payIcon: actionIcon('pay'),
     showOwnExpenses: !auth.can('income:create') && !auth.can('expenses:approve'),
+    recentExpActorId(x) {
+      const st = x?.status || 'submitted'
+      return st === 'submitted'
+        ? (this.recentExpenseActors?.[x?.id] || x?._recentActorId || x?.created_by || x?.updated_by)
+        : (this.recentExpenseActors?.[x?.id] || x?._recentActorId || x?.updated_by || x?.created_by)
+    },
     recentExpStatus(x) {
       const st = x?.status || 'submitted'
       return st === 'submitted' ? `Pending ${x?.approval_count || 0}/${x?.approvals_required || '?'}` : fmtStatus(st)
     },
     recentExpReporter(x) {
-      const st = x?.status || 'submitted'
-      const uid = st === 'submitted' ? (x?.created_by || x?.updated_by) : (x?.updated_by || x?.created_by)
+      const uid = this.recentExpActorId(x)
       if (!uid) return ''
       if (uid === MY_USER_ID) return 'by you'
       const who = this.userNames?.[uid]
       return who ? `by ${who}` : ''
+    },
+    expenseRowTitle(x) {
+      return x?.payee || '—'
+    },
+    expenseRowCategory(x) {
+      return fmtCat(x?.category || 'other')
+    },
+    expenseRowTime(x) {
+      return fmtDate(changedAt(x) || x?.created_at || x?.expense_date)
+    },
+    expenseCanQuickApprove(x) {
+      return this.can('expenses:approve') && (x?.status || 'submitted') === 'submitted' && !this.quickExpenseAction[x.id]
+    },
+    expenseCanQuickPay(x) {
+      return this.can('expenses:approve') && (x?.status || 'submitted') === 'approved' && !this.quickExpenseAction[x.id]
+    },
+    expenseActionBusy(x) {
+      return this.can('expenses:approve') && !!this.quickExpenseAction[x.id]
+    },
+    expenseQuickApprove(x) {
+      return this.approveRecentExpense(x)
+    },
+    expenseQuickPay(x) {
+      return this.payRecentExpense(x)
     },
     recentIncSource(d) {
       if (d?.member_id && this.memberNames?.[d.member_id]) return this.memberNames[d.member_id]
@@ -299,6 +305,9 @@
         const res = await api.approveExpense(x.id, '')
         const exp = res.expense || res
         x.status = exp.status || x.status
+        x.updated_by = exp.updated_by || x.updated_by || MY_USER_ID
+        x._recentActorId = x.updated_by || MY_USER_ID
+        this.recentExpenseActors = { ...this.recentExpenseActors, [x.id]: x._recentActorId }
         x.approval_count = res.approval_count ?? x.approval_count
         x.approvals_required = res.approvals_required ?? x.approvals_required
         this.recentExpenses = [...this.recentExpenses]
@@ -318,6 +327,9 @@
       try {
         const res = await api.payExpense(x.id, '')
         x.status = res.status || x.status
+        x.updated_by = res.updated_by || x.updated_by || MY_USER_ID
+        x._recentActorId = x.updated_by || MY_USER_ID
+        this.recentExpenseActors = { ...this.recentExpenseActors, [x.id]: x._recentActorId }
         this.recentExpenses = [...this.recentExpenses]
         toast('Expense marked as paid', 'success')
         refreshDashboard()
@@ -349,7 +361,16 @@
       auth.can('expenses:view') ? api.getExpenses({ limit: 8, sortBy: 'updated_at', sortDesc: 'true' }).catch(() => ({ items: [] })) : { items: [] },
       auth.can('income:view') ? api.getIncome({ limit: 8, sortBy: 'updated_at', sortDesc: 'true', dateFrom: monthStart, dateTo: monthEnd }).catch(() => ({ items: [] })) : { items: [] },
     ])
-    s.recentExpenses = exp.items || []
+    const recentExpenses = exp.items || []
+    const recentExpenseLogs = await Promise.all(recentExpenses.map(async row => {
+      if (!row?.id || row?.updated_by || row?._recentActorId) return null
+      const logs = await api.getAuditLogs({ entity_type: 'expense', entity_id: row.id, limit: 10, sortBy: 'created_at', sortDesc: 'true' }).catch(() => ({ items: [] }))
+      const items = logs?.items || logs || []
+      return [row.id, items.find(log => log?.user_id)?.user_id || null]
+    }))
+    const actorById = Object.fromEntries(recentExpenseLogs.filter(Boolean))
+    s.recentExpenseActors = { ...s.recentExpenseActors, ...actorById }
+    s.recentExpenses = recentExpenses.map(row => actorById[row.id] ? { ...row, _recentActorId: actorById[row.id] } : row)
     s.recentIncome = (inc.items || []).filter(d => (d?.type || 'income') === 'donation')
   }
 

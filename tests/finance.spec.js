@@ -1188,13 +1188,24 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
     await page.locator('.card-tab-group').waitFor()
-    await page.locator('.exp-card').first().waitFor()
+    await page.locator('.finance-exp-item').first().waitFor()
 
-    await page.locator('.exp-card').first().hover()
-    const editBtn = page.locator('.exp-card-actions .btn-outline').first()
+    await page.locator('.finance-exp-item').first().hover()
+    const editBtn = page.locator('.finance-exp-item').first().locator('[aria-label="Quick revise expense"]')
     await editBtn.click({ force: true })
     await expect(page.locator('.modal-overlay')).toBeVisible()
     await expect(page.locator('.modal')).toBeVisible()
+  })
+
+  test('list view: clicking expense row opens detail modal', async ({ page }) => {
+    const expenses = [{ id: 1, amount: 5000, payee: 'Costco', category: 'kitchen', expense_date: '2025-01-10', status: 'submitted' }]
+    await mockFinance(page, { expenses })
+    await page.goto('/app/finance/#expenses')
+    await page.locator('.card-tab-group').waitFor()
+    await page.locator('.finance-exp-item').first().click()
+
+    await expect(page.locator('.modal-overlay')).toBeVisible()
+    await expect(page.locator('.modal')).toContainText('Costco')
   })
 
 })

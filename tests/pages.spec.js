@@ -62,6 +62,7 @@ test.describe('overview donations', () => {
       if (path === '/api/me/donations/summary' && method === 'GET') return route.fulfill({ json: { total: 8800, count: 1, by_category: { festival: 8800 } } })
       if (path === '/api/me/tax-receipts' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
       if (path === '/api/finance/summary' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
+      if (path === '/api/audit' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
       if (path === '/api/expenses/1/approve' && method === 'POST') {
         expenses[0] = { ...expenses[0], status: 'approved', approval_count: 1 }
         return route.fulfill({ json: { ...expenses[0], approval_count: 1, approvals_required: 1 } })
@@ -80,10 +81,12 @@ test.describe('overview donations', () => {
     await expect(expenseRow.locator('.recent-row-action')).toHaveCount(2)
     await expenseRow.locator('[aria-label="Quick approve expense"]').click()
     await expect(expenseRow).toContainText('Approved')
+    await expect(expenseRow).toContainText('by you')
     await expenseRow.hover()
     await expect(expenseRow.locator('[aria-label="Quick pay expense"]')).toBeVisible()
     await expenseRow.locator('[aria-label="Quick pay expense"]').click()
     await expect(expenseRow).toContainText('Paid')
+    await expect(expenseRow).toContainText('by you')
 
     const donationRow = page.locator('.recent-inc-item').first()
     await donationRow.hover()
@@ -97,7 +100,7 @@ test.describe('overview donations', () => {
 
     const now = new Date().toISOString()
     const expenses = [
-      { id: 1, amount: 4200, payee: 'Govindas Supplies', category: 'kitchen', expense_date: now.slice(0, 10), created_at: now, updated_at: now, status: 'approved', created_by: 2, updated_by: 9 },
+      { id: 1, amount: 4200, payee: 'Govindas Supplies', category: 'kitchen', expense_date: now.slice(0, 10), created_at: now, updated_at: now, status: 'approved', created_by: 2 },
     ]
     const members = [
       { id: 101, user_id: 9, data: { name: 'Madhava Prabhu' } },
@@ -115,6 +118,9 @@ test.describe('overview donations', () => {
       if (path === '/api/me/donations/summary' && method === 'GET') return route.fulfill({ json: { total: 0, count: 0, by_category: {} } })
       if (path === '/api/me/tax-receipts' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
       if (path === '/api/finance/summary' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
+      if (path === '/api/audit' && method === 'GET') {
+        return route.fulfill({ json: { items: [{ id: 1, entity_id: 1, entity_type: 'expense', user_id: 9, action: 'update', created_at: now }], total: 1 } })
+      }
       return route.fulfill({ json: { items: [], total: 0 } })
     })
 
