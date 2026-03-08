@@ -1547,6 +1547,9 @@ form {
 .finance-exp-item {
   background: var(--c-surface);
 }
+.finance-inc-item {
+  background: var(--c-surface);
+}
 .recent-exp-time {
   font-size: var(--f-xs);
   color: var(--c-text-dim);
@@ -1560,6 +1563,9 @@ form {
   display: flex;
   flex-direction: column;
   margin: 0 calc(-1 * var(--s-md));
+}
+.finance-inc-list-group.recent-inc-list {
+  margin: 0;
 }
 .recent-inc-item {
   display: grid;
@@ -2159,6 +2165,9 @@ form {
   pointer-events: auto;
   transition: max-height .34s ease, opacity .22s ease;
 }
+.finance-inc-list-shell {
+  overflow: visible;
+}
 .finance-exp-list-loading {
   min-height: calc(var(--s-xl) * 2.5);
 }
@@ -2170,7 +2179,8 @@ form {
   padding: var(--s-md) var(--s-md) calc(var(--s-md) + var(--s-xs));
 }
 .finance-exp-list-fx .finance-exp-list-loader,
-.finance-exp-list-fx .recent-exp-item {
+.finance-exp-list-fx .recent-exp-item,
+.finance-exp-list-fx .recent-inc-item {
   animation: finance-exp-reveal .2s ease both;
 }
 .finance-exp-list-shell-refreshing {

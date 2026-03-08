@@ -166,12 +166,14 @@
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); align-items:center; flex-wrap:wrap">
-          <button :if="editId && detailExp?.status === 'submitted' && !delConfirm" type="button" class="btn btn-danger" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
+          <button :if="editId && expMode === 'edit' && detailExp?.status === 'submitted' && !delConfirm" type="button" class="btn btn-danger" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
           <span :if="delConfirm" class="dim" style="font-size:var(--f-sm); margin-right:auto; align-self:center">Delete permanently?</span>
           <button :if="delConfirm" type="button" class="btn btn-danger" :class="{'btn-loading': deleting}" :onclick="delExpense()">Yes</button>
           <button :if="delConfirm" type="button" class="btn btn-outline" :onclick="delConfirm = false">No</button>
-          <button :if="!delConfirm" type="button" class="btn btn-outline" :onclick="cancelExpenseEdit()">Cancel</button>
-          <button :if="!delConfirm" type="submit" form="exp-existing-form" class="btn btn-primary" :class="{'btn-loading': expSaving}" :disabled="expEditPolicy.lockedAll || expSaving">Update</button>
+          <button :if="!delConfirm && expMode !== 'edit'" type="button" class="btn btn-outline" :onclick="cancelExpenseEdit()">Close</button>
+          <button :if="!delConfirm && expMode !== 'edit' && detailExp?.status === 'submitted'" type="button" class="btn btn-primary" :onclick="beginExpenseEdit()">Edit</button>
+          <button :if="!delConfirm && expMode === 'edit'" type="button" class="btn btn-outline" :onclick="cancelExpenseEdit()">Cancel</button>
+          <button :if="!delConfirm && expMode === 'edit'" type="submit" form="exp-existing-form" class="btn btn-primary" :class="{'btn-loading': expSaving}" :disabled="expEditPolicy.lockedAll || expSaving">Update</button>
         </div>
       </div>
     </div>

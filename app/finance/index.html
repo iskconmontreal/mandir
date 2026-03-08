@@ -200,7 +200,7 @@
         <span :if="donDateTo" class="chip filter-inline-chip" :onclick="patchState({ donDateTo: '', donPage: 1 })" :text="'To ' + donDateTo + ' ×'"></span>
       </div>
       <div class="filter-search-seg">
-        <button class="btn btn-filter filter-search-btn" :class="{'filter-search-btn-active': showFilter || donFilterCat || donFilterType || donFilterMethods.length || donDateFrom || donDateTo}" :onclick="showFilter = !showFilter">Filter</button>
+        <button class="btn btn-filter filter-search-btn" :class="{'filter-search-btn-active': showFilter || donFilterType || donFilterMethods.length || donDateFrom || donDateTo}" :onclick="showFilter = !showFilter">Filter</button>
         <div :if="showFilter" class="filter-dropdown">
           <div class="field">
             <label>Type</label>
@@ -240,9 +240,9 @@
             </div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">
-            <button class="btn-link" :if="donFilterCat || donFilterType || donFilterMethods.length || donDateFrom || donDateTo"
+            <button class="btn-link" :if="donFilterType || donFilterMethods.length || donDateFrom || donDateTo"
               :onclick="showFilter = false; clearIncomeFilters()" :text="'Clear all'"></button>
-            <span :if="!donFilterCat && !donFilterType && !donFilterMethods.length && !donDateFrom && !donDateTo"></span>
+            <span :if="!donFilterType && !donFilterMethods.length && !donDateFrom && !donDateTo"></span>
             <button class="btn btn-primary btn-sm" :onclick="showFilter = false"
               :text="'Show ' + donFiltered.length + ' results'"></button>
           </div>
@@ -260,43 +260,33 @@
       <button class="btn btn-primary filter-bar-create" :onclick="openDonForm()">+ Income</button>
     </div>
   </div>
-
-  <div class="cat-pill-bar" :if="donations.length">
-    <div :each="seg in catBreakdown" class="cat-pill-seg"
-      :class="{dim: donFilterCat && donFilterCat !== seg.cat, active: donFilterCat === seg.cat}"
-      :style="{width: Math.max(seg.pct, 0.5) + '%', background: seg.color}"
-      :onclick="patchState({ donFilterCat: donFilterCat === seg.cat ? '' : seg.cat, donPage: 1 })">
-      <span class="cat-pill-tip" :text="fmt(seg.cat) + ' ' + Math.round(seg.pct) + '%'"></span>
-    </div>
-  </div>
-
-  <div class="card">
+  <div class="finance-inc-list-shell">
     <div :if="loadErr" class="login-error" :text="loadErr" style="margin:var(--s-md)"></div>
-    <div class="recent-inc-list">
-      <div :each="d in (donSortBy ? _doSort(donFiltered, donSortBy, donSortDir) : donFiltered).slice(0, Math.max(donPage || 1, 1) * pageSize)" class="recent-inc-item row-link" :onclick="editDonation(d)">
-        <span class="recent-inc-icon-col" :class="'recent-inc-icon-' + recentIncMethod(d)">
-          <span class="recent-inc-icon" :html="methodIcon(recentIncMethod(d))"></span>
-        </span>
-        <div class="recent-inc-main">
-          <div class="recent-inc-title-row">
-            <div style="display:flex;align-items:baseline;gap:var(--s-xs);flex-wrap:wrap">
-              <div class="recent-inc-title" :html="hl(recentIncSource(d), donSearch)"></div>
-              <span class="recent-inc-title-sub dim" :if="d.id" :text="'#' + d.id"></span>
+    <div :if="donations.length">
+      <div :each="yr in donRenderYearGroups" class="finance-year-section">
+        <div class="finance-year-sticky" :if="yr.key !== 'unknown'" :text="yr.key"></div>
+        <div class="finance-year-months">
+          <div :each="g in yr.items" :class="{'finance-month-wrap-open': isDonMonthOpen(g.key), 'finance-month-wrap-divider': isDonMonthDividerVisible(g.key)}">
+            <button type="button" class="exp-group-header" :class="{'exp-group-header-open': isDonMonthOpen(g.key)}" :aria-expanded="isDonMonthOpen(g.key) ? 'true' : 'false'" :data-month-key="g.key" :onclick="e => toggleDonMonthFromEvent(e)">
+              <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
+              <span class="exp-group-heading">
+                <span class="exp-group-label">
+                  <span class="finance-month-label-desktop" :text="fmtMonthShort(g.key)"></span>
+                  <span class="finance-month-label-mobile" :text="fmtMonth(g.key)"></span>
+                </span>
+                <span :if="donMonthHasVisibleData(g.key)" class="exp-group-count" :text="g.count"></span>
+              </span>
+              <span :if="donMonthBreakdown(g.key).length" class="exp-group-breakdown" :title="donMonthBreakdownTooltip(g.key)" :aria-label="donMonthBreakdownTooltip(g.key)">
+                <span :each="seg in donMonthBreakdown(g.key)" class="exp-group-breakdown-seg" :style="expBreakdownSegStyle(seg)" :title="donMonthBreakdownSegmentTooltip(seg)" :aria-label="donMonthBreakdownSegmentTooltip(seg)"></span>
+              </span>
+              <span :if="!donMonthBreakdown(g.key).length"></span>
+              <span :if="donMonthHasVisibleData(g.key)" class="exp-group-total" :text="'$' + fmtAmt(g.total)"></span>
+            </button>
+            <div class="recent-inc-list finance-exp-list finance-inc-list-group" :class="{'finance-exp-list-open': isDonMonthOpen(g.key), 'finance-exp-list-fx': donMonthFxKey === g.key}" :aria-hidden="isDonMonthOpen(g.key) ? 'false' : 'true'">
+              <div :each="d in g.items" style="display:contents">
+                {% include finance/recent-income-row.html row_class="finance-inc-item" onclick="editDonation(d)" search="donSearch" show_id=true %}
+              </div>
             </div>
-          </div>
-          <div class="recent-inc-subtitle">
-            <span class="recent-inc-method" :class="'recent-inc-method-' + recentIncMethod(d)" :text="recentIncMethod(d)"></span>
-            <span class="recent-inc-time" :text="fmtDate(changedAt(d) || d.created_at || d.date_received)"></span>
-          </div>
-        </div>
-        <div class="recent-inc-type">
-          <span class="badge" :class="catCls(recentIncKind(d))" :text="fmtCat(recentIncKind(d))"></span>
-        </div>
-        <div class="recent-inc-amount">
-          <div class="recent-inc-value stat-ok" :text="'+$' + fmtAmt(d.amount || 0)"></div>
-          <div class="recent-row-actions" :onclick.stop="">
-            <button type="button" class="recent-row-action" title="Quick receipt" aria-label="Quick receipt" :onclick.stop="printDonation(d)" :html="printIcon"></button>
-            <button type="button" class="recent-row-action recent-row-action-edit" title="Quick revise donation" aria-label="Quick revise donation" hidden :onclick.stop="editDonation(d)" :html="editIcon"></button>
           </div>
         </div>
       </div>
@@ -307,7 +297,7 @@
     </div>
     <div :if="donations.length && !donFiltered.length && !loading" class="dim" style="text-align:center;padding:var(--s-lg)">No income matches filters</div>
     <div :if="loading" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</div>
-    <div :if="donHasMore" class="scroll-sentinel" :ref="el => observe(el, () => donPage++)">
+    <div :if="donHasMore" class="scroll-sentinel">
       <span class="load-spinner"></span>
     </div>
   </div>
@@ -391,11 +381,12 @@
   const curYear = now.getFullYear()
   const years = Array.from({ length: 3 }, (_, i) => curYear - i)
   const todayIso = `${curYear}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  const currentExpenseMonthKey = todayIso.slice(0, 7)
-  const expenseMonthKeys = years.flatMap(year => {
+  const currentMonthKey = todayIso.slice(0, 7)
+  const defaultMonthKeys = years.flatMap(year => {
     const lastMonth = year === curYear ? now.getMonth() + 1 : 12
     return Array.from({ length: lastMonth }, (_, i) => `${year}-${String(lastMonth - i).padStart(2, '0')}`)
   })
+  const expenseMonthKeys = defaultMonthKeys
   const monthLabel = now.toLocaleString('default', { month: 'short' })
   const perPage = 20
   const normTab = tab => tab === 'donations' ? 'income' : (tab || 'expenses')
@@ -427,7 +418,6 @@
       expDateFrom: url.searchParams.get('exp_from') || '',
       expDateTo: url.searchParams.get('exp_to') || '',
       donSearch: url.searchParams.get('inc_q') || '',
-      donFilterCat: url.searchParams.get('inc_cat') || '',
       donFilterType: normIncomeType(url.searchParams.get('inc_type') || ''),
       donFilterMethods: normIncomeMethods(url.searchParams.get('inc_method') || ''),
       donDateFrom: url.searchParams.get('inc_from') || '',
@@ -441,11 +431,51 @@
     return !filter || type === filter
   }
   const incomeMethodMatch = (row, filters) => !filters?.length || filters.includes(normIncomeMethod(row?.method || 'cash'))
-  const expenseMonthKey = x => x.expense_date?.slice(0, 7) || 'unknown'
-  const expenseMonthRange = key => {
+  const monthKeyOf = value => String(value || '').slice(0, 7) || 'unknown'
+  const expenseMonthKey = x => monthKeyOf(x?.expense_date)
+  const incomeMonthKey = x => monthKeyOf(x?.date_received || x?.created_at || x?.updated_at)
+  const monthRange = key => {
     const [year, month] = key.split('-').map(Number)
     const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
     return { dateFrom: `${key}-01`, dateTo: `${key}-${String(lastDay).padStart(2, '0')}` }
+  }
+  const monthKeysWithData = (baseKeys, items, keyOf) => {
+    const keys = new Set(baseKeys)
+    for (const item of items || []) {
+      const key = keyOf(item)
+      if (key) keys.add(key)
+    }
+    return [...keys].sort((a, b) => {
+      if (a === 'unknown') return 1
+      if (b === 'unknown') return -1
+      return b.localeCompare(a)
+    })
+  }
+  const monthItemMap = (keys, items, keyOf) => {
+    const map = Object.fromEntries((keys || []).map(key => [key, []]))
+    for (const item of items || []) {
+      const key = keyOf(item)
+      if (!map[key]) map[key] = []
+      map[key].push(item)
+    }
+    return map
+  }
+  const buildMonthGroups = ({ keys, itemsByKey, metaByKey = {}, filterItem = null, sortItems = list => list, useMeta = false }) => (keys || []).map(key => {
+    const items = sortItems((itemsByKey?.[key] || []).filter(item => filterItem ? filterItem(item) : true))
+    const meta = metaByKey?.[key] || { count: 0, total: 0 }
+    const count = useMeta ? (meta.count || 0) : items.length
+    const total = useMeta ? (meta.total || 0) : items.reduce((sum, item) => sum + (item.amount || 0), 0)
+    return { key, items, count, total }
+  })
+  const groupMonthsByYear = months => {
+    const groups = []
+    for (const month of months || []) {
+      const key = month.key.includes('-') ? month.key.slice(0, 4) : 'unknown'
+      const prev = groups[groups.length - 1]
+      if (!prev || prev.key !== key) groups.push({ key, items: [month] })
+      else prev.items.push(month)
+    }
+    return groups
   }
   const expenseSortDate = x => changedAt(x) || x?.expense_date || ''
   const sortExpenses = list => [...list].sort((a, b) => {
@@ -456,6 +486,16 @@
     if (ad !== bd) return bd > ad ? 1 : -1
     const ae = a?.expense_date || ''
     const be = b?.expense_date || ''
+    if (ae !== be) return be > ae ? 1 : -1
+    return (b?.id || 0) - (a?.id || 0)
+  })
+  const incomeSortDate = x => changedAt(x) || x?.date_received || x?.created_at || ''
+  const sortIncome = list => [...list].sort((a, b) => {
+    const ad = incomeSortDate(a)
+    const bd = incomeSortDate(b)
+    if (ad !== bd) return bd > ad ? 1 : -1
+    const ae = a?.date_received || ''
+    const be = b?.date_received || ''
     if (ae !== be) return be > ae ? 1 : -1
     return (b?.id || 0) - (a?.id || 0)
   })
@@ -470,7 +510,6 @@
     if (state.expDateFrom) params.set('exp_from', state.expDateFrom)
     if (state.expDateTo) params.set('exp_to', state.expDateTo)
     if (state.donSearch) params.set('inc_q', state.donSearch)
-    if (state.donFilterCat) params.set('inc_cat', state.donFilterCat)
     if (state.donFilterType) params.set('inc_type', state.donFilterType)
     if (state.donFilterMethods?.length) params.set('inc_method', state.donFilterMethods.join(','))
     if (state.donDateFrom) params.set('inc_from', state.donDateFrom)
@@ -540,7 +579,9 @@
     expMonthLoading: {},
     expMonthFxKey: '',
     expRangeLoaded: false,
-    expMonthOpen: { [currentExpenseMonthKey]: true },
+    expMonthOpen: { [currentMonthKey]: true },
+    donMonthOpen: {},
+    donMonthFxKey: '',
     actionAmt: '',
 
     get expEditable() { return expIsEditable(this) },
@@ -558,33 +599,6 @@
     },
     recentIncMethod(d) {
       return normIncomeMethod(d?.method || 'cash') || 'cash'
-    },
-    get catBreakdown() {
-      const items = this.activeTab === 'income'
-        ? this.donations.filter(r => {
-          const dt = r.date_received?.slice(0, 10) || ''
-          if (!incomeTypeMatch(r, this.donFilterType)) return false
-          if (!incomeMethodMatch(r, this.donFilterMethods)) return false
-          if (this.donDateFrom && dt < this.donDateFrom) return false
-          if (this.donDateTo && dt > this.donDateTo) return false
-          return true
-        })
-        : this.expenses
-      const map = {}
-      for (const r of items) {
-        const c = this.activeTab === 'income' ? bucketOf(r) : (r.category || 'other')
-        map[c] = (map[c] || 0) + (r.amount || 0)
-      }
-      const total = Object.values(map).reduce((s, v) => s + v, 0)
-      if (!total) return []
-      const sorted = Object.entries(map).sort((a, b) => b[1] - a[1])
-      let offset = 0
-      return sorted.map(([cat, amt]) => {
-        const pct = amt / total * 100
-        const seg = { cat, amount: amt, pct, color: catHex(cat), offset }
-        offset += pct
-        return seg
-      })
     },
     expenseRowTitle(x) {
       return this.expenseTitle(x)
@@ -614,7 +628,6 @@
       for (const r of this.donations) {
         const dt = r.date_received?.slice(0, 10) || ''
         if (!incomeTypeMatch(r, this.donFilterType)) continue
-        if (this.donFilterCat && bucketOf(r) !== this.donFilterCat) continue
         if (this.donDateFrom && dt < this.donDateFrom) continue
         if (this.donDateTo && dt > this.donDateTo) continue
         const q = this.donSearch.toLowerCase()
@@ -667,17 +680,6 @@
     },
     get hasExpMetaFilterState() {
       return !!(this.expSearch || this.expFilterStatus || this.expDateFrom || this.expDateTo)
-    },
-
-    get _filterCat() { return this.activeTab === 'income' ? this.donFilterCat : this.expFilterCats[0] || '' },
-    toggleCat(cat) {
-      if (this.activeTab === 'income') {
-        this.donFilterCat = this.donFilterCat === cat ? '' : cat
-        this.donPage = 1
-      } else {
-        this.expFilterCats = this.expFilterCats.includes(cat) ? this.expFilterCats.filter(x => x !== cat) : [...this.expFilterCats, cat]
-        this.expPage = 1
-      }
     },
 
     get net() { return this.incMonth - this.expMonth },
@@ -750,29 +752,25 @@
     },
     get expGrouped() {
       const q = this.expSearch.toLowerCase()
-      return this.expMonthKeys.map(key => {
-        const items = sortExpenses((this.expMonthItems[key] || []).filter(r => this.expenseMatches(r, q)))
-        const meta = this.expMonthMeta[key] || { count: 0, total: 0, categories: [] }
-        const count = this.hasExpFilterState ? items.length : meta.count
-        const total = this.hasExpFilterState ? items.reduce((sum, item) => sum + (item.amount || 0), 0) : meta.total
-        return { key, items, count, total }
+      return buildMonthGroups({
+        keys: this.expMonthKeys,
+        itemsByKey: this.expMonthItems,
+        metaByKey: this.expMonthMeta,
+        filterItem: r => this.expenseMatches(r, q),
+        sortItems: sortExpenses,
+        useMeta: !this.hasExpFilterState,
       })
     },
     get expYearGroups() {
-      const groups = []
-      for (const month of this.expGrouped) {
-        const key = month.key.slice(0, 4)
-        const prev = groups[groups.length - 1]
-        if (!prev || prev.key !== key) groups.push({ key, items: [month] })
-        else prev.items.push(month)
-      }
-      return groups
+      return groupMonthsByYear(this.expGrouped)
     },
     fmtMonth(key) {
+      if (!key?.includes('-')) return 'Undated'
       const [y, m] = key.split('-')
       return new Date(+y, +m - 1).toLocaleString('default', { month: 'long', year: 'numeric' })
     },
     fmtMonthShort(key) {
+      if (!key?.includes('-')) return 'Undated'
       const [y, m] = key.split('-')
       return new Date(+y, +m - 1).toLocaleString('default', { month: 'long' })
     },
@@ -879,10 +877,10 @@
       if (next) setExpMonthFx(key)
       else if (this.expMonthFxKey === key) this.expMonthFxKey = ''
       this.expMonthOpen = { ...this.expMonthOpen, [key]: next }
-      stabilizeExpMonthScroll(scrollY)
+      stabilizeMonthScroll(scrollY)
       if (next && !this.isExpMonthLoaded(key)) {
         await loadExpenseMonth(key)
-        stabilizeExpMonthScroll(scrollY)
+        stabilizeMonthScroll(scrollY)
       }
       if (next) clearExpMonthFxAfter(key)
     },
@@ -905,24 +903,115 @@
       return arr.slice(0, this.expPage * perPage)
     },
 
-    donSearch: initUrl.donSearch, donFilterCat: initUrl.donFilterCat, donFilterType: initUrl.donFilterType, donFilterMethods: initUrl.donFilterMethods, donDateFrom: initUrl.donDateFrom, donDateTo: initUrl.donDateTo, donPage: 1, donSortBy: '', donSortDir: 'asc',
+    donSearch: initUrl.donSearch, donFilterType: initUrl.donFilterType, donFilterMethods: initUrl.donFilterMethods, donDateFrom: initUrl.donDateFrom, donDateTo: initUrl.donDateTo, donPage: 1, donSortBy: '', donSortDir: 'asc',
     get donFiltered() {
       const q = this.donSearch.toLowerCase()
       return this.donations.filter(r => {
         const dt = r.date_received?.slice(0, 10) || ''
         if (!incomeTypeMatch(r, this.donFilterType)) return false
         if (!incomeMethodMatch(r, this.donFilterMethods)) return false
-        if (this.donFilterCat && bucketOf(r) !== this.donFilterCat) return false
         if (this.donDateFrom && dt < this.donDateFrom) return false
         if (this.donDateTo && dt > this.donDateTo) return false
         return !q || [r.note, r.method, r.type, bucketOf(r), sourceOf(r, this.memberNames)].filter(Boolean).join(' ').toLowerCase().includes(q)
       })
     },
-    get donHasMore() { return this.donPage * perPage < this.donFiltered.length || this.donations.length < this.donTotal },
-    get donPaged() {
-      const page = Math.max(this.donPage || 1, 1)
-      const arr = this.donSortBy ? this._doSort(this.donFiltered, this.donSortBy, this.donSortDir) : this.donFiltered
-      return arr.slice(0, page * perPage)
+    get hasDonFilterState() {
+      return !!(this.donSearch || this.donFilterType || this.donFilterMethods.length || this.donDateFrom || this.donDateTo)
+    },
+    get donSorted() {
+      return this.donSortBy ? this._doSort(this.donFiltered, this.donSortBy, this.donSortDir) : sortIncome(this.donFiltered)
+    },
+    get donMonthKeys() {
+      return monthKeysWithData(defaultMonthKeys, this.donations, incomeMonthKey)
+    },
+    get donGrouped() {
+      return buildMonthGroups({
+        keys: this.donMonthKeys,
+        itemsByKey: monthItemMap(this.donMonthKeys, this.donSorted, incomeMonthKey),
+      })
+    },
+    get donVisibleMonthKeys() {
+      return this.donGrouped.filter(group => group.count || group.total).map(group => group.key)
+    },
+    get donYearGroups() {
+      return groupMonthsByYear(this.donGrouped)
+    },
+    get donRenderYearGroups() {
+      return this.donFiltered.length ? this.donYearGroups : []
+    },
+    donMonthBuckets(key) {
+      return [...Object.entries((this.donGrouped.find(group => group.key === key)?.items || []).reduce((map, item) => {
+        const cat = bucketOf(item)
+        map[cat] = (map[cat] || 0) + (item.amount || 0)
+        return map
+      }, {}))]
+        .map(([category, total]) => ({ category, total }))
+        .filter(item => item.total > 0)
+        .sort((a, b) => (b.total || 0) - (a.total || 0))
+    },
+    donMonthBreakdown(key) {
+      const total = (this.donGrouped.find(group => group.key === key)?.total || 0)
+      if (!total) return []
+      const all = this.donMonthBuckets(key)
+      const top = all.slice(0, 2)
+      const used = top.reduce((sum, item) => sum + (item.total || 0), 0)
+      const items = top.map(item => ({
+        category: item.category,
+        total: item.total || 0,
+        pct: ((item.total || 0) / total) * 100,
+        color: catBgHex(item.category || 'other'),
+      })).filter(item => item.total > 0)
+      const others = all.slice(2).filter(item => (item.total || 0) > 0)
+      const other = total - used
+      if (other > 0 && others.length) {
+        items.push({
+          category: 'other',
+          total: other,
+          pct: (other / total) * 100,
+          color: 'var(--c-cat-gray-bg)',
+          isOther: true,
+        })
+      }
+      return items
+    },
+    donMonthBreakdownTooltip(key) {
+      return this.donMonthBuckets(key)
+        .map(item => `${fmtCat(item.category)} · $${fmtAmt(item.total || 0)}`)
+        .join('\n')
+    },
+    donMonthBreakdownSegmentTooltip(seg) {
+      return `${seg.isOther ? 'Everything else' : fmtCat(seg.category)} · $${fmtAmt(seg.total || 0)}`
+    },
+    get donHasMore() {
+      return this.donations.length < this.donTotal
+    },
+    isDonMonthOpen(key) {
+      return !!this.donMonthOpen[key]
+    },
+    isDonMonthDividerVisible(key) {
+      const idx = this.donMonthKeys.indexOf(key)
+      if (idx <= 0) return false
+      const prevKey = this.donMonthKeys[idx - 1]
+      return !this.isDonMonthOpen(prevKey)
+    },
+    donMonthHasVisibleData(key) {
+      return this.donVisibleMonthKeys.includes(key)
+    },
+    toggleDonMonth(key, event) {
+      event?.preventDefault?.()
+      event?.currentTarget?.blur?.()
+      const scrollY = window.scrollY
+      const next = !this.isDonMonthOpen(key)
+      if (next) setDonMonthFx(key)
+      else if (this.donMonthFxKey === key) this.donMonthFxKey = ''
+      this.donMonthOpen = { ...this.donMonthOpen, [key]: next }
+      stabilizeMonthScroll(scrollY)
+      if (next) clearDonMonthFxAfter(key)
+    },
+    toggleDonMonthFromEvent(event) {
+      const key = event?.currentTarget?.dataset?.monthKey
+      if (!key) return
+      return this.toggleDonMonth(key, event)
     },
 
     donorSearch: initUrl.donorSearch, donorPage: 1, donorSortBy: 'total', donorSortDir: 'desc',
@@ -939,6 +1028,7 @@
     patchState(patch) {
       Object.assign(this, patch)
       if (Object.keys(patch).some(k => k === 'expSearch' || k === 'expFilterCats' || k === 'expFilterStatus' || k === 'expDateFrom' || k === 'expDateTo')) refreshExpMonthOpen()
+      if (Object.keys(patch).some(k => k === 'donSearch' || k === 'donFilterType' || k === 'donFilterMethods' || k === 'donDateFrom' || k === 'donDateTo')) refreshDonMonthOpen()
       writeUrl(this)
     },
     setYear(year) {
@@ -952,7 +1042,7 @@
       this.patchState({ expFilterCats: [], expFilterStatus: '', expDateFrom: '', expDateTo: '', expPage: 1 })
     },
     clearIncomeFilters() {
-      this.patchState({ donFilterCat: '', donFilterType: '', donFilterMethods: [], donDateFrom: '', donDateTo: '', donPage: 1 })
+      this.patchState({ donFilterType: '', donFilterMethods: [], donDateFrom: '', donDateTo: '', donPage: 1 })
     },
     switchTab(tab) {
       s.cancelAdd()
@@ -1048,6 +1138,7 @@
   s.patchState = patch => {
     Object.assign(s, patch)
     if (Object.keys(patch).some(k => k === 'expSearch' || k === 'expFilterCats' || k === 'expFilterStatus' || k === 'expDateFrom' || k === 'expDateTo')) refreshExpMonthOpen()
+    if (Object.keys(patch).some(k => k === 'donSearch' || k === 'donFilterType' || k === 'donFilterMethods' || k === 'donDateFrom' || k === 'donDateTo')) refreshDonMonthOpen()
     writeUrl(s)
   }
   s.setYear = year => {
@@ -1061,14 +1152,7 @@
     s.patchState({ expFilterCats: [], expFilterStatus: '', expDateFrom: '', expDateTo: '', expPage: 1 })
   }
   s.clearIncomeFilters = () => {
-    s.donFilterCat = ''
-    s.donFilterType = ''
-    s.donFilterMethods = []
-    s.donDateFrom = ''
-    s.donDateTo = ''
-    s.donPage = 1
-    writeUrl(s)
-    loadAll()
+    s.patchState({ donFilterType: '', donFilterMethods: [], donDateFrom: '', donDateTo: '', donPage: 1 })
   }
 
   bindForm(s, { api, onSave: loadAll })
@@ -1088,6 +1172,7 @@
   const BATCH = 200
   const expMonthPrimeReq = {}
   let expMonthFxTimer = 0
+  let donMonthFxTimer = 0
 
   async function loadRemaining(fn, params, key, totalKey) {
     let page = 2
@@ -1135,7 +1220,7 @@
   }
 
   async function fetchExpenseMonthItems(key) {
-    const params = expenseMonthRange(key)
+    const params = monthRange(key)
     let page = 1
     let items = []
     let total = 0
@@ -1211,7 +1296,7 @@
       ])
       const nextMonthMeta = monthMetaMap(summary.exp_months || [])
       const nextOpenKeys = openMonthKeys.filter(key => s.expMonthKeys.includes(key))
-      const visibleOpenKeys = nextOpenKeys.length ? nextOpenKeys : [currentExpenseMonthKey]
+      const visibleOpenKeys = nextOpenKeys.length ? nextOpenKeys : [currentMonthKey]
       const nextMonthEntries = await Promise.all(visibleOpenKeys.map(async key => [key, await fetchExpenseMonthItems(key)]))
       const nextMonthItems = Object.fromEntries(nextMonthEntries)
       s.donations = inc.items || []
@@ -1235,6 +1320,7 @@
       s.userNames = unames
       syncLoadedExpenses()
       refreshExpMonthOpen()
+      refreshDonMonthOpen()
       refreshIncomeStats()
     } catch (e) {
       s.loadErr = e.message || 'Failed to load finance data'
@@ -1242,7 +1328,10 @@
       s.loading = false
       s.expRefreshing = false
     }
-    loadRemaining(api.getIncome, dateP, 'donations', 'donTotal').then(refreshIncomeStats)
+    loadRemaining(api.getIncome, dateP, 'donations', 'donTotal').then(() => {
+      refreshIncomeStats()
+      refreshDonMonthOpen()
+    })
   }
 
   function refreshExpMonthOpen() {
@@ -1257,9 +1346,28 @@
     s.expMonthOpen = next
   }
 
+  function refreshDonMonthOpen() {
+    const keys = s.donMonthKeys
+    if (!keys.length) {
+      s.donMonthOpen = {}
+      return
+    }
+    const next = {}
+    for (const key of keys) if (key in (s.donMonthOpen || {})) next[key] = !!s.donMonthOpen[key]
+    const visibleKeys = s.donVisibleMonthKeys
+    const hasVisibleOpen = visibleKeys.some(key => next[key])
+    if (!hasVisibleOpen) next[visibleKeys[0] || keys[0]] = true
+    s.donMonthOpen = next
+  }
+
   function setExpMonthFx(key) {
     clearTimeout(expMonthFxTimer)
     s.expMonthFxKey = key
+  }
+
+  function setDonMonthFx(key) {
+    clearTimeout(donMonthFxTimer)
+    s.donMonthFxKey = key
   }
 
   function clearExpMonthFxAfter(key, delay = 220) {
@@ -1269,7 +1377,14 @@
     }, delay)
   }
 
-  function stabilizeExpMonthScroll(scrollY) {
+  function clearDonMonthFxAfter(key, delay = 220) {
+    clearTimeout(donMonthFxTimer)
+    donMonthFxTimer = setTimeout(() => {
+      if (s.donMonthFxKey === key) s.donMonthFxKey = ''
+    }, delay)
+  }
+
+  function stabilizeMonthScroll(scrollY) {
     if (typeof scrollY !== 'number') return
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (Math.abs(window.scrollY - scrollY) <= 1) return
@@ -1290,13 +1405,13 @@
     s.expDateFrom = next.expDateFrom
     s.expDateTo = next.expDateTo
     s.donSearch = next.donSearch
-    s.donFilterCat = next.donFilterCat
     s.donFilterType = next.donFilterType
     s.donFilterMethods = next.donFilterMethods
     s.donDateFrom = next.donDateFrom
     s.donDateTo = next.donDateTo
     s.donorSearch = next.donorSearch
     refreshExpMonthOpen()
+    refreshDonMonthOpen()
   }
 
   window.addEventListener('hashchange', applyUrlStateFromLocation)

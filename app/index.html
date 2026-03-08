@@ -57,29 +57,8 @@
       <button :if="can('income:create')" class="btn btn-primary" :onclick="openDonForm()">+ Donation</button>
     </div>
     <div :if="recentIncome.length" class="recent-inc-list">
-      <div :each="d in recentIncome" class="recent-inc-item row-link" :onclick="viewDonation(d)">
-        <span class="recent-inc-icon-col" :class="'recent-inc-icon-' + recentIncMethod(d)">
-          <span class="recent-inc-icon" :html="methodIcon(recentIncMethod(d))"></span>
-        </span>
-        <div class="recent-inc-main">
-          <div class="recent-inc-title-row">
-            <div class="recent-inc-title" :text="recentIncSource(d)"></div>
-          </div>
-          <div class="recent-inc-subtitle">
-            <span class="recent-inc-method" :class="'recent-inc-method-' + recentIncMethod(d)" :text="recentIncMethod(d)"></span>
-            <span class="recent-inc-time" :text="fmtDate(changedAt(d) || d.created_at || d.date_received)"></span>
-          </div>
-        </div>
-        <div class="recent-inc-type">
-          <span class="badge" :class="catCls(recentIncKind(d))" :text="fmtCat(recentIncKind(d))"></span>
-        </div>
-        <div class="recent-inc-amount">
-          <div class="recent-inc-value stat-ok" :text="'+$' + fmtAmt(d.amount || 0)"></div>
-          <div class="recent-row-actions" :onclick.stop="">
-            <button type="button" class="recent-row-action" title="Quick receipt" aria-label="Quick receipt" :onclick.stop="printDonation(d)" :html="printIcon"></button>
-            <button type="button" class="recent-row-action recent-row-action-edit" title="Quick revise donation" aria-label="Quick revise donation" hidden :onclick.stop="editDonation(d)" :html="editIcon"></button>
-          </div>
-        </div>
+      <div :each="d in recentIncome" style="display:contents">
+        {% include finance/recent-income-row.html %}
       </div>
     </div>
     <div :if="!recentIncome.length" class="dim" style="font-size:var(--f-sm); padding:var(--s-sm) 0">No recent donations</div>

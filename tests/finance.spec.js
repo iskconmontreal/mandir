@@ -242,14 +242,15 @@ test.describe('finance section', () => {
     await openFinance(page, 'donations')
 
     await page.locator('section').nth(1).locator('.recent-inc-item').first().click()
-  await expect(page.getByRole('heading', { name: /Edit Income/ })).toBeVisible()
+    const modal = page.locator('.modal-overlay:visible').first()
+    await expect(page.getByRole('heading', { name: /Edit Income/ })).toBeVisible()
 
     await page.click('button:has-text("Delete")')
-    await expect(page.locator('button:has-text("Yes")')).toBeVisible()
-    await expect(page.locator('button:has-text("No")')).toBeVisible()
-    await expect(page.locator('text=Delete permanently?')).toBeVisible()
+    await expect(modal.getByRole('button', { name: 'Yes' })).toBeVisible()
+    await expect(modal.getByRole('button', { name: 'No' })).toBeVisible()
+    await expect(modal.getByText('Delete permanently?')).toBeVisible()
 
-    await page.click('button:has-text("Yes")')
+    await modal.getByRole('button', { name: 'Yes' }).click()
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
     expect(donations).toHaveLength(0)
   })
@@ -260,9 +261,10 @@ test.describe('finance section', () => {
     await openFinance(page, 'donations')
 
     await page.locator('section').nth(1).locator('.recent-inc-item').first().click()
-    await page.click('button:has-text("Delete")')
-    await page.click('button:has-text("No")')
-    await expect(page.locator('button:has-text("Delete")')).toBeVisible()
+    const modal = page.locator('.modal-overlay:visible').first()
+    await modal.getByRole('button', { name: 'Delete' }).click()
+    await modal.getByRole('button', { name: 'No' }).click()
+    await expect(modal.getByRole('button', { name: 'Delete' })).toBeVisible()
     expect(donations).toHaveLength(1)
   })
 
@@ -531,6 +533,37 @@ test.describe('finance section', () => {
     await section.locator('.btn-filter').click()
     await expect(section.locator('.filter-dropdown .year-select')).toHaveCount(0)
     await expect(section.locator('.finance-year-sticky')).toHaveText([curYear, prevYear, oldestYear])
+  })
+
+  test('income list groups months under sticky year rails and opens the first month with data', async ({ page }) => {
+    const curYear = String(new Date().getFullYear())
+    const prevYear = String(new Date().getFullYear() - 1)
+    const oldestYear = String(new Date().getFullYear() - 2)
+    const currentMonthDate = isoMonthDate(0, '05')
+    const previousYearDate = isoMonthDate(-13, '06')
+    const currentMonthLabel = new Date(`${currentMonthDate}T00:00:00`).toLocaleString('default', { month: 'long' })
+    const previousYearMonthLabel = new Date(`${previousYearDate}T00:00:00`).toLocaleString('default', { month: 'long' })
+    const donations = [
+      { id: 1, amount: 5000, method: 'cash', category: 'general', date_received: currentMonthDate, source_name: 'Current Month Donor', note: '' },
+      { id: 2, amount: 2500, method: 'wire', category: 'festival', date_received: previousYearDate, source_name: 'Last Year Donor', note: '' },
+    ]
+
+    await mockFinance(page, { donations })
+    await openFinance(page, 'income')
+
+    const section = page.locator('section').nth(1)
+    await expect(section.locator('.recent-inc-item').filter({ hasText: 'Current Month Donor' })).toBeVisible()
+    await expect(section.locator('.finance-year-sticky')).toHaveText([curYear, prevYear, oldestYear])
+
+    const currentHeader = section.locator('.exp-group-header').filter({ hasText: currentMonthLabel }).first()
+    await expect(currentHeader.locator('.exp-group-count')).toHaveText('1')
+    await expect(currentHeader.locator('.exp-group-breakdown-seg')).toHaveCount(1)
+    await expect(currentHeader.locator('.exp-group-breakdown-seg').first()).toHaveAttribute('title', 'General · $50.00')
+    await expect(currentHeader.locator('.exp-group-total')).toHaveText('$50.00')
+
+    const prevYearSection = section.locator('.finance-year-section').nth(1)
+    await prevYearSection.locator('.exp-group-header').filter({ hasText: previousYearMonthLabel }).first().click()
+    await expect(section.locator('.recent-inc-item').filter({ hasText: 'Last Year Donor' })).toBeVisible()
   })
 
   test('expenses list lazy-loads previous months only when expanded', async ({ page }) => {
