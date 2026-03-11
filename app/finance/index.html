@@ -150,7 +150,9 @@
               <button :if="x.status === 'submitted' && !myApprovals[x.id]" class="btn-quick btn-quick-reject" :onclick="rejectExpense(x)">Reject</button>
               <button :if="x.status === 'submitted' && !myApprovals[x.id]" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickApprove(x)">Approve</button>
               <span :if="x.status === 'submitted' && myApprovals[x.id]" class="dim" style="font-size:var(--f-sm)" title="You approved this — awaiting co-approval">✓ Approved</span>
-              <button :if="x.status === 'approved'" class="btn-quick btn-quick-pay" :class="{'btn-loading': quickLoading[x.id]}" :disabled="!x.attachments?.length" :title="x.attachments?.length ? '' : 'Attach receipt first'" :onclick="quickPay(x)">Paid</button>
+              <button :if="x.status === 'approved'" class="btn-quick btn-quick-pay" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickPay(x)">Paid</button>
+              <button :if="x.status === 'paid' && x.attachments?.length" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickClose(x)">Close</button>
+              <button :if="x.status === 'paid' && !x.attachments?.length" class="btn-quick" :onclick="attachExpense(x)" title="Attach receipt to close">Attach receipt</button>
             </td>
           </tr>
           <tr :if="!expenses.length && !loading && !expSearch">
@@ -628,6 +630,7 @@
     approveIcon: actionIcon('approve'),
     rejectIcon: actionIcon('reject'),
     payIcon: actionIcon('pay'),
+    closeIcon: statusIcon('closed'),
 
     year: initUrl.year, years, curYear, monthLabel,
     loading: false, loadErr: null,
@@ -724,10 +727,13 @@
       return this.can('expenses:approve') && (x?.status || 'submitted') === 'submitted' && !this.myApprovals[x.id] && !this.quickLoading[x.id]
     },
     expenseCanQuickPay(x) {
-      return this.can('expenses:approve') && (x?.status || 'submitted') === 'approved' && x.attachments?.length > 0 && !this.quickLoading[x.id]
+      return this.can('expenses:approve') && (x?.status || 'submitted') === 'approved' && !this.quickLoading[x.id]
     },
-    expensePayDisabled(x) {
-      return this.can('expenses:approve') && (x?.status || 'submitted') === 'approved' && !x.attachments?.length && !this.quickLoading[x.id]
+    expenseCanQuickClose(x) {
+      return this.can('expenses:approve') && (x?.status || '') === 'paid' && x.attachments?.length > 0 && !this.quickLoading[x.id]
+    },
+    expensePaidNoReceipt(x) {
+      return this.can('expenses:approve') && (x?.status || '') === 'paid' && !x.attachments?.length && !this.quickLoading[x.id]
     },
     expenseApprovedByMe(x) {
       return this.can('expenses:approve') && (x?.status || 'submitted') === 'submitted' && this.myApprovals[x.id] && !this.quickLoading[x.id]
@@ -736,7 +742,7 @@
       return this.can('expenses:approve') && !!this.quickLoading[x.id]
     },
     expenseHasQuickActions(x) {
-      return this.expenseCanQuickReject(x) || this.expenseCanQuickApprove(x) || this.expenseApprovedByMe(x) || this.expenseCanQuickPay(x) || this.expensePayDisabled(x) || this.expenseActionBusy(x)
+      return this.expenseCanQuickReject(x) || this.expenseCanQuickApprove(x) || this.expenseApprovedByMe(x) || this.expenseCanQuickPay(x) || this.expenseCanQuickClose(x) || this.expensePaidNoReceipt(x) || this.expenseActionBusy(x)
     },
     expenseQuickApprove(x) {
       return this.quickApprove(x)
@@ -746,6 +752,9 @@
     },
     expenseQuickPay(x) {
       return this.quickPay(x)
+    },
+    closeRecentExpense(x) {
+      return this.quickClose(x)
     },
     expenseMatches(r, q = this.expSearch.toLowerCase()) {
       const dt = r.expense_date?.slice(0, 10) || ''
@@ -1186,6 +1195,21 @@
           updated_by: res.updated_by || x.updated_by || MY_USER_ID,
         })
         toast('Marked paid', 'success')
+      }
+      catch (e) { toast(e.message) }
+      finally { const l = { ...s.quickLoading }; delete l[x.id]; s.quickLoading = l }
+    },
+    async quickClose(x) {
+      if (s.quickLoading[x.id]) return
+      s.quickLoading = { ...s.quickLoading, [x.id]: true }
+      try {
+        const res = await api.closeExpense(x.id)
+        mergeExpenseState({
+          ...res,
+          id: x.id,
+          updated_by: res.updated_by || x.updated_by || MY_USER_ID,
+        })
+        toast('Expense closed', 'success')
       }
       catch (e) { toast(e.message) }
       finally { const l = { ...s.quickLoading }; delete l[x.id]; s.quickLoading = l }

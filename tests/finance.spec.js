@@ -54,8 +54,15 @@ function mockFinance(page, { donations = [], expenses = [], members = [], auditL
     if (idMatch) {
       const [, id, action] = idMatch
       const exp = expenses.find(e => e.id == id)
-      const transitions = { approve: 'approved', pay: 'paid', reject: 'rejected' }
-      if (exp && transitions[action]) { exp.status = transitions[action]; return route.fulfill({ json: exp }) }
+      const transitions = { approve: 'approved', pay: 'paid', reject: 'rejected', close: 'closed' }
+      if (exp && transitions[action]) {
+        exp.status = transitions[action]
+        if (action === 'pay') {
+          const body = route.request().postDataJSON() || {}
+          if (body.reference) exp.reference = body.reference
+        }
+        return route.fulfill({ json: exp })
+      }
     }
 
     if (path === '/api/income' && method === 'POST') {
@@ -1457,7 +1464,7 @@ test.describe('finance section', () => {
 
   test('edit income modal shows id and history in one place', async ({ page }) => {
     const members = [{ id: 1, user_id: 11, data: { name: 'Hari Das' } }]
-    const donations = [{ id: 1, member_id: 1, source_name: 'Hari Das', amount: 5000, method: 'wire', type: 'sale', date_received: '2025-01-15', note: 'invoice paid', updated_at: '2025-01-16T10:00:00Z', updated_by: 11 }]
+    const donations = [{ id: 1, member_id: 1, source_name: 'Hari Das', amount: 5000, method: 'wire', type: 'sale', date_received: '2025-01-15', note: 'invoice paid', updated_at: '2025-01-16T10:00:00Z', updated_by: 11, history: [{ action: 'edited', by: 11, at: '2025-01-16T10:00:00Z' }] }]
     const auditLogs = [{ id: 1, entity_id: 1, entity_type: 'income', user_id: 11, action: 'update', diff: JSON.stringify({ note: 'invoice paid' }), created_at: '2025-01-16T10:00:00Z' }]
     await mockFinance(page, { donations, members, auditLogs })
     await openFinance(page, 'income')
@@ -1551,16 +1558,86 @@ test.describe('finance section', () => {
     const row1 = page.locator('.finance-exp-item').filter({ hasText: 'Vendor A' })
     const row2 = page.locator('.finance-exp-item').filter({ hasText: 'Vendor B' })
 
-    await expect(row1.locator('[aria-label="Quick approve expense"]')).toBeVisible()
-    await expect(row2.locator('[aria-label="Quick pay expense"]')).toBeVisible()
+    await expect(row1.getByRole('button', { name: 'Approve' })).toBeVisible()
+    await expect(row2.getByRole('button', { name: 'Paid' })).toBeVisible()
 
-    await row1.locator('[aria-label="Quick approve expense"]').click({ force: true })
+    await row1.getByRole('button', { name: 'Approve' }).click({ force: true })
     await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
     expect(expenses[0].status).toBe('approved')
 
-    await row2.locator('[aria-label="Quick pay expense"]').click({ force: true })
+    await row2.getByRole('button', { name: 'Paid' }).click({ force: true })
     await expect(page.locator('.toast-success').filter({ hasText: 'paid' })).toBeVisible({ timeout: 5000 })
     expect(expenses[1].status).toBe('paid')
+  })
+
+  test('pay button enabled without receipt (advance payment)', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, payee: 'Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'approved', expense_no: 'E-2026-0001', created_at: isoMonthDate(0, '10') + 'T09:00:00Z', updated_at: isoMonthDate(0, '10') + 'T09:00:00Z', history: [{ action: 'submitted', by: 1, at: isoMonthDate(0, '10') + 'T09:00:00Z' }, { action: 'approve', by: 2, at: isoMonthDate(0, '10') + 'T10:00:00Z' }] },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    await page.locator('.finance-exp-item').first().click()
+    const modal = page.locator('.modal-overlay:visible').first()
+    const payBtn = modal.getByRole('button', { name: 'Paid' })
+    await expect(payBtn).toBeVisible()
+    await expect(payBtn).toBeEnabled()
+  })
+
+  test('pay with receipt stays as paid (no auto-close)', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, payee: 'Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'approved', expense_no: 'E-2026-0001', attachments: [{ id: 1, file_path: 'uploads/receipt.jpg', mime_type: 'image/jpeg', original_name: 'receipt.jpg' }] },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    const row = page.locator('.finance-exp-item').first()
+    await row.getByRole('button', { name: 'Paid' }).click({ force: true })
+    await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
+    expect(expenses[0].status).toBe('paid')
+    await expect(row.locator('.recent-exp-status-text')).toHaveText('Paid')
+  })
+
+  test('pay without receipt stays as paid status', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, payee: 'Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'approved', expense_no: 'E-2026-0001' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    const row = page.locator('.finance-exp-item').first()
+    await row.getByRole('button', { name: 'Paid' }).click({ force: true })
+    await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
+    expect(expenses[0].status).toBe('paid')
+    await expect(row.locator('.recent-exp-status-text')).toHaveText('Paid')
+  })
+
+  test('paid expense without receipt shows "Attach receipt" button in list', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, payee: 'Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'paid', expense_no: 'E-2026-0001' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    const row = page.locator('.finance-exp-item').first()
+    await expect(row.getByRole('button', { name: 'Attach receipt' })).toBeVisible()
+  })
+
+  test('pay modal shows reference input and sends it', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, payee: 'Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'approved', expense_no: 'E-2026-0001', created_at: isoMonthDate(0, '10') + 'T09:00:00Z', updated_at: isoMonthDate(0, '10') + 'T09:00:00Z', history: [{ action: 'submitted', by: 1, at: isoMonthDate(0, '10') + 'T09:00:00Z' }, { action: 'approve', by: 2, at: isoMonthDate(0, '10') + 'T10:00:00Z' }] },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    await page.locator('.finance-exp-item').first().click()
+    const modal = page.locator('.modal-overlay:visible').first()
+    const refInput = modal.getByPlaceholder('Reference')
+    await expect(refInput).toBeVisible()
+    await refInput.fill('ETF-2026-001')
+    await modal.getByRole('button', { name: 'Paid' }).click()
+    await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
+    expect(expenses[0].reference).toBe('ETF-2026-001')
   })
 
   test('quick approve: button shows loading then clears after response', async ({ page }) => {
@@ -1794,11 +1871,11 @@ test.describe('finance section', () => {
 
     const row = page.locator('.finance-exp-item').first()
     await row.hover()
-    await row.locator('[aria-label="Quick approve expense"]').click()
+    await row.getByRole('button', { name: 'Approve' }).click()
     await expect(row.locator('.recent-exp-status-text')).toHaveText('Approved')
 
     await row.hover()
-    await row.locator('[aria-label="Quick pay expense"]').click()
+    await row.getByRole('button', { name: 'Paid' }).click()
     await expect(row.locator('.recent-exp-status-text')).toHaveText('Paid')
   })
 
@@ -1909,12 +1986,13 @@ test.describe('finance section', () => {
 
   test('reject opens reason composer and history shows reject note and paid reference', async ({ page }) => {
     const curDate = isoMonthDate(0, '03')
-    const expense = { id: 1, amount: 5000, payee: 'Parking Corp', category: 'travel', expense_date: curDate, expense_no: 'E-2026-0109', status: 'submitted', created_at: curDate + 'T10:00:00Z', updated_at: curDate + 'T10:00:00Z', created_by: 1 }
-    const members = [{ id: 101, user_id: 9, data: { name: 'Admin' } }]
-    const approvals = [
-      { action: 'reject', note: 'Missing receipt', approved_by: 9, created_at: curDate + 'T11:00:00Z' },
-      { action: 'pay', reference: 'ETF-001', approved_by: 9, created_at: curDate + 'T12:00:00Z' },
+    const history = [
+      { action: 'submitted', by: 1, at: curDate + 'T10:00:00Z' },
+      { action: 'reject', by: 9, at: curDate + 'T11:00:00Z', note: 'Missing receipt' },
+      { action: 'paid', by: 9, at: curDate + 'T12:00:00Z', ref: 'ETF-001' },
     ]
+    const expense = { id: 1, amount: 5000, payee: 'Parking Corp', category: 'travel', expense_date: curDate, expense_no: 'E-2026-0109', status: 'submitted', created_at: curDate + 'T10:00:00Z', updated_at: curDate + 'T10:00:00Z', created_by: 1, history }
+    const members = [{ id: 101, user_id: 9, data: { name: 'Admin' } }]
 
     await page.route(`${API}/**`, async route => {
       const url = new URL(route.request().url())
@@ -1923,7 +2001,6 @@ test.describe('finance section', () => {
 
       if (path === '/api/expenses' && method === 'GET') return route.fulfill({ json: { items: [expense], total: 1 } })
       if (path === '/api/expenses/1' && method === 'GET') return route.fulfill({ json: expense })
-      if (path === '/api/expenses/1/approvals' && method === 'GET') return route.fulfill({ json: approvals })
       if (path === '/api/members' && method === 'GET') return route.fulfill({ json: { items: members, total: members.length } })
       if (path === '/api/income' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
       if (path === '/api/finance/summary' && method === 'GET') return route.fulfill({ json: { exp_month: 5000, exp_prev_month: 0, donors_month: 0, donors_prev_month: 0, exp_months: [{ month: expense.expense_date.slice(0, 7), count: 1, total: expense.amount }] } })

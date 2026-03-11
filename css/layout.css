@@ -600,12 +600,14 @@ button.badge:hover { opacity: 0.82; }
 .badge-rejected  { background: var(--c-err-active);     color: var(--c-err); }
 .badge-approved  { background: var(--c-warn-active);    color: var(--c-warn-amber); }
 .badge-paid      { background: var(--c-ok-active);      color: var(--c-ok); }
+.badge-closed    { background: var(--c-ok-active);      color: var(--c-ok); }
 
 /* Status icons in table */
 .status-icon { display: inline-flex; align-items: center; gap: var(--s-xs); white-space: nowrap; }
 .status-submitted { color: var(--c-warn-amber); }
 .status-approved  { color: var(--c-warn-amber); }
 .status-paid      { color: var(--c-ok); }
+.status-closed    { color: var(--c-ok); }
 .status-rejected  { color: var(--c-err); }
 
 /* Detail fields — read-only display */
@@ -680,6 +682,7 @@ button.badge:hover { opacity: 0.82; }
 .activity-marker-submitted { color: var(--c-warn-amber); }
 .activity-marker-approved { color: var(--c-warn-amber); }
 .activity-marker-paid { color: var(--c-ok); }
+.activity-marker-closed { color: var(--c-ok); }
 .activity-marker-update { color: var(--c-text-dim); }
 .activity-marker-delete { color: var(--c-err); }
 .activity-marker-rejected,
@@ -1526,6 +1529,7 @@ form {
 .recent-exp-status-text.status-submitted { color: var(--c-warn-amber); }
 .recent-exp-status-text.status-approved { color: var(--c-warn-amber); }
 .recent-exp-status-text.status-paid { color: var(--c-ok); }
+.recent-exp-status-text.status-closed { color: var(--c-ok); }
 .recent-exp-status-text.status-rejected { color: var(--c-err); }
 .recent-exp-main .recent-exp-time {
   margin-top: 0;

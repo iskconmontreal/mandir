@@ -200,6 +200,7 @@
     approveIcon: actionIcon('approve'),
     rejectIcon: actionIcon('reject'),
     payIcon: actionIcon('pay'),
+    closeIcon: statusIcon('closed'),
     showOwnExpenses: !auth.can('income:create') && !auth.can('expenses:approve'),
     recentExpActorId(x) {
       const st = x?.status || 'submitted'
@@ -234,10 +235,13 @@
       return this.can('expenses:approve') && (x?.status || 'submitted') === 'submitted' && !this.quickExpenseAction[x.id]
     },
     expenseCanQuickPay(x) {
-      return this.can('expenses:approve') && (x?.status || 'submitted') === 'approved' && x.attachments?.length > 0 && !this.quickExpenseAction[x.id]
+      return this.can('expenses:approve') && (x?.status || 'submitted') === 'approved' && !this.quickExpenseAction[x.id]
     },
-    expensePayDisabled(x) {
-      return this.can('expenses:approve') && (x?.status || 'submitted') === 'approved' && !x.attachments?.length && !this.quickExpenseAction[x.id]
+    expenseCanQuickClose(x) {
+      return this.can('expenses:approve') && (x?.status || '') === 'paid' && x.attachments?.length > 0 && !this.quickExpenseAction[x.id]
+    },
+    expensePaidNoReceipt(x) {
+      return this.can('expenses:approve') && (x?.status || '') === 'paid' && !x.attachments?.length && !this.quickExpenseAction[x.id]
     },
     expenseApprovedByMe(x) {
       return false
@@ -246,7 +250,7 @@
       return this.can('expenses:approve') && !!this.quickExpenseAction[x.id]
     },
     expenseHasQuickActions(x) {
-      return this.expenseCanQuickReject(x) || this.expenseCanQuickApprove(x) || this.expenseCanQuickPay(x) || this.expensePayDisabled(x) || this.expenseActionBusy(x)
+      return this.expenseCanQuickReject(x) || this.expenseCanQuickApprove(x) || this.expenseCanQuickPay(x) || this.expenseCanQuickClose(x) || this.expensePaidNoReceipt(x) || this.expenseActionBusy(x)
     },
     expenseQuickApprove(x) {
       return this.approveRecentExpense(x)
@@ -322,6 +326,26 @@
         this.recentExpenseActors = { ...this.recentExpenseActors, [x.id]: x._recentActorId }
         this.recentExpenses = [...this.recentExpenses]
         toast('Expense marked as paid', 'success')
+        refreshDashboard()
+      } catch (e) {
+        toast(e.message)
+      } finally {
+        const next = { ...this.quickExpenseAction }
+        delete next[x.id]
+        this.quickExpenseAction = next
+      }
+    },
+    async closeRecentExpense(x) {
+      if (!x?.id || this.quickExpenseAction[x.id]) return
+      this.quickExpenseAction = { ...this.quickExpenseAction, [x.id]: 'close' }
+      try {
+        const res = await api.closeExpense(x.id)
+        x.status = res.status || x.status
+        x.updated_by = res.updated_by || x.updated_by || MY_USER_ID
+        x._recentActorId = x.updated_by || MY_USER_ID
+        this.recentExpenseActors = { ...this.recentExpenseActors, [x.id]: x._recentActorId }
+        this.recentExpenses = [...this.recentExpenses]
+        toast('Expense closed', 'success')
         refreshDashboard()
       } catch (e) {
         toast(e.message)

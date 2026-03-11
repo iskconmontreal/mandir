@@ -27,7 +27,8 @@
 <button :if="expenseCanQuickApprove(x)" type="button" class="btn btn-sm btn-outline" title="Quick approve expense" aria-label="Quick approve expense" :onclick.stop="expenseQuickApprove(x)" :html="approveIcon + ' Approve'"></button>
     <span :if="expenseApprovedByMe?.(x)" class="dim" style="font-size:var(--f-sm)" title="You approved this — awaiting co-approval" aria-label="Approved by you">✓ Approved</span>
     <button :if="expenseCanQuickPay(x)" type="button" class="btn btn-sm btn-outline btn-ok-outline" title="Mark as paid" aria-label="Mark as paid" :onclick.stop="expenseQuickPay(x)" :html="payIcon + ' Paid'"></button>
-    <button :if="expensePayDisabled(x)" type="button" class="btn btn-sm btn-outline" disabled title="Attach receipt before marking paid" aria-label="Attach receipt to pay" :html="payIcon + ' Paid'"></button>
+    <button :if="expenseCanQuickClose?.(x)" type="button" class="btn btn-sm btn-outline btn-ok-outline" title="Close expense" aria-label="Close expense" :onclick.stop="closeRecentExpense(x)" :html="closeIcon + ' Close'"></button>
+    <button :if="expensePaidNoReceipt?.(x)" type="button" class="btn btn-sm btn-outline" title="Attach receipt to close" aria-label="Attach receipt" :onclick.stop="attachExpense(x)" :html="icon('attach') + ' Attach receipt'"></button>
     <span :if="expenseActionBusy(x)" class="btn btn-sm btn-outline" style="pointer-events:none;color:var(--c-text-dim)" aria-label="Working">…</span>
     {% endif %}
   </span>

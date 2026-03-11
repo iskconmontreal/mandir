@@ -1,3 +1,5 @@
+* [x] history field, close status
+
 * [ ] improve add receipt/transaction form
 * [ ] better home page
 * [ ] reorganize finances page

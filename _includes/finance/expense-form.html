@@ -139,7 +139,7 @@
               </div>
             </div>
 
-            <div class="activity-item activity-item-current">
+            <div :if="expenseHasActions(detailExp)" class="activity-item activity-item-current">
               <span class="activity-marker" :class="'activity-marker-' + expenseCurrentStatusBadge(detailExp)" :html="activityIcon(expenseCurrentStatusBadge(detailExp))"></span>
               <div class="activity-copy">
                 <div class="activity-line activity-line-current">
@@ -156,7 +156,11 @@
                     <button class="btn btn-danger btn-sm" :class="{'btn-loading': actioning}" :onclick="rejectExp()">Send</button>
                   </div>
                   <div :if="detailExp?.status === 'approved' && can('expenses:approve')" class="activity-followup-actions activity-followup-actions-inline">
-                    <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :disabled="!expAttachments.length" :title="expAttachments.length ? '' : 'Attach receipt before marking paid'" :onclick="payExp()">Paid</button>
+                    <input type="text" :value="payRef" :oninput="e => payRef = e.target.value" placeholder="Reference (optional)" class="input input-sm" style="width:14rem">
+                    <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="payExp()">Paid</button>
+                  </div>
+                  <div :if="detailExp?.status === 'paid' && can('expenses:approve')" class="activity-followup-actions activity-followup-actions-inline">
+                    <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :disabled="!expAttachments.length" :title="expAttachments.length ? '' : 'Attach receipt before closing'" :onclick="closeExp()">Close</button>
                     <span :if="!expAttachments.length" class="activity-hint dim">Attach receipt first</span>
                   </div>
                 </div>
@@ -166,7 +170,7 @@
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); align-items:center; flex-wrap:wrap">
-          <button :if="editId && expMode === 'edit' && !delConfirm && detailExp?.status !== 'paid' && (detailExp?.status === 'submitted' || hasRole('admin') || hasRole('administrator'))" type="button" class="btn btn-danger" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
+          <button :if="editId && expMode === 'edit' && !delConfirm && detailExp?.status !== 'closed' && (detailExp?.status === 'submitted' || hasRole('admin') || hasRole('administrator'))" type="button" class="btn btn-danger" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
           <span :if="delConfirm" class="dim" style="font-size:var(--f-sm); margin-right:auto; align-self:center">Delete permanently?</span>
           <button :if="delConfirm" type="button" class="btn btn-danger" :class="{'btn-loading': deleting}" :onclick="delExpense()">Yes</button>
           <button :if="delConfirm" type="button" class="btn btn-outline" :onclick="delConfirm = false">No</button>
