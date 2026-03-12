@@ -25,10 +25,11 @@
                 <div class="activity-line">
                   <span class="activity-label" :text="h.label"></span>
                   <span :if="h.actor"> by </span>
-                  <span :if="h.actor" :text="h.actor"></span>
-                  <span class="activity-date-inline" :if="h.date" :text="timelineShortDate(h.date)"></span>
+                  <a class="activity-actor-link" :if="h.actor && h.uid" href="{{ '/app/members/' | relative_url }}" :text="h.actor"></a>
+                  <span :if="h.actor && !h.uid" :text="h.actor"></span>
+                  <span :if="h.detail" class="activity-detail" :text="h.detail"></span>
+                  <time class="activity-date-inline" :if="h.date" :text="timelineShortDate(h.date)" :datetime="h.date" :title="new Date(h.date).toLocaleString()"></time>
                 </div>
-                <div :if="h.detail" class="activity-detail" :text="h.detail"></div>
               </div>
             </div>
           </div>

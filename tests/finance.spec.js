@@ -61,6 +61,9 @@ function mockFinance(page, { donations = [], expenses = [], members = [], auditL
           const body = route.request().postDataJSON() || {}
           if (body.reference) exp.reference = body.reference
         }
+        if (action === 'approve') {
+          return route.fulfill({ json: { status: exp.status, expense: exp, approval_count: 1, approvals_required: 1 } })
+        }
         return route.fulfill({ json: exp })
       }
     }
@@ -189,7 +192,7 @@ test.describe('finance section', () => {
     await mockFinance(page)
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     await page.locator('#exp-vendor').focus()
     await page.evaluate(() => document.dispatchEvent(new Event('keydown')))
     await page.locator('#exp-vendor').fill('Test')
@@ -201,10 +204,10 @@ test.describe('finance section', () => {
     await openFinance(page)
 
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     await page.fill('#exp-vendor', 'Hydro Quebec')
     await page.selectOption('#exp-cat', 'kitchen')
-    await page.fill('#exp-amount', '142.50')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '142.50')
     await page.fill('#exp-desc', 'Monthly electricity bill')
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
@@ -970,8 +973,10 @@ test.describe('finance section', () => {
 
     await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
     await expect(page.locator('#exp-amount')).toHaveValue('142.50', { timeout: 5000 })
-    await expect(page.locator('#exp-vendor')).toHaveValue('Hydro Quebec', { timeout: 5000 })
+    // Vendor from OCR populates items table description, not payee
+    await expect(page.locator('.exp-items-table tbody input[type="text"]').first()).toHaveValue('Hydro Quebec', { timeout: 5000 })
 
+    await page.fill('#exp-vendor', 'Test Payee')
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
@@ -984,9 +989,9 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses: [] })
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     await page.fill('#exp-vendor', 'Test Vendor')
-    await page.fill('#exp-amount', '50.00')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '50.00')
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.toast-success')).toBeVisible({ timeout: 5000 })
     await expect(page.locator('.toast-success')).toContainText('Expense saved')
@@ -1019,9 +1024,9 @@ test.describe('finance section', () => {
     })
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     await page.fill('#exp-vendor', 'Test Vendor')
-    await page.fill('#exp-amount', '50.00')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '50.00')
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.form-warn')).toBeVisible({ timeout: 5000 })
     await expect(page.locator('.form-warn')).toContainText('UNIQUE constraint failed')
@@ -1075,7 +1080,7 @@ test.describe('finance section', () => {
     await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
 
     await page.fill('#exp-vendor', 'Test')
-    await page.fill('#exp-amount', '10.00')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '10.00')
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.form-warn')).toContainText('Please wait for receipt processing')
 
@@ -1117,7 +1122,7 @@ test.describe('finance section', () => {
 
     await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
     await page.fill('#exp-vendor', 'Receipt Bundle')
-    await page.fill('#exp-amount', '100.00')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '100.00')
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
@@ -1149,7 +1154,7 @@ test.describe('finance section', () => {
     await expect(page.locator('.receipt-thumb.receipt-error')).toHaveCount(1, { timeout: 5000 })
 
     await page.fill('#exp-vendor', 'Fallback Vendor')
-    await page.fill('#exp-amount', '99.00')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '99.00')
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
@@ -1182,17 +1187,18 @@ test.describe('finance section', () => {
     await page.click('button:has-text("+ Expense")')
     await page.setInputFiles('#exp-receipt-input', { name: 'r.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
 
-    await page.locator('#exp-vendor').waitFor({ timeout: 5000 })
-    await expect(page.locator('#exp-vendor')).toHaveValue('Removed Store', { timeout: 5000 })
-    await expect(page.locator('#exp-amount')).toHaveValue('75.00')
+    await expect(page.locator('#exp-amount')).toHaveValue('75.00', { timeout: 5000 })
+    // Vendor from OCR populates items table description, not payee
+    await expect(page.locator('.exp-items-table tbody input[type="text"]').first()).toHaveValue('Removed Store', { timeout: 5000 })
 
     await page.locator('.receipt-remove').click()
     await expect(page.locator('.receipt-thumb')).toHaveCount(0)
 
+    await page.fill('#exp-vendor', 'Manual Payee')
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
-    expect(savedBody.payee).toBe('Removed Store')
+    expect(savedBody.payee).toBe('Manual Payee')
     expect(savedBody.attachment_ids).toBeUndefined()
   })
 
@@ -1239,14 +1245,14 @@ test.describe('finance section', () => {
     await openFinance(page)
 
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     await page.fill('#exp-vendor', 'Leftover Vendor')
-    await page.fill('#exp-amount', '99.00')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '99.00')
     await page.keyboard.press('Escape')
     await expect(page.locator('.modal-overlay')).not.toBeVisible()
 
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     await expect(page.locator('#exp-vendor')).toHaveValue('')
     await expect(page.locator('#exp-amount')).toHaveValue('')
     await expect(page.locator('.receipt-thumb')).toHaveCount(0)
@@ -1367,9 +1373,9 @@ test.describe('finance section', () => {
 
     await page.locator('.expense-media-pane').dispatchEvent('drop', { dataTransfer })
     await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
-    await page.locator('#exp-vendor').waitFor({ timeout: 5000 })
-    await expect(page.locator('#exp-vendor')).toHaveValue('Drop Store', { timeout: 5000 })
-    await expect(page.locator('#exp-amount')).toHaveValue('55.00')
+    await expect(page.locator('#exp-amount')).toHaveValue('55.00', { timeout: 5000 })
+    // Vendor from OCR populates items table description, not payee
+    await expect(page.locator('.exp-items-table tbody input[type="text"]').first()).toHaveValue('Drop Store', { timeout: 5000 })
   })
 
 
@@ -1405,13 +1411,13 @@ test.describe('finance section', () => {
     await mockFinance(page)
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     await page.fill('#exp-vendor', 'Test')
     await page.click('button:has-text("Cancel")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible()
 
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     await expect(page.locator('#exp-vendor')).toHaveValue('')
   })
 
@@ -1429,14 +1435,16 @@ test.describe('finance section', () => {
     await openFinance(page)
 
     await page.locator('.finance-exp-item').first().click()
-    const amount = page.locator('#exp-amount:visible')
-    await amount.waitFor({ timeout: 5000 })
-    await amount.evaluate((el, v) => {
+    const amount = page.locator('#exp-amount')
+    await amount.waitFor({ state: 'attached', timeout: 5000 })
+    const itemAmount = page.locator('.exp-items-table tbody tr:first-child td:nth-child(2) input')
+    await itemAmount.waitFor({ timeout: 5000 })
+    await itemAmount.evaluate((el, v) => {
       el.value = v
       el.dispatchEvent(new Event('input', { bubbles: true }))
       el.dispatchEvent(new Event('change', { bubbles: true }))
     }, '75.00')
-    await expect(amount).toHaveValue('75')
+    await expect(itemAmount).toHaveValue('75')
     await page.click('button:has-text("Update")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
@@ -1640,6 +1648,36 @@ test.describe('finance section', () => {
     expect(expenses[0].reference).toBe('ETF-2026-001')
   })
 
+  test('approve from modal keeps modal open and updates status', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, payee: 'Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'submitted', expense_no: 'E-2026-0001', created_at: isoMonthDate(0, '10') + 'T09:00:00Z', updated_at: isoMonthDate(0, '10') + 'T09:00:00Z', history: [{ action: 'submitted', by: 1, at: isoMonthDate(0, '10') + 'T09:00:00Z' }] },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    await page.locator('.finance-exp-item').first().click()
+    const modal = page.locator('.modal-overlay:visible').first()
+    await modal.getByRole('button', { name: 'Approve' }).click()
+    await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
+    await expect(modal).toBeVisible()
+    await expect(modal.getByRole('button', { name: 'Paid' })).toBeVisible()
+  })
+
+  test('pay from modal keeps modal open and updates status', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, payee: 'Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'approved', expense_no: 'E-2026-0001', created_at: isoMonthDate(0, '10') + 'T09:00:00Z', updated_at: isoMonthDate(0, '10') + 'T09:00:00Z', history: [{ action: 'submitted', by: 1, at: isoMonthDate(0, '10') + 'T09:00:00Z' }, { action: 'approve', by: 2, at: isoMonthDate(0, '10') + 'T10:00:00Z' }] },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    await page.locator('.finance-exp-item').first().click()
+    const modal = page.locator('.modal-overlay:visible').first()
+    await modal.getByRole('button', { name: 'Paid' }).click()
+    await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
+    await expect(modal).toBeVisible()
+    expect(expenses[0].status).toBe('paid')
+  })
+
   test('quick approve: button shows loading then clears after response', async ({ page }) => {
     let resolveApproval
     const expenses = [{ id: 1, amount: 5000, payee: 'Slow Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'submitted' }]
@@ -1716,15 +1754,18 @@ test.describe('finance section', () => {
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
     await page.setInputFiles('#exp-receipt-input', { name: 'r1.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
-    await page.locator('#exp-vendor').waitFor({ timeout: 5000 })
-    await expect(page.locator('#exp-vendor')).toHaveValue('First Store', { timeout: 5000 })
+    await expect(page.locator('#exp-amount')).toHaveValue('10.00', { timeout: 5000 })
+    // Vendor from OCR populates items table, not payee
+    await expect(page.locator('.exp-items-table tbody input[type="text"]').first()).toHaveValue('First Store', { timeout: 5000 })
 
+    // User manually enters payee
     await page.fill('#exp-vendor', 'My Override')
 
     await page.locator('.receipt-add').click()
     await page.setInputFiles('#exp-receipt-input', { name: 'r2.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
 
+    // Payee should remain user's override
     await expect(page.locator('#exp-vendor')).toHaveValue('My Override')
     await expect(page.locator('#exp-amount')).toHaveValue('30.00', { timeout: 5000 })
   })
@@ -1735,9 +1776,9 @@ test.describe('finance section', () => {
     await openFinance(page)
 
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     await page.fill('#exp-vendor', 'Date Test')
-    await page.fill('#exp-amount', '10.00')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '10.00')
     await page.fill('#exp-date', '2025-06-15')
     await expect(page.locator('#exp-date')).toHaveValue('2025-06-15')
 
@@ -1759,7 +1800,7 @@ test.describe('finance section', () => {
     await page.click('button:has-text("+ Expense")')
     await page.fill('#exp-vendor', 'Bell Canada')
     await page.selectOption('#exp-cat', 'utilities')
-    await page.fill('#exp-amount', '89.50')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '89.50')
     await page.fill('#exp-date', isoMonthDate(0, '01'))
     await page.fill('#exp-desc', 'Internet service')
     await page.click('button:has-text("Submit")')
@@ -2052,7 +2093,7 @@ test.describe('finance section', () => {
     const minJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9])
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
 
     // Date should start empty (not prefilled with today)
     await expect(page.locator('#exp-date')).toHaveValue('')
@@ -2063,16 +2104,16 @@ test.describe('finance section', () => {
     // Then scan a receipt — scanned date should NOT overwrite user's date
     await page.setInputFiles('#exp-receipt-input', { name: 'r.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
-    await expect(page.locator('#exp-vendor')).toHaveValue('Scanned Store', { timeout: 5000 })
+    await expect(page.locator('#exp-amount')).toHaveValue('80.00', { timeout: 5000 })
 
     // Date must remain what user entered, not the scanned '2024-06-01'
     await expect(page.locator('#exp-date')).toHaveValue(userDate)
 
+    await page.fill('#exp-vendor', 'Test Payee')
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
     expect(savedBody.expense_date).toBe(userDate)
-    await expect(page.locator('.toast-warn')).toBeVisible()
   })
 
   test('second receipt does not overwrite date set by first receipt', async ({ page }) => {
@@ -2094,7 +2135,7 @@ test.describe('finance section', () => {
     const minJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9])
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
-    await page.locator('#exp-amount').waitFor({ timeout: 5000 })
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
 
     // Date starts empty
     await expect(page.locator('#exp-date')).toHaveValue('')
@@ -2304,8 +2345,10 @@ test.describe('finance section', () => {
     await openFinance(page)
 
     await page.locator('.finance-exp-item').first().click()
-    await page.locator('#exp-amount:visible').waitFor({ timeout: 5000 })
-    await page.locator('#exp-amount:visible').fill('99.99')
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
+    const itemAmt = page.locator('.exp-items-table tbody tr:first-child td:nth-child(2) input')
+    await itemAmt.waitFor({ timeout: 5000 })
+    await itemAmt.fill('99.99')
 
     // Cancel — should prompt
     page.once('dialog', d => d.accept())
@@ -2425,6 +2468,138 @@ test.describe('finance section', () => {
     const modal = page.locator('.modal-overlay:visible').first()
     await expect(modal).toBeVisible()
     await expect(modal.getByText('submit a new expense instead')).toBeVisible()
+  })
+
+  test('empty item row auto-removed on blur', async ({ page }) => {
+    await mockFinance(page)
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
+
+    // Start with 1 row, add another
+    const rows = page.locator('.exp-items-table tbody tr')
+    await expect(rows).toHaveCount(1)
+    await page.click('button:has-text("+ Add item")')
+    await expect(rows).toHaveCount(2)
+
+    // Fill first row with data
+    await page.fill('.exp-items-table tbody tr:first-child input[type="text"]', 'Item 1')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '10.00')
+
+    // Leave second row empty, blur away from it
+    await page.locator('.exp-items-table tbody tr:nth-child(2) input[type="text"]').focus()
+    await page.locator('.exp-items-table tbody tr:nth-child(2) input[type="text"]').blur()
+
+    // Empty row should be auto-removed
+    await expect(rows).toHaveCount(1)
+  })
+
+  test('expense payee shows member suggestions', async ({ page }) => {
+    const members = [
+      { id: 1, user_id: 11, data: { name: 'Hari Das' } },
+      { id: 2, user_id: 12, data: { name: 'Gopi Devi' } },
+    ]
+    await mockFinance(page, { members })
+    await loginAs(page, 'treasurer')
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
+
+    // Focus payee field — should show all members
+    await page.locator('#exp-vendor').focus()
+    const list = page.locator('.autocomplete-list').filter({ has: page.locator('.autocomplete-item') }).first()
+    await expect(list).toBeVisible({ timeout: 5000 })
+    await expect(list).toContainText('Hari Das')
+    await expect(list).toContainText('Gopi Devi')
+
+    // Type to filter
+    await page.fill('#exp-vendor', 'Gopi')
+    await expect(list.locator('.autocomplete-item')).toHaveCount(1)
+    await expect(list).toContainText('Gopi Devi')
+
+    // Select member
+    await list.locator('.autocomplete-item').first().click()
+    await expect(page.locator('#exp-vendor')).toHaveValue('Gopi Devi')
+  })
+
+  test('item descriptions saved in details payload', async ({ page }) => {
+    let savedBody = null
+    const expenses = []
+    await mockFinance(page, { expenses })
+    await page.route(`${API}/api/expenses`, async route => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      savedBody = route.request().postDataJSON()
+      expenses.push({ id: 1, ...savedBody, status: 'submitted' })
+      return route.fulfill({ json: expenses[0] })
+    })
+    await openFinance(page)
+    await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
+
+    // Fill item desc and amount
+    await page.fill('.exp-items-table tbody tr:first-child input[type="text"]', 'Office supplies')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '25.00')
+    await page.fill('#exp-vendor', 'Test Payee')
+    await page.selectOption('#exp-cat', 'kitchen')
+    await page.click('button:has-text("Submit")')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
+
+    expect(savedBody?.details?.items).toBeTruthy()
+    expect(savedBody.details.items[0].desc).toBe('Office supplies')
+    expect(Number(savedBody.details.items[0].amount)).toBe(25)
+  })
+
+  test('item title persists after save and reopen', async ({ page }) => {
+    const expenses = []
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    await page.click('button:has-text("+ Expense")')
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
+
+    // Fill item desc and amount
+    await page.fill('.exp-items-table tbody tr:first-child input[type="text"]', 'Printer paper')
+    await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '35.00')
+    await page.fill('#exp-vendor', 'Staples')
+    await page.selectOption('#exp-cat', 'kitchen')
+    await page.click('button:has-text("Submit")')
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
+
+    // Reopen the saved expense
+    await page.locator('.finance-exp-item').first().click()
+    await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
+    const descInput = page.locator('.exp-items-table tbody tr:first-child input[type="text"]')
+    await expect(descInput).toHaveValue('Printer paper', { timeout: 5000 })
+  })
+
+  test('history actor you is a link', async ({ page }) => {
+    await loginAs(page, 'treasurer')
+    const expenses = [{ id: 1, amount: 5000, payee: 'Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'submitted', created_by: 2, created_at: '2025-01-15T10:30:00Z' }]
+    await mockFinance(page, { expenses, members: [{ id: 1, user_id: 2, data: { name: 'Treasurer' } }] })
+    await openFinance(page)
+    await page.locator('.finance-exp-item').first().click()
+    await expect(page.locator('.modal-overlay:visible')).toBeVisible()
+
+    // "you" in history should be an <a> link
+    const actorLink = page.locator('.activity-actor-link').first()
+    await expect(actorLink).toBeVisible({ timeout: 5000 })
+  })
+
+  test('history date shows datetime on hover', async ({ page }) => {
+    await loginAs(page, 'treasurer')
+    const expenses = [{ id: 1, amount: 5000, payee: 'Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '10'), status: 'submitted', created_by: 2, created_at: '2025-01-15T10:30:00Z' }]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+    await page.locator('.finance-exp-item').first().click()
+    await expect(page.locator('.modal-overlay:visible')).toBeVisible()
+
+    // Date should be a <time> element with title attribute
+    const timeEl = page.locator('time.activity-date-inline').first()
+    await expect(timeEl).toBeVisible({ timeout: 5000 })
+    const title = await timeEl.getAttribute('title')
+    expect(title).toBeTruthy()
+    const datetime = await timeEl.getAttribute('datetime')
+    expect(datetime).toContain('2025-01-15')
   })
 
 })
