@@ -2805,3 +2805,7 @@ form {
 .exp-items-table tfoot td { border-bottom: none; border-top: 2px solid var(--c-border); padding: 3px; }
 .exp-items-table tfoot td:first-child { padding: 3px 0; }
 .exp-items-table tfoot input { font-weight: var(--f-wt-b); }
+.exp-item-desc { position: relative; }
+.exp-item-remove { position: absolute; right: var(--s-sm); top: 50%; transform: translateY(-50%); display: none; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; border: none; background: transparent; color: var(--c-text-dim); font-size: var(--f-md); line-height: 1; cursor: pointer; border-radius: var(--r-sm); padding: 0; }
+.exp-items-table tr:hover .exp-item-remove { display: flex; }
+.exp-item-remove:hover { color: var(--c-err); }

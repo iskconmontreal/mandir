@@ -2470,28 +2470,31 @@ test.describe('finance section', () => {
     await expect(modal.getByText('submit a new expense instead')).toBeVisible()
   })
 
-  test('empty item row auto-removed on blur', async ({ page }) => {
+  test('item row removed via cross button', async ({ page }) => {
     await mockFinance(page)
     await openFinance(page)
     await page.click('button:has-text("+ Expense")')
     await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
 
-    // Start with 1 row, add another
     const rows = page.locator('.exp-items-table tbody tr')
     await expect(rows).toHaveCount(1)
     await page.click('button:has-text("+ Add item")')
     await expect(rows).toHaveCount(2)
 
-    // Fill first row with data
+    // Fill both rows
     await page.fill('.exp-items-table tbody tr:first-child input[type="text"]', 'Item 1')
     await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '10.00')
+    await page.fill('.exp-items-table tbody tr:nth-child(2) input[type="text"]', 'Item 2')
+    await page.fill('.exp-items-table tbody tr:nth-child(2) td:nth-child(2) input', '20.00')
 
-    // Leave second row empty, blur away from it
-    await page.locator('.exp-items-table tbody tr:nth-child(2) input[type="text"]').focus()
-    await page.locator('.exp-items-table tbody tr:nth-child(2) input[type="text"]').blur()
-
-    // Empty row should be auto-removed
+    // Remove first row via cross button (visible on hover)
+    await page.locator('.exp-items-table tbody tr:first-child').hover()
+    await page.locator('.exp-items-table tbody tr:first-child .exp-item-remove').click()
     await expect(rows).toHaveCount(1)
+    await expect(page.locator('.exp-items-table tbody tr:first-child input[type="text"]')).toHaveValue('Item 2')
+
+    // Single row should not show remove button
+    await expect(page.locator('.exp-item-remove')).toHaveCount(0)
   })
 
   test('expense payee shows member suggestions', async ({ page }) => {

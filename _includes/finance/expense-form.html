@@ -83,11 +83,10 @@
               </thead>
               <tbody>
                 <tr :each="(item, i) in expForm.items">
-                  <td><input type="text" :value="item.desc" :oninput="e => { expForm.items[i].desc = e.target.value }" placeholder="Item" :disabled="expEditPolicy.lockedAll"></td>
+                  <td class="exp-item-desc"><input type="text" :value="item.desc" :oninput="e => { expForm.items[i].desc = e.target.value }" placeholder="Item" :disabled="expEditPolicy.lockedAll"><button :if="!expEditPolicy.lockedAll && expForm.items.length > 1" type="button" class="exp-item-remove" :onclick="removeExpItem(i)" tabindex="-1">&times;</button></td>
                   <td><input type="number" step="0.01" min="0" :value="item.amount" :oninput="e => { expForm.items[i].amount = e.target.value; syncItemTotals() }" placeholder="0.00" :disabled="expEditPolicy.amountLocked"></td>
                   <td><input type="number" step="0.01" min="0" :value="item.gst" :oninput="e => { expForm.items[i].gst = e.target.value; syncItemTotals() }" placeholder="0.00" :disabled="expEditPolicy.amountLocked"></td>
                   <td><input type="number" step="0.01" min="0" :value="item.pst" :oninput="e => { expForm.items[i].pst = e.target.value; syncItemTotals() }" placeholder="0.00" :disabled="expEditPolicy.amountLocked"></td>
-                  <td class="exp-items-act" :if="!expEditPolicy.lockedAll && expForm.items.length > 1"><button type="button" class="exp-item-remove" :onclick="removeExpItem(i)" tabindex="-1">&times;</button></td>
                 </tr>
               </tbody>
               <tfoot>
