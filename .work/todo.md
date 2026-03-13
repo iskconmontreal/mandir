@@ -1,8 +1,10 @@
 * [x] history field, close status
 
-* [ ] improve add receipt/transaction form
-* [ ] better home page
+* [x] improve add receipt/transaction form
+
 * [ ] reorganize finances page
+
+* [ ] better home page
 * [ ] 1-image → multiple receipts OCR segmentation (complex, skip for now)
   * [ ] integrate better Apple OCR
 * [ ] Double OCR check? ollama can estimate the clarity of parsed data.

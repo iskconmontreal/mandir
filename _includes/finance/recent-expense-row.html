@@ -1,4 +1,4 @@
-<div :each="{{ include.each }}" class="recent-exp-item row-link{% if include.row_class %} {{ include.row_class }}{% endif %}" :class="{'row-fresh': isFresh(x.id)}" :onclick="viewExpense(x)">
+<div {% if include.each %}:each="{{ include.each }}"{% endif %} class="recent-exp-item row-link{% if include.row_class %} {{ include.row_class }}{% endif %}" :class="{'row-fresh': isFresh(x.id)}" :onclick="viewExpense(x)">
   <span class="recent-exp-icon-col">
     <span class="status-icon" :class="'status-' + (x.status || 'submitted')" :html="statusIcon(x.status || 'submitted')"></span>
   </span>

@@ -75,7 +75,7 @@
 </div>
 </template>
 
-<div :html="showAdd && activeTab === 'income'
+<div :html="showAdd && addFormType === 'income'
   ? document.getElementById(
       donMode === 'create'
         ? 'don-create-modal-template'

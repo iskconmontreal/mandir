@@ -215,7 +215,7 @@
   </div>
 </div>
 </template>
-<div :html="showAdd && activeTab === 'expenses' ? document.getElementById('exp-modal-template') : ''"></div>
+<div :html="showAdd && addFormType === 'expense' ? document.getElementById('exp-modal-template') : ''"></div>
 <div :if="lightboxSrc" class="lightbox" :onclick="lightboxSrc = ''" :onkeydown.esc.document="lightboxSrc = ''">
   <img :src="lightboxSrc">
   <button class="lightbox-close" :onclick="lightboxSrc = ''" :html="icon('close')"></button>

@@ -177,14 +177,14 @@ test.describe('finance section', () => {
 
   test.afterEach(() => { expect(errors).toEqual([]) })
 
-  test('shows three tabs: Expenses, Income, Donors', async ({ page }) => {
+  test('shows three tabs: Transactions, Expenses, Income', async ({ page }) => {
     await mockFinance(page)
     await openFinance(page)
     const tabs = page.locator('.card-tab')
     await expect(tabs).toHaveCount(3)
-    await expect(tabs.nth(0).locator('.stat-label')).toHaveText('Expenses')
-    await expect(tabs.nth(1).locator('.stat-label')).toHaveText('Income')
-    await expect(tabs.nth(2).locator('.stat-label')).toHaveText('Donors')
+    await expect(tabs.nth(0).locator('.stat-label')).toHaveText('Transactions')
+    await expect(tabs.nth(1).locator('.stat-label')).toHaveText('Expenses')
+    await expect(tabs.nth(2).locator('.stat-label')).toHaveText('Income')
   })
 
 

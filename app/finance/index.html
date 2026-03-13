@@ -1,14 +1,17 @@
 ---
 ---
 <div class="page-header" style="display:flex; align-items:baseline; justify-content:space-between">
-  <div>
-    <h1>Finance</h1>
-    <div style="font-size:var(--f-sm)" class="dim"><span :class="net > 0 ? 'stat-ok' : net < 0 ? 'stat-err' : ''" :text="(net >= 0 ? '+' : '−') + '$' + fmtAmt(Math.abs(net))"></span> this month</div>
-  </div>
+  <h1>Finance</h1>
 </div>
 
 <!-- Stat cards as tabs -->
 <div class="card-tab-group">
+  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'transactions'}"
+    :onclick="e => { switchTab('transactions'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
+    <div class="stat-label">Transactions</div>
+    <div class="stat-value"><span :class="net > 0 ? 'stat-ok' : net < 0 ? 'stat-err' : ''" :text="(net >= 0 ? '+' : '\u2212') + '$' + fmtAmt(Math.abs(net))"></span></div>
+    <div class="stat-sub dim"><span :text="monthLabel"></span></div>
+  </div>
   <div class="card-tab" :class="{['card-tab-active']: activeTab === 'expenses'}"
     :onclick="e => { switchTab('expenses'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
     <div class="stat-label">Expenses</div>
@@ -20,12 +23,6 @@
     <div class="stat-label">Income</div>
     <div class="stat-value"><span :text="'$' + fmtAmt(incMonth)"></span></div>
     <div class="stat-sub dim"><span :if="trend(incMonth, incPrevMonth).dir" class="trend-arrow" :class="trend(incMonth, incPrevMonth).cls" :html="trendIcon(trend(incMonth, incPrevMonth).dir)"></span><span :text="trend(incMonth, incPrevMonth).num"></span><span :text="trend(incMonth, incPrevMonth).label"></span></div>
-  </div>
-  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'donors'}"
-    :onclick="e => { switchTab('donors'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
-    <div class="stat-label">Donors</div>
-    <div class="stat-value"><span :text="donorsMonth"></span></div>
-    <div class="stat-sub dim"><span :if="trendDiff(donorsMonth, donorsPrevMonth).dir" class="trend-arrow" :class="trendDiff(donorsMonth, donorsPrevMonth).cls" :html="trendIcon(trendDiff(donorsMonth, donorsPrevMonth).dir)"></span><span :text="trendDiff(donorsMonth, donorsPrevMonth).num"></span><span :text="trendDiff(donorsMonth, donorsPrevMonth).label"></span></div>
   </div>
 </div>
 
@@ -347,12 +344,14 @@
 
 </section>
 
-<!-- ===== DONORS TAB ===== -->
-<section :class="{'hidden': activeTab !== 'donors'}" :scope="{showExport: false}">
+<!-- ===== NET TAB (all transactions) ===== -->
+<section :class="{'hidden': activeTab !== 'transactions'}" :scope="{showExport: false, showAddMenu: false}">
 
   <div class="filter-bar">
-    <input class="filter-search" type="search" placeholder="Search donor…"
-      :value="donorSearch" :oninput.debounce-150="e => patchState({ donorSearch: e.target.value, donorPage: 1 })">
+    <div class="filter-search-wrap">
+      <input class="filter-search filter-search-input" type="search" placeholder="Search all transactions…"
+        :value="netSearch" :oninput.debounce-150="e => patchState({ netSearch: e.target.value })">
+    </div>
     <div class="filter-bar-actions">
       <div style="position:relative">
         <button class="btn btn-outline btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export</button>
@@ -361,41 +360,51 @@
           <a class="quick-add-item" :onclick="printTable(); showExport = false">Print / PDF</a>
         </div>
       </div>
+      <div style="position:relative">
+        <button class="btn btn-primary filter-bar-create" :onclick="showAddMenu = !showAddMenu" :onclick.outside="showAddMenu = false">+ Transaction</button>
+        <div :if="showAddMenu" class="quick-add" style="right:0;left:auto">
+          <a :if="can('expenses:create')" class="quick-add-item" :onclick="openAdd(); showAddMenu = false">Expense</a>
+          <a :if="can('income:create')" class="quick-add-item" :onclick="openDonForm(); showAddMenu = false">Income</a>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="card">
+  <div class="finance-inc-list-shell">
     <div :if="loadErr" class="login-error" :text="loadErr" style="margin:var(--s-md)"></div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th class="th-sort" :class="_sortCls('donor', 'name')" :onclick="_toggleSort('donor', 'name')">Donor</th>
-            <th class="th-sort" :class="_sortCls('donor', 'count')" :onclick="_toggleSort('donor', 'count')" style="text-align:right">Donations</th>
-            <th class="th-sort" :class="_sortCls('donor', 'total')" :onclick="_toggleSort('donor', 'total')" style="text-align:right">Total</th>
-            <th class="th-sort" :class="_sortCls('donor', 'lastDate')" :onclick="_toggleSort('donor', 'lastDate')">Last Donation</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr :each="d in donorPaged">
-            <td :html="hl(d.name, donorSearch)"></td>
-            <td style="text-align:right" :text="d.count"></td>
-            <td style="text-align:right" class="stat-ok" :text="'$' + fmtAmt(d.total)"></td>
-            <td class="dim" :text="fmtDate(d.lastDate)"></td>
-          </tr>
-          <tr :if="!donorFiltered.length && !loading">
-            <td colspan="4" class="dim" style="text-align:center;padding:var(--s-lg)">
-              <span :text="donations.length ? 'No donors match search' : 'Donors appear once donations are recorded'"></span>
-            </td>
-          </tr>
-          <tr :if="loading">
-            <td colspan="4" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</td>
-          </tr>
-        </tbody>
-      </table>
+    <div :if="loading" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</div>
+    <div :if="!loading && !netFiltered.length" class="dim" style="text-align:center;padding:var(--s-xl)">
+      <span :text="netSearch ? 'No transactions match search' : 'No transactions yet'"></span>
     </div>
-    <div :if="donorHasMore" class="scroll-sentinel" :ref="el => observe(el, () => donorPage++)">
-      <span class="load-spinner"></span>
+    <div :if="netFiltered.length">
+      <div :each="yr in netYearGroups" class="finance-year-section">
+        <div class="finance-year-sticky" :if="yr.key !== 'unknown'" :text="yr.key"></div>
+        <div class="finance-year-months">
+          <div :each="g in yr.items" :class="{'finance-month-wrap-open': isNetMonthOpen(g.key), 'finance-month-wrap-divider': isNetMonthDividerVisible(g.key)}">
+            <button type="button" class="exp-group-header" :class="{'exp-group-header-open': isNetMonthOpen(g.key)}" :aria-expanded="isNetMonthOpen(g.key) ? 'true' : 'false'" :data-month-key="g.key" :onclick="e => toggleNetMonthFromEvent(e)">
+              <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
+              <span class="exp-group-heading">
+                <span class="exp-group-label">
+                  <span class="finance-month-label-desktop" :text="fmtMonthShort(g.key)"></span>
+                  <span class="finance-month-label-mobile" :text="fmtMonth(g.key)"></span>
+                </span>
+                <span :if="g.count" class="exp-group-count" :text="g.count"></span>
+              </span>
+              <span :if="g.count" class="exp-group-total" :class="g.net >= 0 ? 'stat-ok' : 'stat-err'" :text="(g.net >= 0 ? '+' : '\u2212') + '$' + fmtAmt(Math.abs(g.net))"></span>
+            </button>
+            <div class="recent-exp-list finance-exp-list finance-net-list" :class="{'finance-exp-list-open': isNetMonthOpen(g.key)}" :aria-hidden="isNetMonthOpen(g.key) ? 'false' : 'true'">
+              <div :each="tx in g.items" style="display:contents">
+                <div :if="tx._isExp" style="display:contents" :scope="{x: tx}">
+                  {% include finance/recent-expense-row.html row_class="finance-net-item" show_expense_no=true %}
+                </div>
+                <div :if="!tx._isExp" style="display:contents" :scope="{d: tx}">
+                  {% include finance/recent-income-row.html row_class="finance-net-item" onclick="editDonation(d)" show_id=true %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -431,7 +440,7 @@
   const expenseMonthKeys = defaultMonthKeys
   const monthLabel = now.toLocaleString('default', { month: 'short' })
   const perPage = 20
-  const normTab = tab => tab === 'donations' ? 'income' : (tab || 'expenses')
+  const normTab = tab => tab === 'donations' ? 'income' : tab === 'net' ? 'transactions' : (['transactions', 'expenses', 'income'].includes(tab) ? tab : 'transactions')
   const normYear = value => years.includes(+value) ? +value : curYear
   const normIncomeType = value => INCOME_TYPES.includes(String(value || '').toLowerCase()) ? String(value || '').toLowerCase() : ''
   const normIncomeMethod = value => {
@@ -461,7 +470,7 @@
   const urlState = () => {
     const url = new URL(location.href)
     return {
-      activeTab: normTab(url.searchParams.get('tab') || url.hash.slice(1) || 'expenses'),
+      activeTab: normTab(url.searchParams.get('tab') || url.hash.slice(1) || 'transactions'),
       year: curYear,
       expSearch: url.searchParams.get('exp_q') || '',
       expFilterCats: normExpenseCats(url.searchParams.get('exp_cat') || ''),
@@ -478,6 +487,7 @@
       donDateFrom: url.searchParams.get('inc_from') || '',
       donDateTo: url.searchParams.get('inc_to') || '',
       donorSearch: url.searchParams.get('donor_q') || '',
+      netSearch: url.searchParams.get('net_q') || '',
     }
   }
   const initUrl = urlState()
@@ -569,7 +579,7 @@
   function writeUrl(state, mode = 'replaceState') {
     const url = new URL(location.href)
     const params = new URLSearchParams()
-    params.set('tab', normTab(state.activeTab || 'expenses'))
+    params.set('tab', normTab(state.activeTab || 'transactions'))
     if (state.expSearch) params.set('exp_q', state.expSearch)
     if (state.expFilterCats?.length) params.set('exp_cat', state.expFilterCats.join(','))
     if (state.expFilterStatus) params.set('exp_status', state.expFilterStatus)
@@ -585,8 +595,9 @@
     if (state.donDateFrom) params.set('inc_from', state.donDateFrom)
     if (state.donDateTo) params.set('inc_to', state.donDateTo)
     if (state.donorSearch) params.set('donor_q', state.donorSearch)
+    if (state.netSearch) params.set('net_q', state.netSearch)
     url.search = params.toString()
-    url.hash = '#' + normTab(state.activeTab || 'expenses')
+    url.hash = '#' + normTab(state.activeTab || 'transactions')
     history[mode](null, '', url)
   }
 
@@ -1125,15 +1136,53 @@
       return this.toggleDonMonth(key, event)
     },
 
-    donorSearch: initUrl.donorSearch, donorPage: 1, donorSortBy: 'total', donorSortDir: 'desc',
-    get donorFiltered() {
-      const q = this.donorSearch.toLowerCase()
-      return q ? this.donorRows.filter(d => d.name.toLowerCase().includes(q)) : this.donorRows
+    // Net tab (unified transactions)
+    netSearch: initUrl.netSearch,
+    netMonthOpen: monthOpenState(defaultMonthKeys),
+    get netTransactions() {
+      const exp = this.expenses.map(x => ({ ...x, _isExp: true, _date: x.expense_date || x.created_at || '' }))
+      const inc = this.donations.map(d => ({ ...d, _isExp: false, _date: d.date_received || d.created_at || '' }))
+      return [...exp, ...inc]
     },
-    get donorHasMore() { return this.donorPage * perPage < this.donorFiltered.length },
-    get donorPaged() {
-      const arr = this.donorSortBy ? this._doSort(this.donorFiltered, this.donorSortBy, this.donorSortDir) : this.donorFiltered
-      return arr.slice(0, this.donorPage * perPage)
+    get netFiltered() {
+      const q = this.netSearch?.toLowerCase() || ''
+      if (!q) return this.netTransactions
+      return this.netTransactions.filter(tx => {
+        if (tx._isExp) return [tx.payee, tx.note, tx.category, tx.expense_no, fmtCat(tx.category)].filter(Boolean).join(' ').toLowerCase().includes(q)
+        return [tx.note, tx.method, tx.type, bucketOf(tx), sourceOf(tx, this.memberNames)].filter(Boolean).join(' ').toLowerCase().includes(q)
+      })
+    },
+    get netMonthKeys() {
+      const keyOf = tx => (tx._date || '').slice(0, 7) || 'unknown'
+      return monthKeysWithData(defaultMonthKeys, this.netFiltered, keyOf)
+    },
+    get netGrouped() {
+      const keyOf = tx => (tx._date || '').slice(0, 7) || 'unknown'
+      const keys = this.netMonthKeys
+      const byKey = monthItemMap(keys, this.netFiltered, keyOf)
+      return keys.map(key => {
+        const items = (byKey[key] || []).sort((a, b) => (b._date || '').localeCompare(a._date || '') || (b.id || 0) - (a.id || 0))
+        const income = items.filter(tx => !tx._isExp).reduce((s, tx) => s + (tx.amount || 0), 0)
+        const expense = items.filter(tx => tx._isExp).reduce((s, tx) => s + (tx.amount || 0), 0)
+        return { key, items, count: items.length, total: income + expense, net: income - expense }
+      })
+    },
+    get netYearGroups() { return groupMonthsByYear(this.netGrouped) },
+    isNetMonthOpen(key) { return !!this.netMonthOpen[key] },
+    isNetMonthDividerVisible(key) {
+      const idx = this.netMonthKeys.indexOf(key)
+      if (idx <= 0) return false
+      return !this.isNetMonthOpen(this.netMonthKeys[idx - 1])
+    },
+    toggleNetMonthFromEvent(event) {
+      const key = event?.currentTarget?.dataset?.monthKey
+      if (!key) return
+      event?.preventDefault?.()
+      event?.currentTarget?.blur?.()
+      const scrollY = window.scrollY
+      const next = !this.isNetMonthOpen(key)
+      this.netMonthOpen = { ...this.netMonthOpen, [key]: next }
+      stabilizeMonthScroll(scrollY)
     },
 
     patchState(patch) {
@@ -1157,9 +1206,10 @@
       this.patchState({ donFilterType: '', donFilterMethods: [], donAmtMin: '', donAmtMax: '', donDateFrom: '', donDateTo: '', donPage: 1 })
     },
     switchTab(tab) {
-      s.cancelAdd()
+      if (s.showAdd) s.cancelAdd()
       s.activeTab = tab
       writeUrl(s, 'pushState')
+      if (tab === 'transactions' && !s.expRangeLoaded) loadExpenseRange()
     },
 
     _hoverCat: null,
@@ -1216,10 +1266,13 @@
     },
 
     exportCSV() {
-      if (this.activeTab === 'donors') {
-        const rows = [['Donor', 'Donations', 'Total', 'Last Donation']]
-        for (const d of this.donorFiltered) rows.push([d.name, d.count, rawAmt(d.total), d.lastDate])
-        dlCSV(rows, 'donors.csv')
+      if (this.activeTab === 'transactions') {
+        const rows = [['Date', 'Type', 'Description', 'Category', 'Amount', 'Note']]
+        for (const tx of this.netFiltered) {
+          if (tx._isExp) rows.push([tx.expense_date?.slice(0, 10), 'Expense', tx.payee, tx.category, '-' + rawAmt(tx.amount), tx.note || ''])
+          else rows.push([tx.date_received?.slice(0, 10), 'Income', sourceOf(tx, this.memberNames), labelOf(tx), '+' + rawAmt(tx.amount), tx.note || ''])
+        }
+        dlCSV(rows, 'transactions.csv')
       } else if (this.activeTab === 'income') {
         const rows = [['Date', 'Source', 'Method', 'Type', 'Amount', 'Note']]
         for (const d of this.donFiltered) rows.push([d.date_received?.slice(0, 10), sourceOf(d, this.memberNames), d.method, labelOf(d), rawAmt(d.amount), d.note || ''])
@@ -1235,12 +1288,22 @@
       const section = document.querySelector('section:not(.hidden)')
       const table = section?.querySelector('table')
       const w = window.open('', '_blank')
-      w.document.write('<html><head><title>' + fmtCat(this.activeTab) + '</title>')
+      const title = this.activeTab === 'transactions' ? 'Transactions' : fmtCat(this.activeTab)
+      w.document.write('<html><head><title>' + title + '</title>')
       w.document.write('<style>body{font-family:system-ui,sans-serif;padding:2rem}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px 12px;text-align:left;border-bottom:1px solid #ddd}th{font-weight:600;border-bottom:2px solid #999}h1{font-size:1.5rem;margin-bottom:1rem}@media print{body{padding:0}}</style>')
       w.document.write('</head><body>')
-      w.document.write('<h1>' + fmtCat(this.activeTab) + ' — ' + this.year + '</h1>')
+      w.document.write('<h1>' + title + ' — ' + this.year + '</h1>')
       if (table) {
         w.document.write(table.outerHTML)
+      } else if (this.activeTab === 'net') {
+        const rows = this.netFiltered.map(tx => '<tr>'
+          + '<td>' + ((tx._isExp ? tx.expense_date : tx.date_received)?.slice(0, 10) || '') + '</td>'
+          + '<td>' + (tx._isExp ? 'Expense' : 'Income') + '</td>'
+          + '<td>' + (tx._isExp ? (tx.payee || '') : sourceOf(tx, this.memberNames)) + '</td>'
+          + '<td>' + fmtCat(tx._isExp ? tx.category : labelOf(tx)) + '</td>'
+          + '<td style="text-align:right">' + (tx._isExp ? '\u2212' : '+') + '$' + fmtAmt(tx.amount || 0) + '</td>'
+          + '</tr>').join('')
+        w.document.write('<table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>')
       } else if (this.activeTab === 'income') {
         const rows = this.donFiltered.map(d => '<tr>'
           + '<td>' + (d.date_received?.slice(0, 10) || '') + '</td>'
@@ -1532,6 +1595,7 @@
       syncLoadedExpenses()
       refreshExpMonthOpen()
       refreshDonMonthOpen()
+      refreshNetMonthOpen()
       refreshIncomeStats()
       syncRangeVars()
     } catch (e) {
@@ -1543,6 +1607,7 @@
     loadRemaining(api.getIncome, dateP, 'donations', 'donTotal').then(() => {
       refreshIncomeStats()
       refreshDonMonthOpen()
+      refreshNetMonthOpen()
     })
   }
 
@@ -1565,6 +1630,12 @@
     const visibleKeys = s.donVisibleMonthKeys
     next[visibleKeys[0] || keys[0]] = true
     s.donMonthOpen = next
+  }
+
+  function refreshNetMonthOpen() {
+    const keys = s.netMonthKeys
+    if (!keys.length) { s.netMonthOpen = {}; return }
+    s.netMonthOpen = monthOpenState(keys, s.netMonthOpen)
   }
 
   function setExpMonthFx(key) {
@@ -1621,6 +1692,7 @@
     s.donDateFrom = next.donDateFrom
     s.donDateTo = next.donDateTo
     s.donorSearch = next.donorSearch
+    s.netSearch = next.netSearch
     refreshExpMonthOpen()
     refreshDonMonthOpen()
   }
@@ -1629,5 +1701,5 @@
   window.addEventListener('popstate', applyUrlStateFromLocation)
 
   if (s.expSearch) scheduleExpSearch(s.expSearch)
-  loadAll()
+  loadAll().then(() => { if (s.activeTab === 'transactions' && !s.expRangeLoaded) loadExpenseRange() })
 </script>
