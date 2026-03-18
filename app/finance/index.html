@@ -174,10 +174,12 @@
   <!-- List view -->
   <expense-list :if="expView === 'list'" :class="{'finance-exp-list-shell-refreshing': expRefreshing}"
     :years="expYearGroups" :search="expSearch" :loading="loading" :error="loadErr"
-    :hasmore="expHasMore" :refreshing="expRefreshing" :searchloading="expSearchLoading"
+    :hasmore="expHasMore" :canapprove="can('expenses:approve')"
     :empty="!loading && !expRefreshing && !expSearchLoading && !expenses.length && !expSearch"
     :nomatch="!loading && !expRefreshing && !expSearchLoading && !expFiltered.length && (expenses.length || expSearch)"
-    :onview="e => viewExpense(e.detail)">
+    :onview="e => viewExpense(e.detail)"
+    :onapprove="e => expenseQuickApprove(e.detail)"
+    :onpay="e => expenseQuickPay(e.detail)">
   </expense-list>
 
 </section>
@@ -402,8 +404,22 @@
   const fmtMonth = k => { if (!k?.includes('-')) return 'Undated'; const [y, m] = k.split('-'); return new Date(+y, +m - 1).toLocaleString('default', { month: 'long', year: 'numeric' }) }
   customElements.get('define-element').processor = (root, state) => {
     if (root.template) root.appendChild(root.template.content.cloneNode(true))
-    let s = sprae(root, { fmtAmt, fmtCat, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, catCls, hl, statusIcon, icon, apiBase: BASE, ...state })
-    state.host.onpropchange = (k, v) => s[k] = v
+    let _open = {}
+    let s = sprae(root, {
+      fmtAmt, fmtCat, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, catCls, hl, statusIcon, icon,
+      apiBase: BASE, approveIcon: actionIcon('approve'), payIcon: actionIcon('pay'),
+      _open, _toggle: key => s._open = { ...s._open, [key]: !s._open[key] },
+      _emit: (name, detail) => state.host.dispatchEvent(new CustomEvent(name, { detail, bubbles: true })),
+      ...state
+    })
+    state.host.onpropchange = (k, v) => {
+      s[k] = v
+      // Auto-open first month when years data arrives
+      if (k === 'years' && v?.length && !Object.keys(s._open || {}).length) {
+        let first = v[0]?.items?.[0]?.key
+        if (first) s._open = { [first]: true }
+      }
+    }
     return s
   }
 

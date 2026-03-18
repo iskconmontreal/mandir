@@ -27,7 +27,7 @@ test.describe('e2e: viewer restrictions', () => {
     await page.locator('.card-tab-group').waitFor()
     await expect(page.locator('button:has-text("+ Expense")')).toBeVisible()
     await expect(page.locator('button:has-text("+ Income")')).not.toBeVisible()
-    const row = page.locator('.finance-net-item.recent-exp-item').first()
+    const row = page.locator('expense-list .recent-exp-item').first()
     if (await row.isVisible().catch(() => false)) {
       await row.hover()
       await expect(page.locator('[aria-label="Quick approve expense"]')).toHaveCount(0)
@@ -187,13 +187,13 @@ test.describe('e2e: viewer submits → approver approves', () => {
     const approverToken = await loginAsReal(approverPage, 'approver')
     const approverHeaders = { Authorization: `Bearer ${approverToken}` }
 
-    await approverPage.goto('/app/finance/')
+    await approverPage.goto('/app/finance/?tab=expenses#expenses')
     await approverPage.locator('.card-tab-group').waitFor()
-    await expect(approverPage.locator('.finance-net-item.recent-exp-item').first()).toBeVisible({ timeout: 15_000 })
+    await expect(approverPage.locator('expense-list .recent-exp-item').first()).toBeVisible({ timeout: 15_000 })
 
     await approverPage.fill('.filter-search', `E2E-Viewer-${ts}`)
     await approverPage.waitForTimeout(500)
-    const row = approverPage.locator('.finance-net-item.recent-exp-item').first()
+    const row = approverPage.locator('expense-list .recent-exp-item').first()
     await expect(row).toBeVisible()
 
     await row.hover()
