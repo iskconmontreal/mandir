@@ -1,0 +1,83 @@
+<define-element>
+  <transaction-list years:array loading:boolean="false" error:string="" search:string="" empty:boolean="false" canapprove:boolean="false">
+    <style>:host { display: contents; }</style>
+    <template>
+      <div :if="error" class="login-error" :text="error" style="margin:var(--s-md)"></div>
+      <div :if="loading" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</div>
+      <div :if="empty" class="dim" style="text-align:center;padding:var(--s-xl)">No transactions yet</div>
+      <div :each="yr in years" class="finance-year-section">
+        <div class="finance-year-sticky" :if="yr.key !== 'unknown'" :text="yr.key"></div>
+        <div class="finance-year-months">
+          <div :each="g in yr.items" :class="{'finance-month-wrap-open': _open[g.key]}">
+            <button type="button" class="exp-group-header" :class="{'exp-group-header-open': _open[g.key]}" :aria-expanded="_open[g.key] ? 'true' : 'false'" :onclick="e => _toggle(g.key)">
+              <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
+              <span class="exp-group-heading">
+                <span class="exp-group-label">
+                  <span class="finance-month-label-desktop" :text="fmtMonthShort(g.key)"></span>
+                  <span class="finance-month-label-mobile" :text="fmtMonth(g.key)"></span>
+                </span>
+                <span :if="g.count" class="exp-group-count" :text="g.count"></span>
+              </span>
+              <span :if="g.count" class="exp-group-total" :class="g.net >= 0 ? 'stat-ok' : 'stat-err'" :text="(g.net >= 0 ? '+' : '\u2212') + '$' + fmtAmt(Math.abs(g.net))"></span>
+            </button>
+            <div class="recent-exp-list finance-exp-list finance-net-list" :class="{'finance-exp-list-open': _open[g.key]}" :aria-hidden="_open[g.key] ? 'false' : 'true'">
+              <template :each="tx in g.items">
+                <!-- Expense row -->
+                <div :if="tx._isExp" class="recent-exp-item row-link finance-net-item" :onclick="e => _emit('viewexp', tx)">
+                  <span class="recent-exp-icon-col">
+                    <span class="status-icon" :class="'status-' + (tx.status || 'submitted')" :html="statusIcon(tx.status || 'submitted')"></span>
+                  </span>
+                  <div class="recent-exp-main">
+                    <div class="recent-exp-info">
+                      <div class="recent-exp-title-row">
+                        <div class="recent-exp-title">
+                          <span :html="hl(tx.payee || '\u2014', search || '')"></span>
+                          <span :if="tx.expense_no" class="recent-exp-title-sub dim" :text="'#' + tx.expense_no"></span>
+                        </div>
+                      </div>
+                      <div class="recent-exp-meta-row">
+                        <span class="recent-exp-status-text" :class="'status-' + (tx.status || 'submitted')" :text="fmtStatus(tx.status || 'submitted')"></span>
+                        <span class="recent-exp-time" :text="fmtDate(tx.updated_at || tx.created_at || tx.expense_date)"></span>
+                      </div>
+                    </div>
+                  </div>
+                  <span :if="canapprove" class="recent-exp-actions" :onclick.stop="">
+                    <button :if="tx.status === 'submitted'" type="button" class="btn btn-sm btn-outline" aria-label="Quick approve expense" :onclick.stop="e => _emit('approve', tx)" :html="approveIcon + ' Approve'"></button>
+                    <button :if="tx.status === 'approved'" type="button" class="btn btn-sm btn-outline btn-ok-outline" aria-label="Mark as paid" :onclick.stop="e => _emit('pay', tx)" :html="payIcon + ' Paid'"></button>
+                  </span>
+                  <div class="recent-exp-cat">
+                    <span class="badge" :class="catCls(tx.category || 'other')" :text="fmtCat(tx.category || 'other')"></span>
+                  </div>
+                  <div class="recent-exp-amount">
+                    <div class="recent-exp-value stat-err" :text="'-$' + fmtAmt(tx.amount || 0)"></div>
+                  </div>
+                </div>
+                <!-- Income row -->
+                <div :if="!tx._isExp" class="recent-inc-item row-link finance-net-item" :onclick="e => _emit('viewinc', tx)">
+                  <span class="recent-inc-icon-col" :class="'recent-inc-icon-' + (tx.method || 'cash')">
+                    <span class="recent-inc-icon" :html="methodIcon(tx.method || 'cash')"></span>
+                  </span>
+                  <div class="recent-inc-main">
+                    <div class="recent-inc-info">
+                      <div class="recent-inc-title" :text="tx.source_name || tx.member_name || 'Anonymous'"></div>
+                      <div class="recent-inc-subtitle">
+                        <span class="recent-inc-method" :text="tx.method || 'cash'"></span>
+                        <span class="recent-inc-time" :text="fmtDate(tx.updated_at || tx.created_at || tx.date_received)"></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="recent-inc-type">
+                    <span class="badge" :class="catCls((tx.type || 'donation') === 'donation' ? (tx.category || 'general') : (tx.type || 'other'))" :text="fmtCat((tx.type || 'donation') === 'donation' ? (tx.category || 'general') : (tx.type || 'other'))"></span>
+                  </div>
+                  <div class="recent-inc-amount">
+                    <div class="recent-inc-value stat-ok" :text="'+$' + fmtAmt(tx.amount || 0)"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </transaction-list>
+</define-element>

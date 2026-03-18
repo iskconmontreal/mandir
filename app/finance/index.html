@@ -311,49 +311,21 @@
     </div>
   </div>
 
-  <div class="finance-inc-list-shell">
-    <div :if="loadErr" class="login-error" :text="loadErr" style="margin:var(--s-md)"></div>
-    <div :if="loading" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</div>
-    <div :if="!loading && !netFiltered.length" class="dim" style="text-align:center;padding:var(--s-xl)">
-      <span :text="netSearch ? 'No transactions match search' : 'No transactions yet'"></span>
-    </div>
-    <div :if="netFiltered.length">
-      <div :each="yr in netYearGroups" class="finance-year-section">
-        <div class="finance-year-sticky" :if="yr.key !== 'unknown'" :text="yr.key"></div>
-        <div class="finance-year-months">
-          <div :each="g in yr.items" :class="{'finance-month-wrap-open': isNetMonthOpen(g.key), 'finance-month-wrap-divider': isNetMonthDividerVisible(g.key)}">
-            <button type="button" class="exp-group-header" :class="{'exp-group-header-open': isNetMonthOpen(g.key)}" :aria-expanded="isNetMonthOpen(g.key) ? 'true' : 'false'" :data-month-key="g.key" :onclick="e => toggleNetMonthFromEvent(e)">
-              <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
-              <span class="exp-group-heading">
-                <span class="exp-group-label">
-                  <span class="finance-month-label-desktop" :text="fmtMonthShort(g.key)"></span>
-                  <span class="finance-month-label-mobile" :text="fmtMonth(g.key)"></span>
-                </span>
-                <span :if="g.count" class="exp-group-count" :text="g.count"></span>
-              </span>
-              <span :if="g.count" class="exp-group-total" :class="g.net >= 0 ? 'stat-ok' : 'stat-err'" :text="(g.net >= 0 ? '+' : '\u2212') + '$' + fmtAmt(Math.abs(g.net))"></span>
-            </button>
-            <div class="recent-exp-list finance-exp-list finance-net-list" :class="{'finance-exp-list-open': isNetMonthOpen(g.key)}" :aria-hidden="isNetMonthOpen(g.key) ? 'false' : 'true'">
-              <div :each="tx in g.items" style="display:contents">
-                <div :if="tx._isExp" style="display:contents" :scope="{x: tx}">
-                  {% include finance/recent-expense-row.html row_class="finance-net-item" show_expense_no=true show_actions=true %}
-                </div>
-                <div :if="!tx._isExp" style="display:contents" :scope="{d: tx}">
-                  {% include finance/recent-income-row.html row_class="finance-net-item" onclick="editDonation(d)" show_id=true %}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <transaction-list
+    :years="netYearGroups" :search="netSearch" :loading="loading" :error="loadErr"
+    :empty="!loading && !netFiltered.length" :canapprove="can('expenses:approve')"
+    :onviewexp="e => viewExpense(e.detail)"
+    :onviewinc="e => editDonation(e.detail)"
+    :onapprove="e => expenseQuickApprove(e.detail)"
+    :onpay="e => expenseQuickPay(e.detail)">
+  </transaction-list>
 
 </section>
 
 <script src="../../lib/define-element.js"></script>
 {% include components/expense-list.html %}
 {% include components/income-list.html %}
+{% include components/transaction-list.html %}
 
 {% include finance/expense-form.html %}
 {% include finance/donation-form.html %}
