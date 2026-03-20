@@ -1,0 +1,95 @@
+<define-element>
+  <expense-filter-bar search:string="" filtercats:array filterstatus:string="" amtmin:string="" amtmax:string="" amtlo:number amthi:number amtceil:number amthist:array datefrom:string="" dateto:string="" cats:array resultcount:number="0">
+    <style>:host { display: contents; }</style>
+    <template>
+      <div class="filter-search-wrap" :onclick.outside="panel = false">
+        <input class="filter-search filter-search-input" type="search" placeholder="Search expense, vendor, submitter…"
+          :value="search" :oninput.debounce-150="e => _change({ search: e.target.value })">
+        <div :class="{'hidden': !(filtercats.length || filterstatus || datefrom || dateto || amtmin || amtmax)}" class="filter-inline-chips">
+          <span :each="cat in filtercats" class="chip filter-inline-chip" :onclick="_change({ filtercats: filtercats.filter(x => x !== cat) })" :text="fmtCat(cat) + ' ×'"></span>
+          <span :if="filterstatus" class="chip filter-inline-chip" :onclick="_change({ filterstatus: '' })" :text="fmtStatus(filterstatus) + ' ×'"></span>
+          <span :if="amtmin || amtmax" class="chip filter-inline-chip" :onclick="_change({ amtmin: '', amtmax: '' })" :text="'$' + amtlo + '–$' + amthi + ' ×'"></span>
+          <span :if="datefrom" class="chip filter-inline-chip" :onclick="_change({ datefrom: '' })" :text="'From ' + datefrom + ' ×'"></span>
+          <span :if="dateto" class="chip filter-inline-chip" :onclick="_change({ dateto: '' })" :text="'To ' + dateto + ' ×'"></span>
+        </div>
+        <div class="filter-search-seg">
+          <button class="btn btn-filter filter-search-btn" :class="{'filter-search-btn-active': panel || filtercats.length || filterstatus || datefrom || dateto || amtmin || amtmax}" :onclick="panel = !panel">Filter</button>
+          <div class="filter-dropdown hidden" :class="{'hidden': !panel}">
+            <div class="field">
+              <label>Category</label>
+              <div class="tag-cloud">
+                <span :each="cat in cats" class="tag" :class="catCls(cat) + (filtercats.includes(cat) ? ' tag-active' : '')"
+                  :onclick="_change({ filtercats: filtercats.includes(cat) ? filtercats.filter(x => x !== cat) : [].concat(filtercats, [cat]) })"
+                  :text="fmtCat(cat)"></span>
+              </div>
+            </div>
+            <div class="field">
+              <label>Status</label>
+              <select :value="filterstatus" :onchange="e => _change({ filterstatus: e.target.value })">
+                <option value="" :selected="!filterstatus">All statuses</option>
+                <option value="submitted" :selected="filterstatus === 'submitted'">Approval</option>
+                <option value="approved" :selected="filterstatus === 'approved'">Approved</option>
+                <option value="paid" :selected="filterstatus === 'paid'">Paid</option>
+                <option value="rejected" :selected="filterstatus === 'rejected'">Rejected</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Amount range</label>
+              <div class="range-track">
+                <div class="range-hist" :if="amthist.length">
+                  <span :each="(h, i) in amthist" class="range-hist-bar" :style="'height:' + (h * 100) + '%'" :class="{'range-hist-bar-dim': i < (amtlo / amtceil * amthist.length) || i >= (amthi / amtceil * amthist.length)}"></span>
+                </div>
+                <div class="range-slider" :ref="el => { el.style.setProperty('--lh', (amtlo / amtceil * 100) + '%'); el.style.setProperty('--rh', (amthi / amtceil * 100) + '%') }">
+                  <input type="range" class="range-lo" min="0" :max="amtceil" step="1"
+                    :ref="el => { el.max = amtceil; el.value = amtlo }"
+                    :oninput="e => { var v = Math.min(+e.target.value, amthi); e.target.value = v; _rangeSync(e, v, true) }">
+                  <input type="range" class="range-hi" min="0" :max="amtceil" step="1"
+                    :ref="el => { el.max = amtceil; el.value = amthi }"
+                    :oninput="e => { var v = Math.max(+e.target.value, amtlo); e.target.value = v; _rangeSync(e, v, false) }">
+                </div>
+              </div>
+              <div style="display:flex;gap:var(--s-sm);align-items:center">
+                <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Min" :value="amtmin"
+                  :onchange="e => { var v = Math.max(0, Math.min(+e.target.value || 0, amthi)); _change({ amtmin: e.target.value === '' ? '' : v }) }"></span>
+                <span class="dim">—</span>
+                <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Max" :value="amtmax"
+                  :onchange="e => { var v = Math.min(amtceil, Math.max(+e.target.value || 0, amtlo)); _change({ amtmax: v >= amtceil ? '' : v }) }"></span>
+              </div>
+            </div>
+            <div class="field">
+              <label>Date range</label>
+              <div style="display:flex;gap:var(--s-sm);align-items:center">
+                <input type="date" :value="datefrom" :onchange="e => _change({ datefrom: e.target.value })" style="flex:1">
+                <span class="dim">—</span>
+                <input type="date" :value="dateto" :onchange="e => _change({ dateto: e.target.value })" style="flex:1">
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">
+              <button class="btn-link" :if="filtercats.length || filterstatus || datefrom || dateto || amtmin || amtmax"
+                :onclick="_change({ filtercats: [], filterstatus: '', datefrom: '', dateto: '', amtmin: '', amtmax: '' }); panel = false" :text="'Clear all'"></button>
+              <span :if="!filtercats.length && !filterstatus && !datefrom && !dateto && !amtmin && !amtmax"></span>
+              <button class="btn btn-primary btn-sm" :onclick="panel = false" :text="'Show ' + resultcount + ' results'"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+    <script>
+      this.panel = false
+
+      this._change = function(patch) {
+        this.emit('change', patch)
+      }
+
+      this._rangeSync = function(e, v, isLo) {
+        var slider = e.target.closest('.range-slider')
+        if (slider) {
+          if (isLo) slider.style.setProperty('--lh', (v / this.amtceil * 100) + '%')
+          else slider.style.setProperty('--rh', (v / this.amtceil * 100) + '%')
+        }
+        var patch = isLo ? { amtmin: v } : { amtmax: v >= this.amtceil ? '' : v }
+        this._change(patch)
+      }
+    </script>
+  </expense-filter-bar>
+</define-element>

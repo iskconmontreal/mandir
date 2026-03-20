@@ -1,0 +1,33 @@
+<define-element>
+  <my-expense-table items:array>
+    <style>:host { display: contents; }</style>
+    <template>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Category</th>
+              <th>Status</th>
+              <th style="text-align:right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :each="x in items" class="row-link" :onclick="e => emit('view', x)">
+              <td :text="(x.created_at || x.expense_date)?.slice(0,10) || '\u2014'"></td>
+              <td :text="fmtCat(x.category)"></td>
+              <td><span class="badge" :class="'badge-' + x.status" :text="x.status === 'submitted' ? ('Approval ' + (x.approval_count||0) + '/' + (x.approvals_required||'?')) : fmtStatus(x.status)"></span></td>
+              <td style="text-align:right" :text="'$' + fmtAmt(x.amount)"></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr style="font-weight:var(--f-wt-b)">
+              <td colspan="3">Total</td>
+              <td style="text-align:right" :text="'$' + fmtAmt(items.reduce((t, x) => t + (x.amount || 0), 0))"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </template>
+  </my-expense-table>
+</define-element>

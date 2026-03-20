@@ -22,10 +22,11 @@
         <h3 class="section-title-row">Recent Expenses</h3>
         <div class="recent-list-subtitle"><span class="trend-arrow" :class="financeArrow === 'up' ? 'stat-ok' : 'stat-err'" :html="trendIcon(financeArrow)"></span><span :text="financeIntro"></span></div>
       </a>
-      <button :if="can('expenses:create')" class="btn btn-primary" :onclick="openAdd()">+ Expense</button>
+      <button :if="can('expenses:create')" class="btn btn-primary" :onclick="showExpForm = true; expFormDetail = null; expFormMode = 'create'">+ Expense</button>
     </div>
     <div :if="recentExpenses.length" class="recent-exp-list">
-      {% include finance/recent-expense-row.html each="x in recentExpenses" %}
+      <recent-expenses :items="recentExpenses" :actors="recentExpenseActors" :usernames="userNames" :myuserid="MY_USER_ID"
+        :onview="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"></recent-expenses>
     </div>
     <div :if="!recentExpenses.length" class="dim" style="font-size:var(--f-sm); padding:var(--s-sm) 0">No recent expenses</div>
   </div>
@@ -36,12 +37,11 @@
         <h3 class="section-title-row">Recent Donations</h3>
         <div class="recent-list-subtitle"><span class="trend-arrow stat-ok" :html="trendIcon('up')"></span><span :text="donationIntro"></span></div>
       </a>
-      <button :if="can('income:create')" class="btn btn-primary" :onclick="openDonForm()">+ Donation</button>
+      <button :if="can('income:create')" class="btn btn-primary" :onclick="showDonForm = true; donFormDetail = null">+ Donation</button>
     </div>
     <div :if="recentIncome.length" class="recent-inc-list">
-      <div :each="d in recentIncome" style="display:contents">
-        {% include finance/recent-income-row.html %}
-      </div>
+      <recent-donations :items="recentIncome" :membernames="memberNames"
+        :onview="e => { showDonForm = true; donFormDetail = e.detail }"></recent-donations>
     </div>
     <div :if="!recentIncome.length" class="dim" style="font-size:var(--f-sm); padding:var(--s-sm) 0">No recent donations</div>
   </div>
@@ -67,32 +67,7 @@
   <div class="card-header">
     <h3>My Expenses</h3>
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Category</th>
-          <th>Status</th>
-          <th style="text-align:right">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr :each="x in myExpenses" class="row-link" :onclick="viewExpense(x)">
-          <td :text="(x.created_at || x.expense_date)?.slice(0,10) || '—'"></td>
-          <td :text="fmtCat(x.category)"></td>
-          <td><span class="badge" :class="'badge-' + x.status" :text="x.status === 'submitted' ? `Approval ${x.approval_count||0}/${x.approvals_required||'?'}` : fmtStatus(x.status)"></span></td>
-          <td style="text-align:right" :text="'$' + fmtAmt(x.amount)"></td>
-        </tr>
-      </tbody>
-      <tfoot>
-        <tr style="font-weight:var(--f-wt-b)">
-          <td colspan="3">Total</td>
-          <td style="text-align:right" :text="'$' + fmtAmt(myExpenses.reduce((t, x) => t + (x.amount || 0), 0))"></td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
+  <my-expense-table :items="myExpenses" :onview="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"></my-expense-table>
 </div>
 
 <!-- My Giving -->
@@ -153,16 +128,36 @@
   .recent-grid .recent-inc-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 
-{% include finance/expense-form.html %}
-{% include finance/donation-form.html %}
+<script src="../lib/define-element.js"></script>
+{% include components/recent-expenses.html %}
+{% include components/recent-donations.html %}
+{% include components/my-expense-table.html %}
+{% include components/expense-form.html %}
+{% include components/donation-form.html %}
+
+<expense-form :show="showExpForm" :detail="expFormDetail" :mode="expFormMode"
+  :canapprove="can('expenses:approve')" :isadmin="hasRole('admin') || hasRole('administrator')"
+  :membernames="memberNames" :usernames="userNames" :myuserid="MY_USER_ID"
+  :onsave="e => { showExpForm = false; refreshDashboard() }"
+  :oncancel="() => { showExpForm = false }">
+</expense-form>
+
+<donation-form :show="showDonForm" :detail="donFormDetail"
+  :membernames="memberNames" :usernames="userNames" :myuserid="MY_USER_ID"
+  :onsave="e => { showDonForm = false; refreshDashboard() }"
+  :oncancel="() => { showDonForm = false }"
+  :onprint="e => printDonation(e.detail)">
+</donation-form>
 
 <script type="module">
-  import { init, fmtAmt, fmtCat, rawAmt, toast, auth, hl } from '../lib/app.js'
+  import sprae from '../lib/sprae.js'
+  import { setupProcessor } from '../lib/processor.js'
+  import { init, fmtAmt, fmtCat, rawAmt, toCents, toast, auth } from '../lib/app.js'
   import { api, BASE } from '../lib/api.js'
   import { greeting } from '../lib/greeting.js'
-  import { catCls, changedAt, fmtDate, fmtStatus, parseMemberNames } from '../lib/finance.js'
-  import { actionIcon, methodIcon, statusIcon } from '../lib/icons.js'
-  import { formDefaults, bindForm, expIsEditable, expEditPolicy as getExpEditPolicy, expGetAttachments, buildExpTimeline } from '../lib/form.js'
+  import { catCls, changedAt, fmtDate, fmtStatus, parseMemberNames, EXP_CATS, EXP_METHODS, DON_CATS, DON_METHODS, INCOME_TYPES, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName } from '../lib/finance.js'
+  import { icon, methodIcon, statusIcon, activityIcon } from '../lib/icons.js'
+  import { formDefaults, createPrintDonation } from '../lib/form.js'
 
   const now = new Date()
   const y = now.getFullYear()
@@ -178,11 +173,18 @@
     try { return JSON.parse(atob(auth.token.split('.')[1])).user_id || null } catch { return null }
   })()
 
+  setupProcessor(sprae, {
+    fmtAmt, fmtCat, fmtStatus, fmtDate, catCls, rawAmt, toCents, toast,
+    statusIcon, icon, methodIcon, activityIcon,
+    apiBase: BASE, api,
+    EXP_CATS, EXP_METHODS, DON_CATS, DON_METHODS, INCOME_TYPES,
+    EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName,
+  })
+
   const s = init({
     ...formDefaults(BASE, MY_USER_ID),
     _greeting: greeting(now, vis),
-    fmtAmt, fmtCat, fmtDate, catCls, statusIcon, methodIcon, changedAt, hl,
-    isFresh() { return false },
+    fmtAmt, fmtCat, fmtDate, fmtStatus, catCls, statusIcon, methodIcon,
     fin: { income: 0, expenses: 0, net: 0 },
     finTasks: { pending: 0, ready: 0 },
     donMonth: { count: 0, total: 0 },
@@ -194,84 +196,12 @@
     recentExpenses: [],
     recentExpenseActors: {},
     recentIncome: [],
-    quickExpenseAction: {},
-    editIcon: actionIcon('edit'),
-    printIcon: actionIcon('print'),
-    approveIcon: actionIcon('approve'),
-    rejectIcon: actionIcon('reject'),
-    payIcon: actionIcon('pay'),
-    closeIcon: statusIcon('closed'),
     showOwnExpenses: !auth.can('income:create') && !auth.can('expenses:approve'),
-    recentExpActorId(x) {
-      const st = x?.status || 'submitted'
-      return st === 'submitted'
-        ? (this.recentExpenseActors?.[x?.id] || x?._recentActorId || x?.created_by || x?.updated_by)
-        : (this.recentExpenseActors?.[x?.id] || x?._recentActorId || x?.updated_by || x?.created_by)
-    },
-    recentExpStatus(x) {
-      const st = x?.status || 'submitted'
-      return st === 'submitted' ? `Approval ${x?.approval_count || 0}/${x?.approvals_required || '?'}` : fmtStatus(st)
-    },
-    recentExpReporter(x) {
-      const uid = this.recentExpActorId(x)
-      if (!uid) return ''
-      if (uid === MY_USER_ID) return 'by you'
-      const who = this.userNames?.[uid]
-      return who ? `by ${who}` : ''
-    },
-    expenseRowTitle(x) {
-      return this.expenseTitle(x)
-    },
-    expenseRowCategory(x) {
-      return fmtCat(x?.category || 'other')
-    },
-    expenseRowTime(x) {
-      return fmtDate(changedAt(x) || x?.created_at || x?.expense_date)
-    },
-    expenseCanQuickApprove(x) {
-      return this.can('expenses:approve') && (x?.status || 'submitted') === 'submitted' && !this.quickExpenseAction[x.id]
-    },
-    expenseCanQuickReject(x) {
-      return this.can('expenses:approve') && (x?.status || 'submitted') === 'submitted' && !this.quickExpenseAction[x.id]
-    },
-    expenseCanQuickPay(x) {
-      return this.can('expenses:approve') && (x?.status || 'submitted') === 'approved' && !this.quickExpenseAction[x.id]
-    },
-    expenseCanQuickClose(x) {
-      return this.can('expenses:approve') && (x?.status || '') === 'paid' && x.attachments?.length > 0 && !this.quickExpenseAction[x.id]
-    },
-    expensePaidNoReceipt(x) {
-      return this.can('expenses:approve') && (x?.status || '') === 'paid' && !x.attachments?.length && !this.quickExpenseAction[x.id]
-    },
-    expenseApprovedByMe(x) {
-      return false
-    },
-    expenseActionBusy(x) {
-      return this.can('expenses:approve') && !!this.quickExpenseAction[x.id]
-    },
-    expenseHasQuickActions(x) {
-      return this.expenseCanQuickReject(x) || this.expenseCanQuickApprove(x) || this.expenseCanQuickPay(x) || this.expenseCanQuickClose(x) || this.expensePaidNoReceipt(x) || this.expenseActionBusy(x)
-    },
-    expenseQuickApprove(x) {
-      return this.approveRecentExpense(x)
-    },
-    expenseQuickReject(x) {
-      return this.rejectExpense(x)
-    },
-    expenseQuickPay(x) {
-      return this.payRecentExpense(x)
-    },
-    recentIncSource(d) {
-      if (d?.member_id && this.memberNames?.[d.member_id]) return this.memberNames[d.member_id]
-      return d?.source_name || 'Anonymous'
-    },
-    recentIncKind(d) {
-      return d?.type === 'donation' ? (d?.category || 'donation') : (d?.type || 'income')
-    },
-    recentIncMethod(d) {
-      const method = (d?.method || 'cash').toLowerCase()
-      return method === 'e transfer' ? 'e-transfer' : method
-    },
+    showExpForm: false,
+    expFormDetail: null,
+    expFormMode: 'create',
+    showDonForm: false,
+    donFormDetail: null,
     get finNetIntro() {
       const net = this.fin.net
       return net >= 0 ? `$${fmtAmt(net)} surplus this month` : `$${fmtAmt(Math.abs(net))} deficit this month`
@@ -292,82 +222,13 @@
       if (!count) return 'No donations yet this month'
       return `$${fmtAmt(total)} · ${count} donation${count === 1 ? '' : 's'} this month`
     },
-    async approveRecentExpense(x) {
-      if (!x?.id || this.quickExpenseAction[x.id]) return
-      this.quickExpenseAction = { ...this.quickExpenseAction, [x.id]: 'approve' }
-      try {
-        const res = await api.approveExpense(x.id, '')
-        const exp = res.expense || res
-        x.status = exp.status || x.status
-        x.updated_by = exp.updated_by || x.updated_by || MY_USER_ID
-        x._recentActorId = x.updated_by || MY_USER_ID
-        this.recentExpenseActors = { ...this.recentExpenseActors, [x.id]: x._recentActorId }
-        x.approval_count = res.approval_count ?? x.approval_count
-        x.approvals_required = res.approvals_required ?? x.approvals_required
-        this.recentExpenses = [...this.recentExpenses]
-        toast(exp.status === 'approved' ? 'Expense approved' : `Approval recorded (${res.approval_count}/${res.approvals_required})`, 'success')
-        refreshDashboard()
-      } catch (e) {
-        toast(e.message)
-      } finally {
-        const next = { ...this.quickExpenseAction }
-        delete next[x.id]
-        this.quickExpenseAction = next
-      }
-    },
-    async payRecentExpense(x) {
-      if (!x?.id || this.quickExpenseAction[x.id]) return
-      this.quickExpenseAction = { ...this.quickExpenseAction, [x.id]: 'pay' }
-      try {
-        const res = await api.payExpense(x.id, '')
-        x.status = res.status || x.status
-        x.updated_by = res.updated_by || x.updated_by || MY_USER_ID
-        x._recentActorId = x.updated_by || MY_USER_ID
-        this.recentExpenseActors = { ...this.recentExpenseActors, [x.id]: x._recentActorId }
-        this.recentExpenses = [...this.recentExpenses]
-        toast('Expense marked as paid', 'success')
-        refreshDashboard()
-      } catch (e) {
-        toast(e.message)
-      } finally {
-        const next = { ...this.quickExpenseAction }
-        delete next[x.id]
-        this.quickExpenseAction = next
-      }
-    },
-    async closeRecentExpense(x) {
-      if (!x?.id || this.quickExpenseAction[x.id]) return
-      this.quickExpenseAction = { ...this.quickExpenseAction, [x.id]: 'close' }
-      try {
-        const res = await api.closeExpense(x.id)
-        x.status = res.status || x.status
-        x.updated_by = res.updated_by || x.updated_by || MY_USER_ID
-        x._recentActorId = x.updated_by || MY_USER_ID
-        this.recentExpenseActors = { ...this.recentExpenseActors, [x.id]: x._recentActorId }
-        this.recentExpenses = [...this.recentExpenses]
-        toast('Expense closed', 'success')
-        refreshDashboard()
-      } catch (e) {
-        toast(e.message)
-      } finally {
-        const next = { ...this.quickExpenseAction }
-        delete next[x.id]
-        this.quickExpenseAction = next
-      }
-    },
-    get expEditable() { return expIsEditable(this) },
-    get expEditPolicy() { return getExpEditPolicy(this) },
-    get expAttachments() { return expGetAttachments(this) },
-    get expTimeline() { return buildExpTimeline(this) },
   })
 
-  bindForm(s, { api, onSave: refreshDashboard })
+  s.printDonation = createPrintDonation(s.memberNames)
 
   const hasFin = s.can('income:view') || s.can('expenses:view')
   const hasMem = s.can('members:view')
 
-  const _openDonForm = s.openDonForm
-  s.openDonForm = () => { _openDonForm(); loadMemberNames() }
 
   async function loadRecentTables() {
     if (!hasFin) return
@@ -448,5 +309,6 @@
     }
     refreshGiving()
   }
+  s.refreshDashboard = refreshDashboard
 
 </script>

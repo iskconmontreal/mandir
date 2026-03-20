@@ -152,7 +152,7 @@ test.describe('e2e: viewer restrictions', () => {
     await expect(page.locator('#exp-vendor')).not.toBeVisible()
 
     const options = await page.locator('#exp-cat option:not([disabled])').allTextContents()
-    expect(options.length).toBe(17)
+    expect(options.length).toBe(24) // matches EXP_CATS from finance.js
 
     const ts = Date.now()
     await page.fill('.exp-items-table tbody tr:first-child td:nth-child(2) input', '12.34')

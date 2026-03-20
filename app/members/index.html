@@ -7,9 +7,16 @@
 <!-- ===== MEMBERS TAB ===== -->
 <section>
 
-<!-- Modals loaded via partials -->
-<div :html="editHTML"></div>
-<div :html="detailHTML"></div>
+<!-- Member modals -->
+<member-edit-form :show="showEdit" :member="editing" :roles="roles" :photosrc="photoSrc" :services="SERVICES"
+  :onsave="e => { showEdit = false; editing = null; if (e.detail?.member) openDetail(e.detail.member); load() }"
+  :oncancel="() => { showEdit = false; editing = null }">
+</member-edit-form>
+
+<member-detail :show="showDetail" :member="detail" :photosrc="photoSrc" :sysroles="sysRoles"
+  :onedit="e => { showDetail = false; editing = e.detail; form = Object.assign({}, e.detail); showEdit = true }"
+  :onclose="() => { showDetail = false; detail = {} }">
+</member-detail>
 
 <!-- Filter bar -->
 <div class="filter-bar">
@@ -72,9 +79,18 @@
 
 </section>
 
+<script src="../../lib/define-element.js"></script>
+{% include components/member-edit-form.html %}
+{% include components/member-detail.html %}
+
 <script type="module">
+  import sprae from '../../lib/sprae.js'
+  import { setupProcessor } from '../../lib/processor.js'
   import { init, SERVICES, auth, fmtCat, toast, hl, loadSystemRoles, uniq } from '../../lib/app.js'
+  import { icon } from '../../lib/icons.js'
   import { api, BASE } from '../../lib/api.js'
+
+  setupProcessor(sprae, { fmtCat, toast, icon, api, BASE, SERVICES })
 
   if (!auth.can('members:view')) {
     location.replace(new URL('../', location.href).href)
@@ -83,7 +99,6 @@
 
   const today = new Date().toISOString().slice(0, 10)
   const perPage = 20
-  const modalCache = {}
   const roleNameById = new Map()
   const userRolesByUserId = new Map()
   let userRoleLookupDenied = false
@@ -204,44 +219,19 @@
     })
   }
 
-  async function loadModal(name) {
-    if (!modalCache[name]) {
-      const res = await fetch(`partials/${name}.html`)
-      modalCache[name] = await res.text()
-    }
-    return modalCache[name]
-  }
-
   const s = init({
-    editHTML: '',
-    detailHTML: '',
     showEdit: false,
     showDetail: false,
     editing: null,
     form: emptyForm(),
     detail: {},
-    userDetail: {},
     sysRoles: [],
     members: [],
     total: 0,
     roles: [],
     SERVICES, hl,
-
-    toggleService(sv) {
-      const svcs = [...(s.form.services || [])]
-      const i = svcs.indexOf(sv)
-      if (i >= 0) svcs.splice(i, 1); else svcs.push(sv)
-      s.form.services = svcs
-    },
     loading: false,
-    saving: false,
-    inviting: false,
-    revoking: false,
-    pendingRoleId: null,
-    rolePassword: '',
-    rolePasswordErr: null,
     loadErr: null,
-    formErr: null,
     search: '',
     filterRole: '',
     page: 1,
@@ -289,132 +279,7 @@
       }
     },
 
-    closeDetail() {
-      s.showDetail = false
-      s.detail = {}
-      s.userDetail = {}
-      s.pendingRoleId = null
-      s.rolePassword = ''
-      s.rolePasswordErr = null
-      if (s.photoSrc?.startsWith('blob:')) URL.revokeObjectURL(s.photoSrc)
-      s.photoSrc = null
-    },
-
-    editFromDetail() {
-      const m = s.detail
-      s.showDetail = false
-      s.editing = m
-      s.form = { ...m }
-      s.formErr = null
-      s.photoErr = null
-      s.photoFile = null
-      s.showEdit = true
-    },
-
-    closeEdit() {
-      s.showEdit = false
-      s.editing = null
-      s.form = emptyForm(s.roles[0] || '')
-      s.formErr = null
-      s.photoFile = null
-      s.photoErr = null
-    },
-
-    async saveMember() {
-      s.formErr = null
-      s.photoErr = null
-      s.saving = true
-      const data = { ...s.form }
-      delete data._id
-      delete data._public
-      delete data._user_id
-      try {
-        if (s.editing) {
-          await api.updateMember(s.editing._id, data)
-          if (s.photoFile) {
-            try {
-              await api.uploadMemberPhoto(s.editing._id, s.photoFile)
-              s.photoFile = null
-              await loadPhoto(s.editing._public)
-            } catch (e) {
-              s.photoErr = e.message || 'Photo upload failed'
-            }
-          }
-          const updated = { ...s.editing, ...data }
-          s.closeEdit()
-          s.openDetail(updated)
-        } else {
-          await api.createMember(data)
-          s.closeEdit()
-        }
-        load()
-      } catch (e) {
-        s.formErr = e.message || 'Failed to save member'
-      } finally {
-        s.saving = false
-      }
-    },
-
     photoSrc: null,
-    photoFile: null,
-    photoErr: null,
-    inviteConfirm: false,
-
-    async inviteMember() {
-      s.inviteConfirm = false
-      s.inviting = true
-      try {
-        await api.inviteMember(s.detail._id)
-        toast(`Invite sent to ${s.detail.email}`, 'success')
-      } catch (e) {
-        toast(e.message || 'Failed to send invite')
-      } finally { s.inviting = false }
-    },
-
-    async changeRole(roleId) {
-      s.rolePassword = ''
-      s.rolePasswordErr = null
-      s.pendingRoleId = null
-      try {
-        await api.updateUser(s.userDetail.id, { role_id: roleId })
-        s.userDetail = { ...s.userDetail, role_id: roleId }
-      } catch (e) {
-        if (e.message === 'Password required for this role') {
-          s.pendingRoleId = roleId
-          return
-        }
-        toast(e.message || 'Failed to change role')
-      }
-    },
-
-    async confirmRolePassword() {
-      if (!s.rolePassword) return
-      s.rolePasswordErr = null
-      try {
-        await api.updateUser(s.userDetail.id, { role_id: s.pendingRoleId, password: s.rolePassword })
-        s.userDetail = { ...s.userDetail, role_id: s.pendingRoleId }
-        s.pendingRoleId = null
-        s.rolePassword = ''
-      } catch (e) {
-        s.rolePasswordErr = e.message || 'Failed to change role'
-      }
-    },
-
-    async revokeDevice() {
-      s.revoking = true
-      try {
-        await api.revokeDevice(s.userDetail.id)
-        s.userDetail = { ...s.userDetail, devices: [] }
-      } catch (e) { toast(e.message || 'Failed to revoke') }
-      finally { s.revoking = false }
-    },
-
-    userRoleName(u) {
-      if (!u.role?.role) return ''
-      const r = typeof u.role.role === 'string' ? JSON.parse(u.role.role) : u.role.role
-      return r.name || ''
-    },
-
     load,
   })
 
@@ -474,10 +339,6 @@
     }
   }
 
-  Promise.all([loadModal('edit'), loadModal('detail')]).then(([e, d]) => {
-    s.editHTML = e
-    s.detailHTML = d
-  }).catch(e => { s.loadErr = e.message || 'Failed to load page templates' })
   load()
   loadSystemRoles().then(roles => {
     if (!roles.length) return

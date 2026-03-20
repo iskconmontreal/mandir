@@ -27,81 +27,14 @@
 </div>
 
 <!-- ===== EXPENSES TAB ===== -->
-<section :class="{'hidden': activeTab !== 'expenses'}" :scope="{showFilter: false, showExport: false}">
+<section :class="{'hidden': activeTab !== 'expenses'}" :scope="{showExport: false}">
 
   <div class="filter-bar">
-    <div class="filter-search-wrap" :onclick.outside="showFilter = false">
-      <input class="filter-search filter-search-input" type="search" placeholder="Search expense, vendor, submitter…"
-        :value="expSearch" :oninput.debounce-150="e => patchState({ expSearch: e.target.value, expPage: 1 })">
-      <div :class="{'hidden': !(expFilterCats.length || expFilterStatus || expDateFrom || expDateTo || expAmtMin || expAmtMax)}" class="filter-inline-chips">
-        <span :each="cat in expFilterCats" class="chip filter-inline-chip" :onclick="patchState({ expFilterCats: expFilterCats.filter(x => x !== cat), expPage: 1 })" :text="fmtCat(cat) + ' ×'"></span>
-        <span :if="expFilterStatus" class="chip filter-inline-chip" :onclick="patchState({ expFilterStatus: '', expPage: 1 })" :text="fmtStatus(expFilterStatus) + ' ×'"></span>
-        <span :if="expAmtMin || expAmtMax" class="chip filter-inline-chip" :onclick="patchState({ expAmtMin: '', expAmtMax: '', expPage: 1 })" :text="'$' + expAmtLo + '–$' + expAmtHi + ' ×'"></span>
-        <span :if="expDateFrom" class="chip filter-inline-chip" :onclick="patchState({ expDateFrom: '', expPage: 1 })" :text="'From ' + expDateFrom + ' ×'"></span>
-        <span :if="expDateTo" class="chip filter-inline-chip" :onclick="patchState({ expDateTo: '', expPage: 1 })" :text="'To ' + expDateTo + ' ×'"></span>
-      </div>
-      <div class="filter-search-seg">
-        <button class="btn btn-filter filter-search-btn" :class="{'filter-search-btn-active': showFilter || expFilterCats.length || expFilterStatus || expDateFrom || expDateTo || expAmtMin || expAmtMax}" :onclick="showFilter = !showFilter">Filter</button>
-        <div class="filter-dropdown hidden" :class="{'hidden': !showFilter}">
-          <div class="field">
-            <label>Category</label>
-            <div class="tag-cloud">
-              <span :each="cat in expCats" class="tag" :class="catCls(cat) + (expFilterCats.includes(cat) ? ' tag-active' : '')"
-                :onclick="patchState({ expFilterCats: expFilterCats.includes(cat) ? expFilterCats.filter(x => x !== cat) : [...expFilterCats, cat], expPage: 1 })"
-                :text="fmtCat(cat)"></span>
-            </div>
-          </div>
-          <div class="field">
-            <label>Status</label>
-            <select :value="expFilterStatus" :onchange="e => patchState({ expFilterStatus: e.target.value, expPage: 1 })">
-              <option value="" :selected="!expFilterStatus">All statuses</option>
-              <option value="submitted" :selected="expFilterStatus === 'submitted'">Approval</option>
-              <option value="approved" :selected="expFilterStatus === 'approved'">Approved</option>
-              <option value="paid" :selected="expFilterStatus === 'paid'">Paid</option>
-              <option value="rejected" :selected="expFilterStatus === 'rejected'">Rejected</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Amount range</label>
-            <div class="range-track">
-              <div class="range-hist" :if="expAmtHist.length">
-                <span :each="(h, i) in expAmtHist" class="range-hist-bar" :style="'height:' + (h * 100) + '%'" :class="{'range-hist-bar-dim': i < (expAmtLo / expAmtCeil * expAmtHist.length) || i >= (expAmtHi / expAmtCeil * expAmtHist.length)}"></span>
-              </div>
-              <div class="range-slider" :ref="el => { el.style.setProperty('--lh', (expAmtLo / expAmtCeil * 100) + '%'); el.style.setProperty('--rh', (expAmtHi / expAmtCeil * 100) + '%') }">
-                <input type="range" class="range-lo" min="0" :max="expAmtCeil" step="1"
-                  :ref="el => { el.max = expAmtCeil; el.value = expAmtLo }"
-                  :oninput="e => { const v = Math.min(+e.target.value, expAmtHi); e.target.value = v; rangeSync(e, v, expAmtCeil, true, { expAmtMin: v, expPage: 1 }) }">
-                <input type="range" class="range-hi" min="0" :max="expAmtCeil" step="1"
-                  :ref="el => { el.max = expAmtCeil; el.value = expAmtHi }"
-                  :oninput="e => { const v = Math.max(+e.target.value, expAmtLo); e.target.value = v; rangeSync(e, v, expAmtCeil, false, { expAmtMax: v >= expAmtCeil ? '' : v, expPage: 1 }) }">
-              </div>
-            </div>
-            <div style="display:flex;gap:var(--s-sm);align-items:center">
-              <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Min" :value="expAmtMin"
-                :onchange="e => { const v = Math.max(0, Math.min(+e.target.value || 0, expAmtHi)); patchState({ expAmtMin: e.target.value === '' ? '' : v, expPage: 1 }) }"></span>
-              <span class="dim">—</span>
-              <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Max" :value="expAmtMax"
-                :onchange="e => { const v = Math.min(expAmtCeil, Math.max(+e.target.value || 0, expAmtLo)); patchState({ expAmtMax: v >= expAmtCeil ? '' : v, expPage: 1 }) }"></span>
-            </div>
-          </div>
-          <div class="field">
-            <label>Date range</label>
-            <div style="display:flex;gap:var(--s-sm);align-items:center">
-              <input type="date" :value="expDateFrom" :onchange="e => patchState({ expDateFrom: e.target.value, expPage: 1 })" style="flex:1">
-              <span class="dim">—</span>
-              <input type="date" :value="expDateTo" :onchange="e => patchState({ expDateTo: e.target.value, expPage: 1 })" style="flex:1">
-            </div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">
-            <button class="btn-link" :if="expFilterCats.length || expFilterStatus || expDateFrom || expDateTo || expAmtMin || expAmtMax"
-              :onclick="patchState({ expFilterCats: [], expFilterStatus: '', expDateFrom: '', expDateTo: '', expAmtMin: '', expAmtMax: '', expPage: 1 }); showFilter = false" :text="'Clear all'"></button>
-            <span :if="!expFilterCats.length && !expFilterStatus && !expDateFrom && !expDateTo && !expAmtMin && !expAmtMax"></span>
-            <button class="btn btn-primary btn-sm" :onclick="showFilter = false"
-              :text="'Show ' + expFiltered.length + ' results'"></button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <expense-filter-bar :search="expSearch" :filtercats="expFilterCats" :filterstatus="expFilterStatus"
+      :amtmin="expAmtMin" :amtmax="expAmtMax" :amtlo="expAmtLo" :amthi="expAmtHi" :amtceil="expAmtCeil" :amthist="expAmtHist"
+      :datefrom="expDateFrom" :dateto="expDateTo" :cats="expCats" :resultcount="expFiltered.length"
+      :onchange="e => patchState({ expSearch: e.detail.search ?? expSearch, expFilterCats: e.detail.filtercats ?? expFilterCats, expFilterStatus: e.detail.filterstatus ?? expFilterStatus, expAmtMin: e.detail.amtmin ?? expAmtMin, expAmtMax: e.detail.amtmax ?? expAmtMax, expDateFrom: e.detail.datefrom ?? expDateFrom, expDateTo: e.detail.dateto ?? expDateTo, expPage: 1 })">
+    </expense-filter-bar>
     <div class="filter-bar-actions">
       <div style="position:relative">
         <button class="btn btn-outline btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export</button>
@@ -110,7 +43,7 @@
           <a class="quick-add-item" :onclick="printTable(); showExport = false">Print / PDF</a>
         </div>
       </div>
-      <button class="btn btn-primary filter-bar-create" :onclick="openAdd()">+ Expense</button>
+      <button class="btn btn-primary filter-bar-create" :onclick="showExpForm = true; expFormDetail = null; expFormMode = 'create'">+ Expense</button>
     </div>
     <div class="seg-group" hidden>
       <span class="seg" :class="{'seg-active': expView === 'list'}" :onclick="setExpView('list')" title="List view" style="display:flex;align-items:center">
@@ -141,7 +74,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr :each="x in expPaged" class="row-link" :onclick="viewExpense(x)">
+          <tr :each="x in expPaged" class="row-link" :onclick="setTimeout(() => { showExpForm = true; expFormDetail = x; expFormMode = ((x.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' })">
             <td :each="c in expCols" :html="_expCell(x, c.key)" :style="c.right ? 'text-align:right' : ''"></td>
             <td :if="can('expenses:approve')" class="quick-actions" :onclick.stop="">
               <button :if="x.status === 'submitted' && !myApprovals[x.id]" class="btn-quick btn-quick-reject" :onclick="rejectExpense(x)">Reject</button>
@@ -177,7 +110,7 @@
     :hasmore="expHasMore" :canapprove="can('expenses:approve')"
     :empty="!loading && !expRefreshing && !expSearchLoading && !expenses.length && !expSearch"
     :nomatch="!loading && !expRefreshing && !expSearchLoading && !expFiltered.length && (expenses.length || expSearch)"
-    :onview="e => viewExpense(e.detail)"
+    :onview="e => setTimeout(() => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' })"
     :onapprove="e => expenseQuickApprove(e.detail)"
     :onpay="e => expenseQuickPay(e.detail)">
   </expense-list>
@@ -185,84 +118,14 @@
 </section>
 
 <!-- ===== INCOME TAB ===== -->
-<section :class="{'hidden': activeTab !== 'income'}" :scope="{showFilter: false, showExport: false}">
+<section :class="{'hidden': activeTab !== 'income'}" :scope="{showExport: false}">
 
   <div class="filter-bar">
-    <div class="filter-search-wrap" :onclick.outside="showFilter = false">
-      <input class="filter-search filter-search-input" type="search" placeholder="Search source or note…"
-        :value="donSearch" :oninput.debounce-150="e => patchState({ donSearch: e.target.value, donPage: 1 })">
-      <div :class="{'hidden': !(donFilterMethods.length || donFilterType || donDateFrom || donDateTo || donAmtMin || donAmtMax)}" class="filter-inline-chips">
-        <span :each="method in donFilterMethods" class="chip filter-inline-chip" :onclick="patchState({ donFilterMethods: donFilterMethods.filter(x => x !== method), donPage: 1 })" :text="fmtCat(method) + ' ×'"></span>
-        <span :if="donFilterType" class="chip filter-inline-chip" :onclick="patchState({ donFilterType: '', donPage: 1 })" :text="fmtCat(donFilterType) + ' ×'"></span>
-        <span :if="donAmtMin || donAmtMax" class="chip filter-inline-chip" :onclick="patchState({ donAmtMin: '', donAmtMax: '', donPage: 1 })" :text="'$' + donAmtLo + '–$' + donAmtHi + ' ×'"></span>
-        <span :if="donDateFrom" class="chip filter-inline-chip" :onclick="patchState({ donDateFrom: '', donPage: 1 })" :text="'From ' + donDateFrom + ' ×'"></span>
-        <span :if="donDateTo" class="chip filter-inline-chip" :onclick="patchState({ donDateTo: '', donPage: 1 })" :text="'To ' + donDateTo + ' ×'"></span>
-      </div>
-      <div class="filter-search-seg">
-        <button class="btn btn-filter filter-search-btn" :class="{'filter-search-btn-active': showFilter || donFilterMethods.length || donFilterType || donDateFrom || donDateTo || donAmtMin || donAmtMax}" :onclick="showFilter = !showFilter">Filter</button>
-        <div class="filter-dropdown hidden" :class="{'hidden': !showFilter}">
-          <div class="field">
-            <label>Method</label>
-            <div class="tag-cloud">
-              <span :each="m in donMethods" class="tag cat-gray" :class="{'tag-active': donFilterMethods.includes(m)}"
-                :onclick="patchState({ donFilterMethods: donFilterMethods.includes(m) ? donFilterMethods.filter(x => x !== m) : [...donFilterMethods, m], donPage: 1 })"
-                :text="fmtCat(m)"></span>
-            </div>
-          </div>
-          <div class="field">
-            <label>Type</label>
-            <select :onchange="e => patchState({ donFilterType: e.target.value, donPage: 1 })">
-              <option value="" :selected="!donFilterType">All income</option>
-              <option value="donation" :selected="donFilterType === 'donation'">Donation</option>
-              <option value="sale" :selected="donFilterType === 'sale'">Sale</option>
-              <option value="grant" :selected="donFilterType === 'grant'">Grant</option>
-              <option value="interest" :selected="donFilterType === 'interest'">Interest</option>
-              <option value="refund" :selected="donFilterType === 'refund'">Refund</option>
-              <option value="rebate" :selected="donFilterType === 'rebate'">Rebate</option>
-              <option value="other" :selected="donFilterType === 'other'">Other</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Amount range</label>
-            <div class="range-track">
-              <div class="range-hist" :if="donAmtHist.length">
-                <span :each="(h, i) in donAmtHist" class="range-hist-bar" :style="'height:' + (h * 100) + '%'" :class="{'range-hist-bar-dim': i < (donAmtLo / donAmtCeil * donAmtHist.length) || i >= (donAmtHi / donAmtCeil * donAmtHist.length)}"></span>
-              </div>
-              <div class="range-slider" :ref="el => { el.style.setProperty('--lh', (donAmtLo / donAmtCeil * 100) + '%'); el.style.setProperty('--rh', (donAmtHi / donAmtCeil * 100) + '%') }">
-                <input type="range" class="range-lo" min="0" :max="donAmtCeil" step="1"
-                  :ref="el => { el.max = donAmtCeil; el.value = donAmtLo }"
-                  :oninput="e => { const v = Math.min(+e.target.value, donAmtHi); e.target.value = v; rangeSync(e, v, donAmtCeil, true, { donAmtMin: v, donPage: 1 }) }">
-                <input type="range" class="range-hi" min="0" :max="donAmtCeil" step="1"
-                  :ref="el => { el.max = donAmtCeil; el.value = donAmtHi }"
-                  :oninput="e => { const v = Math.max(+e.target.value, donAmtLo); e.target.value = v; rangeSync(e, v, donAmtCeil, false, { donAmtMax: v >= donAmtCeil ? '' : v, donPage: 1 }) }">
-              </div>
-            </div>
-            <div style="display:flex;gap:var(--s-sm);align-items:center">
-              <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Min" :value="donAmtMin"
-                :onchange="e => { const v = Math.max(0, Math.min(+e.target.value || 0, donAmtHi)); patchState({ donAmtMin: e.target.value === '' ? '' : v, donPage: 1 }) }"></span>
-              <span class="dim">—</span>
-              <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Max" :value="donAmtMax"
-                :onchange="e => { const v = Math.min(donAmtCeil, Math.max(+e.target.value || 0, donAmtLo)); patchState({ donAmtMax: v >= donAmtCeil ? '' : v, donPage: 1 }) }"></span>
-            </div>
-          </div>
-          <div class="field">
-            <label>Date range</label>
-            <div style="display:flex;gap:var(--s-sm);align-items:center">
-              <input type="date" :value="donDateFrom" :onchange="e => patchState({ donDateFrom: e.target.value, donPage: 1 })" style="flex:1">
-              <span class="dim">—</span>
-              <input type="date" :value="donDateTo" :onchange="e => patchState({ donDateTo: e.target.value, donPage: 1 })" style="flex:1">
-            </div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">
-            <button class="btn-link" :if="donFilterMethods.length || donFilterType || donDateFrom || donDateTo || donAmtMin || donAmtMax"
-              :onclick="showFilter = false; clearIncomeFilters()" :text="'Clear all'"></button>
-            <span :if="!donFilterMethods.length && !donFilterType && !donDateFrom && !donDateTo && !donAmtMin && !donAmtMax"></span>
-            <button class="btn btn-primary btn-sm" :onclick="showFilter = false"
-              :text="'Show ' + donFiltered.length + ' results'"></button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <income-filter-bar :search="donSearch" :filtermethods="donFilterMethods" :filtertype="donFilterType"
+      :amtmin="donAmtMin" :amtmax="donAmtMax" :amtlo="donAmtLo" :amthi="donAmtHi" :amtceil="donAmtCeil" :amthist="donAmtHist"
+      :datefrom="donDateFrom" :dateto="donDateTo" :methods="donMethods" :resultcount="donFiltered.length"
+      :onchange="e => patchState({ donSearch: e.detail.search ?? donSearch, donFilterMethods: e.detail.filtermethods ?? donFilterMethods, donFilterType: e.detail.filtertype ?? donFilterType, donAmtMin: e.detail.amtmin ?? donAmtMin, donAmtMax: e.detail.amtmax ?? donAmtMax, donDateFrom: e.detail.datefrom ?? donDateFrom, donDateTo: e.detail.dateto ?? donDateTo, donPage: 1 })">
+    </income-filter-bar>
     <div class="filter-bar-actions">
       <div style="position:relative">
         <button class="btn btn-outline btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export</button>
@@ -271,7 +134,7 @@
           <a class="quick-add-item" :onclick="printTable(); showExport = false">Print / PDF</a>
         </div>
       </div>
-      <button class="btn btn-primary filter-bar-create" :onclick="openDonForm()">+ Income</button>
+      <button class="btn btn-primary filter-bar-create" :onclick="showDonForm = true; donFormDetail = null">+ Income</button>
     </div>
   </div>
   <income-list
@@ -279,7 +142,7 @@
     :hasmore="donHasMore"
     :empty="!donations.length && !loading"
     :nomatch="donations.length && !donFiltered.length && !loading"
-    :onview="e => editDonation(e.detail)"
+    :onview="e => { showDonForm = true; donFormDetail = e.detail }"
     :onprint="e => printDonation(e.detail)">
   </income-list>
 
@@ -304,8 +167,8 @@
       <div style="position:relative">
         <button class="btn btn-primary filter-bar-create" :onclick="showAddMenu = !showAddMenu" :onclick.outside="showAddMenu = false">+ Transaction</button>
         <div :if="showAddMenu" class="quick-add" style="right:0;left:auto">
-          <a :if="can('expenses:create')" class="quick-add-item" :onclick="openAdd(); showAddMenu = false">Expense</a>
-          <a :if="can('income:create')" class="quick-add-item" :onclick="openDonForm(); showAddMenu = false">Income</a>
+          <a :if="can('expenses:create')" class="quick-add-item" :onclick="showExpForm = true; expFormDetail = null; expFormMode = 'create'; showAddMenu = false">Expense</a>
+          <a :if="can('income:create')" class="quick-add-item" :onclick="showDonForm = true; donFormDetail = null; showAddMenu = false">Income</a>
         </div>
       </div>
     </div>
@@ -314,8 +177,8 @@
   <transaction-list
     :years="netYearGroups" :search="netSearch" :loading="loading" :error="loadErr"
     :empty="!loading && !netFiltered.length" :canapprove="can('expenses:approve')"
-    :onviewexp="e => viewExpense(e.detail)"
-    :onviewinc="e => editDonation(e.detail)"
+    :onviewexp="e => setTimeout(() => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' })"
+    :onviewinc="e => { showDonForm = true; donFormDetail = e.detail }"
     :onapprove="e => expenseQuickApprove(e.detail)"
     :onpay="e => expenseQuickPay(e.detail)">
   </transaction-list>
@@ -326,42 +189,62 @@
 {% include components/expense-list.html %}
 {% include components/income-list.html %}
 {% include components/transaction-list.html %}
+{% include components/expense-filter-bar.html %}
+{% include components/income-filter-bar.html %}
+{% include components/expense-form.html %}
+{% include components/donation-form.html %}
 
-{% include finance/expense-form.html %}
-{% include finance/donation-form.html %}
+<expense-form :show="showExpForm" :detail="expFormDetail" :mode="expFormMode"
+  :canapprove="can('expenses:approve')" :isadmin="hasRole('admin') || hasRole('administrator')"
+  :membernames="memberNames" :usernames="userNames" :myuserid="MY_USER_ID"
+  :onsave="e => { showExpForm = false; freshId = e.detail?.id || null; if (freshId) setTimeout(() => freshId = null, 5000); loadAll() }"
+  :oncancel="() => { showExpForm = false }">
+</expense-form>
+
+<donation-form :show="showDonForm" :detail="donFormDetail"
+  :isfinance="true" :membernames="memberNames" :usernames="userNames" :myuserid="MY_USER_ID"
+  :onsave="e => { showDonForm = false; freshId = e.detail?.id || null; if (freshId) setTimeout(() => freshId = null, 5000); loadAll() }"
+  :oncancel="() => { showDonForm = false }"
+  :onprint="e => printDonation(e.detail)">
+</donation-form>
 
 <script type="module">
   import { init, fmtCat, fmtAmt, rawAmt, toCents, toast, auth, hl } from '../../lib/app.js'
   import sprae from '../../lib/sprae.js'
+  import { setupProcessor } from '../../lib/processor.js'
   import { icon, actionIcon, statusIcon, methodIcon, activityIcon } from '../../lib/icons.js'
   import { api, BASE } from '../../lib/api.js'
 
-  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, AMT_MAX, catCls, catHex, catBgHex, fmtStatus, fmtDate, changedAt, parseMemberNames } from '../../lib/finance.js'
-  import { formDefaults, bindForm, expIsEditable, expEditPolicy as getExpEditPolicy, expGetAttachments, buildExpTimeline } from '../../lib/form.js'
+  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, EXP_METHODS, AMT_MAX, catCls, catHex, catBgHex, fmtStatus, fmtDate, changedAt, parseMemberNames, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName } from '../../lib/finance.js'
+  import { formDefaults, createPrintDonation } from '../../lib/form.js'
 
   // CE processor + registration (must be before init() so CEs are defined when sprae processes DOM)
   const fmtMonthShort = k => { if (!k?.includes('-')) return 'Undated'; const [y, m] = k.split('-'); return new Date(+y, +m - 1).toLocaleString('default', { month: 'long' }) }
   const fmtMonth = k => { if (!k?.includes('-')) return 'Undated'; const [y, m] = k.split('-'); return new Date(+y, +m - 1).toLocaleString('default', { month: 'long', year: 'numeric' }) }
-  customElements.get('define-element').processor = (root, state) => {
-    if (root.template) root.appendChild(root.template.content.cloneNode(true))
-    let _open = {}
-    let s = sprae(root, {
-      fmtAmt, fmtCat, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, catCls, hl, statusIcon, icon,
-      apiBase: BASE, methodIcon, approveIcon: actionIcon('approve'), payIcon: actionIcon('pay'), printIcon: actionIcon('print'),
-      _open, _toggle: key => s._open = { ...s._open, [key]: !s._open[key] },
-      _emit: (name, detail) => state.host.dispatchEvent(new CustomEvent(name, { detail, bubbles: true })),
-      ...state
-    })
-    state.host.onpropchange = (k, v) => {
-      s[k] = v
-      // Auto-open first month when years data arrives
-      if (k === 'years' && v?.length && !Object.keys(s._open || {}).length) {
+  setupProcessor(sprae, {
+    fmtAmt, fmtCat, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, catCls, rawAmt, toCents, toast, hl,
+    statusIcon, icon, methodIcon, activityIcon,
+    apiBase: BASE, api,
+    EXP_CATS, EXP_METHODS, DON_METHODS, INCOME_TYPES,
+    EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName,
+    approveIcon: actionIcon('approve'), payIcon: actionIcon('pay'), printIcon: actionIcon('print'),
+  }, {
+    extras: {
+      _emit: (name, detail) => {}, // placeholder — overridden per-instance below
+      _open: {}, _toggle: () => {},
+    },
+    onInit(sp) {
+      sp._open = {}
+      sp._toggle = key => sp._open = { ...sp._open, [key]: !sp._open[key] }
+      sp._emit = (name, detail) => sp.host?.dispatchEvent(new CustomEvent(name, { detail, bubbles: true }))
+    },
+    onPropChange(sp, k, v) {
+      if (k === 'years' && v?.length && !Object.keys(sp._open || {}).length) {
         let first = v[0]?.items?.[0]?.key
-        if (first) s._open = { [first]: true }
+        if (first) sp._open = { [first]: true }
       }
     }
-    return s
-  }
+  })
 
   const MY_USER_ID = auth.user?.id || auth.user?.user_id || (() => {
     try { return JSON.parse(atob(auth.token.split('.')[1])).user_id || null } catch { return null }
@@ -588,6 +471,8 @@
 
     year: initUrl.year, years, curYear, monthLabel,
     loading: false, loadErr: null,
+    showExpForm: false, expFormDetail: null, expFormMode: 'create',
+    showDonForm: false, donFormDetail: null,
     expRefreshing: false,
     donations: [], expenses: [],
     expTotal: 0, donTotal: 0,
@@ -614,10 +499,6 @@
     freshId: null,
     isFresh(id) { return id && id === this.freshId },
 
-    get expEditable() { return expIsEditable(this) },
-    get expEditPolicy() { return getExpEditPolicy(this) },
-    get expAttachments() { return expGetAttachments(this) },
-    get expTimeline() { return buildExpTimeline(this) },
     incomeBucket: bucketOf,
     incomeLabel: labelOf,
     incomeSource(x) { return sourceOf(x, this.memberNames) },
@@ -1326,11 +1207,7 @@
     s.patchState({ donFilterType: '', donFilterMethods: [], donAmtMin: '', donAmtMax: '', donDateFrom: '', donDateTo: '', donPage: 1 })
   }
 
-  bindForm(s, { api, onSave(hint) {
-    s.freshId = hint?.id || null
-    if (s.freshId) setTimeout(() => { if (s.freshId === hint?.id) s.freshId = null }, 5000)
-    loadAll()
-  } })
+  s.printDonation = createPrintDonation(s.memberNames)
 
   function refreshIncomeStats() {
     const { cur, prev } = monthKeys(s.year)
@@ -1553,6 +1430,8 @@
       refreshNetMonthOpen()
     })
   }
+
+  s.loadAll = loadAll
 
   function refreshExpMonthOpen() {
     const keys = s.expMonthKeys

@@ -1,0 +1,47 @@
+<define-element>
+  <recent-donations items:array membernames:object>
+    <style>:host { display: contents; }</style>
+    <template>
+      <div :each="d in items" class="recent-inc-item row-link" :onclick="e => emit('view', d)">
+        <span class="recent-inc-icon-col" :class="'recent-inc-icon-' + method(d)">
+          <span class="recent-inc-icon" :html="methodIcon(method(d))"></span>
+        </span>
+        <div class="recent-inc-main">
+          <div class="recent-inc-info">
+            <div class="recent-inc-title-row">
+              <div class="recent-inc-title" :text="source(d)"></div>
+            </div>
+            <div class="recent-inc-subtitle">
+              <span class="recent-inc-method" :class="'recent-inc-method-' + method(d)" :text="method(d)"></span>
+              <span class="recent-inc-time" :text="fmtDate(d.updated_at || d.created_at || d.date_received)"></span>
+            </div>
+          </div>
+          <div :if="d.attachments?.length" class="row-attachments">
+            <img :each="a in (d.attachments || []).slice(0, 4)" :if="a.mime_type?.startsWith('image/')" class="row-attach-thumb" :src="apiBase + '/' + a.file_path" :alt="a.original_name">
+            <span :each="a in (d.attachments || []).slice(0, 4)" :if="!a.mime_type?.startsWith('image/')" class="row-attach-file" :title="a.original_name" :html="icon('attach')"></span>
+          </div>
+        </div>
+        <div class="recent-inc-type">
+          <span class="badge" :class="catCls(kind(d))" :text="fmtCat(kind(d))"></span>
+        </div>
+        <div class="recent-inc-amount">
+          <div class="recent-inc-value stat-ok" :text="'+$' + fmtAmt(d.amount || 0)"></div>
+        </div>
+      </div>
+    </template>
+    <script>
+      this.source = function(d) {
+        return d?.member_id && this.membernames?.[d.member_id]
+          ? this.membernames[d.member_id]
+          : (d?.source_name || 'Anonymous')
+      }
+      this.method = function(d) {
+        const m = (d?.method || 'cash').toLowerCase()
+        return m === 'e transfer' ? 'e-transfer' : m
+      }
+      this.kind = function(d) {
+        return d?.type === 'donation' ? (d?.category || 'donation') : (d?.type || 'income')
+      }
+    </script>
+  </recent-donations>
+</define-element>

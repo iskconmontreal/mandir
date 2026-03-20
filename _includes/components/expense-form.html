@@ -1,0 +1,620 @@
+<define-element>
+  <expense-form show:boolean="false" detail:object mode:string="create" canapprove:boolean="false" isadmin:boolean="false" membernames:object usernames:object myuserid:number>
+    <style>:host { display: contents; }</style>
+    <template>
+
+<!-- Modal -->
+<div :if="show" class="modal-overlay" :onkeydown.esc.document="e => { if (lightboxSrc || filePickerOpen) return; _close() }">
+  <div class="modal modal-expense" :onclick.outside="e => { if (lightboxSrc || filePickerOpen) return; _close() }">
+    <div class="expense-media-pane" :if="!detailExp || _attachments().length || receipts.length || (expMode === 'edit')"
+      :ondragover="e => e.preventDefault()"
+      :ondrop="e => { e.preventDefault(); addReceipts(e.dataTransfer.files) }">
+
+      <div :class="{'hidden': _attachments().length || receipts.length}" class="expense-media-empty"
+        :onclick="() => { filePickerOpen = true; _root().querySelector('#exp-receipt-input')?.click() }">
+        <div class="scan-icon"><span :html="icon('scan_receipts')"></span></div>
+        <div class="expense-media-empty-title">Scan receipts</div>
+      </div>
+
+      <div :class="{'hidden': !_attachments().length && !receipts.length}" class="receipt-carousel">
+        <div id="exp-receipt-track" class="receipt-carousel-track" :onscroll="e => _syncSlide(e)">
+          <div :each="(item, i) in _receiptItems()" class="receipt-thumb receipt-thumb-gallery"
+            :class="{ 'receipt-extracting': item.kind === 'queued' && item.value.extracting, 'receipt-error': item.kind === 'queued' && item.value.err, 'receipt-duplicate': item.kind === 'queued' && item.value.duplicate }"
+            :onclick="e => { if (e.target.closest('.receipt-remove')) return; if (item.kind === 'saved') { return item.value.mime_type?.startsWith('image/') ? (lightboxSrc = apiBase + '/' + item.value.file_path) : window.open(apiBase + '/' + item.value.file_path, '_blank') } if (item.value.preview) lightboxSrc = item.value.preview }">
+            <img :if="item.kind === 'saved' && item.value.mime_type?.startsWith('image/')" :src="apiBase + '/' + item.value.file_path" :alt="item.value.original_name">
+            <img :if="item.kind === 'queued' && item.value.preview" :src="item.value.preview">
+            <div :if="item.kind === 'saved' && !item.value.mime_type?.startsWith('image/')" class="receipt-placeholder">
+              <span class="receipt-placeholder-icon" :html="icon('file')"></span>
+              <span :text="item.value.original_name?.split('.').pop()?.toUpperCase() || 'FILE'"></span>
+              <div :if="item.value.extracted_data?.vendor || item.value.extracted_data?.amount" class="receipt-placeholder-data">
+                <span :if="item.value.extracted_data?.vendor" class="receipt-placeholder-vendor" :text="item.value.extracted_data.vendor"></span>
+                <span :if="item.value.extracted_data?.amount" class="receipt-placeholder-amt" :text="'$' + Number(item.value.extracted_data.amount).toFixed(2)"></span>
+                <span :if="item.value.extracted_data?.date" :text="item.value.extracted_data.date"></span>
+              </div>
+            </div>
+            <div :if="item.kind === 'queued' && !item.value.preview" class="receipt-placeholder">
+              <span class="receipt-placeholder-icon" :html="icon('file')"></span>
+              <span :text="item.value.name?.split('.').pop()?.toUpperCase() || 'FILE'"></span>
+              <div :if="item.value.data?.vendor || item.value.data?.amount" class="receipt-placeholder-data">
+                <span :if="item.value.data?.vendor" class="receipt-placeholder-vendor" :text="item.value.data.vendor"></span>
+                <span :if="item.value.data?.amount" class="receipt-placeholder-amt" :text="'$' + Number(item.value.data.amount).toFixed(2)"></span>
+                <span :if="item.value.data?.date" :text="item.value.data.date"></span>
+              </div>
+            </div>
+            <div :if="item.kind === 'queued' && item.value.extracting" class="receipt-spinner"><span class="receipt-spinner-label">Scanning…</span></div>
+            <button :if="item.kind === 'queued'" type="button" class="receipt-remove" :onclick="removeReceipt(item.value)">&times;</button>
+            <button :if="item.kind === 'saved' && (detailExp?.status !== 'paid' || isadmin)" type="button" class="receipt-remove" :onclick="deleteSavedAttachment(item.value)">&times;</button>
+          </div>
+        </div>
+        <div class="receipt-dots" :if="_receiptItems().length > 1">
+          <button type="button" class="receipt-dot" :each="(_, i) in _receiptItems()" :class="{'receipt-dot-active': i === (expReceiptSlide || 0)}" :onclick="_jumpSlide(i)"></button>
+        </div>
+      </div>
+      <button :class="{'hidden': !_attachments().length && !receipts.length}" type="button" class="receipt-add receipt-add-gallery"
+        :onclick="() => { filePickerOpen = true; _root().querySelector('#exp-receipt-input')?.click() }">
+        + Add more
+      </button>
+      <input id="exp-receipt-input" type="file" accept="image/*,.pdf" multiple style="display:none"
+        :onchange="e => { filePickerOpen = false; addReceipts(e.target.files); e.target.value = '' }"
+        :oncancel="() => filePickerOpen = false">
+    </div>
+
+    <div class="expense-content-pane">
+      <div class="modal-header">
+        <h2 style="display:flex;align-items:center;gap:var(--s-sm)">
+          <span :text="detailExp ? 'Edit Expense' : 'Add Expense'"></span>
+          <span :if="detailExp?.expense_no" class="dim modal-title-sub" :text="'#' + detailExp?.expense_no"></span>
+          <span :if="detailExp?.status" class="badge" :class="'badge-' + detailExp?.status" :text="fmtStatus(detailExp?.status)"></span>
+        </h2>
+        <button class="modal-close" type="button" aria-label="Close dialog" :onclick="_close()" :html="icon('close')"></button>
+      </div>
+      <div class="modal-body">
+        <form id="exp-form" :onsubmit.prevent="saveExpense" style="display:flex;flex-direction:column;gap:var(--s-md)">
+          <div :if="_policy().message" class="dim" style="font-size:var(--f-sm)" :text="_policy().message"></div>
+
+          <div class="exp-items">
+            <table class="exp-items-table">
+              <thead><tr><th>Receipts</th><th>Amount</th><th>GST</th><th>PST</th></tr></thead>
+              <tbody>
+                <tr :each="(item, i) in expForm.items">
+                  <td class="exp-item-desc"><input type="text" :value="item.desc" :oninput="e => { expForm.items[i].desc = e.target.value }" placeholder="Item" :disabled="_policy().lockedAll"><button :if="!_policy().lockedAll && expForm.items.length > 1" type="button" class="exp-item-remove" :onclick="removeExpItem(i)" tabindex="-1">&times;</button></td>
+                  <td><input type="number" step="0.01" min="0" :value="item.amount" :oninput="e => { expForm.items[i].amount = e.target.value; syncItemTotals() }" placeholder="0.00" :disabled="_policy().amountLocked"></td>
+                  <td><input type="number" step="0.01" min="0" :value="item.gst" :oninput="e => { expForm.items[i].gst = e.target.value; syncItemTotals() }" placeholder="0.00" :disabled="_policy().amountLocked"></td>
+                  <td><input type="number" step="0.01" min="0" :value="item.pst" :oninput="e => { expForm.items[i].pst = e.target.value; syncItemTotals() }" placeholder="0.00" :disabled="_policy().amountLocked"></td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td><button :if="!_policy().lockedAll" type="button" class="btn btn-outline btn-sm" :onclick="addExpItem()">+ Add item</button><span :if="_policy().lockedAll">Total</span></td>
+                  <td><input type="number" :value="expForm.amount" readonly tabindex="-1"></td>
+                  <td><input type="number" :value="expForm.gst" readonly tabindex="-1" :placeholder="'0.00'"></td>
+                  <td><input type="number" :value="expForm.pst" readonly tabindex="-1" :placeholder="'0.00'"></td>
+                </tr>
+              </tfoot>
+            </table>
+            <input id="exp-amount" type="hidden" :value="expForm.amount">
+          </div>
+
+          <div class="form-row">
+            <div :if="canapprove" class="field autocomplete">
+              <label>Payee</label>
+              <div style="position:relative">
+                <input id="exp-vendor" type="text" autocomplete="off" :value="expForm.payee"
+                  :onfocus="e => filterPayees(expForm.payee)"
+                  :oninput="e => { expForm.member_id = null; filterPayees(e.target.value) }"
+                  :onblur="e => { memberHits = [] }"
+                  placeholder="Member name…" :required="!editId" :disabled="_policy().payeeLocked">
+                <button :if="expForm.member_id && !_policy().payeeLocked" type="button" class="btn-link"
+                  style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%)"
+                  :onclick="clearMember()">&times;</button>
+              </div>
+              <div :if="memberHits.length" class="autocomplete-list">
+                <div class="autocomplete-item" :each="m in memberHits" :onmousedown="e => { e.preventDefault(); queueMicrotask(() => selectMember(m)) }" :text="m.name"></div>
+              </div>
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <select id="exp-cat" :value="expForm.category" :change="v => { expForm.category = v; markDirty('category') }" :disabled="_policy().lockedAll">
+                <option value="" disabled hidden :selected="!(expForm.category || '')">Select…</option>
+                <option :each="cat in EXP_CATS" :value="cat" :text="fmtCat(cat)" :selected="expForm.category === cat"></option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Date</label>
+              <input id="exp-date" type="date" :value="expForm.expense_date" :change="v => { expForm.expense_date = v; markDirty('date') }" :disabled="_policy().dateLocked" :placeholder="'Defaults to today'">
+            </div>
+          </div>
+          <div class="field">
+            <label>Note</label>
+            <textarea id="exp-desc" rows="1" style="field-sizing:content;resize:none" :value="expForm.note" :change="v => { expForm.note = v; markDirty('note') }" placeholder="Optional…" :disabled="_policy().lockedAll"></textarea>
+          </div>
+
+          <div :if="receipts.some(r => r.duplicate)" class="form-warn">Possible duplicate — a receipt was previously uploaded for another expense</div>
+          <div class="form-warn" :if="addErr" :text="addErr"></div>
+        </form>
+
+        <div :if="detailExp" style="display:flex;flex-direction:column;gap:var(--s-sm)">
+          <label>History</label>
+          <div class="activity-feed">
+            <template :each="e in _timeline()">
+              <div class="activity-item" :if="!e.collapsed">
+                <span class="activity-marker" :class="'activity-marker-' + e.badge" :html="activityIcon(e.badge)"></span>
+                <div class="activity-copy">
+                  <div class="activity-line">
+                    <span class="activity-label" :text="e.label"></span>
+                    <span :if="e.actor"> by </span>
+                    <a class="activity-actor-link" :if="e.actor && e.uid" href="/app/members/" :text="e.actor"></a>
+                    <span :if="e.actor && !e.uid" :text="e.actor"></span>
+                    <span :if="e.detail" class="activity-detail" :text="e.detail"></span>
+                    <time class="activity-date-inline" :if="e.date" :text="_shortDate(e.date)" :datetime="e.date" :title="new Date(e.date).toLocaleString()"></time>
+                  </div>
+                </div>
+              </div>
+              <div class="activity-item activity-collapsed" :if="e.collapsed">
+                <span class="activity-marker"></span>
+                <div class="activity-copy">
+                  <a class="activity-expand" href="#" :onclick="e => { e.preventDefault(); expTimelineExpanded = true }" :text="'… ' + e.collapsed + ' more'"></a>
+                </div>
+              </div>
+            </template>
+
+            <div :if="_hasActions()" class="activity-item activity-item-current">
+              <span class="activity-marker" :class="'activity-marker-' + _statusBadge()" :html="activityIcon(_statusBadge())"></span>
+              <div class="activity-copy">
+                <div class="activity-line activity-line-current">
+                  <span class="activity-label" :text="_statusLabel()"></span>
+                  <div :if="detailExp?.status === 'submitted' && canapprove && !expRejecting" class="activity-followup-actions activity-followup-actions-inline">
+                    <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="approveExp()">Approve</button>
+                    <button class="btn btn-outline btn-sm" :onclick="openReject()">Reject</button>
+                  </div>
+                  <div :if="detailExp?.status === 'submitted' && canapprove && expRejecting" class="activity-followup-actions activity-followup-actions-inline activity-followup-actions-reject-inline">
+                    <span class="activity-inline-input-wrap">
+                      <input class="activity-inline-input" type="text" :value="actionNote" :change="v => actionNote = v" placeholder="Reason">
+                      <button class="activity-inline-clear" aria-label="Cancel reject" title="Cancel reject" :onclick="cancelReject()">×</button>
+                    </span>
+                    <button class="btn btn-danger btn-sm" :class="{'btn-loading': actioning}" :onclick="rejectExp()">Send</button>
+                  </div>
+                  <div :if="detailExp?.status === 'approved' && canapprove" class="activity-followup-actions activity-followup-actions-inline">
+                    <select :value="payMethod" :change="v => payMethod = v" class="input input-sm" style="width:9rem">
+                      <option value="">Method</option>
+                      <option value="cash">Cash</option><option value="cheque">Cheque</option><option value="e-transfer">E Transfer</option><option value="card">Card</option><option value="credit-card">Credit Card</option><option value="debit">Debit</option><option value="interac">Interac</option><option value="direct-deposit">Direct Deposit</option><option value="bank-deposit">Bank Deposit</option><option value="wire">Wire</option><option value="in-kind">In Kind</option><option value="other">Other</option>
+                    </select>
+                    <input type="text" :value="payRef" :change="v => payRef = v" placeholder="Reference" class="input input-sm" style="width:10rem">
+                    <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="payExp()">Paid</button>
+                  </div>
+                  <div :if="detailExp?.status === 'paid' && canapprove" class="activity-followup-actions activity-followup-actions-inline">
+                    <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :disabled="!_attachments().length" :title="_attachments().length ? '' : 'Attach receipt before closing'" :onclick="closeExp()">Close</button>
+                    <span :if="!_attachments().length" class="activity-hint dim">Attach receipt first</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); align-items:center; flex-wrap:wrap">
+          <button :if="editId && expMode === 'edit' && !delConfirm && detailExp?.status !== 'closed' && (detailExp?.status === 'submitted' || isadmin)" type="button" class="btn btn-outline" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
+          <span :if="delConfirm" class="dim" style="font-size:var(--f-sm); margin-right:auto; align-self:center">Delete permanently?</span>
+          <button :if="delConfirm" type="button" class="btn btn-danger" :class="{'btn-loading': deleting}" :onclick="delExpense()">Yes</button>
+          <button :if="delConfirm" type="button" class="btn btn-outline" :onclick="delConfirm = false">No</button>
+          <button :if="!delConfirm && !detailExp" type="button" class="btn btn-outline" :onclick="_close()">Cancel</button>
+          <button :if="!delConfirm && !detailExp" type="submit" form="exp-form" class="btn btn-primary" :disabled="_policy().lockedAll || expSaving">Submit</button>
+          <button :if="!delConfirm && detailExp && expMode !== 'edit'" type="button" class="btn btn-outline" :onclick="_close()">Close</button>
+          <button :if="!delConfirm && detailExp && expMode !== 'edit' && (detailExp?.status === 'submitted' || isadmin)" type="button" class="btn btn-primary" :onclick="beginEdit()">Edit</button>
+          <button :if="!delConfirm && detailExp && expMode === 'edit'" type="button" class="btn btn-outline" :onclick="_close()">Cancel</button>
+          <button :if="!delConfirm && detailExp && expMode === 'edit'" type="submit" form="exp-form" class="btn btn-primary" :class="{'btn-loading': expSaving}" :disabled="_policy().lockedAll || expSaving">Update</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div :if="lightboxSrc" class="lightbox" :onclick="lightboxSrc = ''" :onkeydown.esc.document="lightboxSrc = ''">
+  <img :src="lightboxSrc">
+  <button class="lightbox-close" :onclick="lightboxSrc = ''" :html="icon('close')"></button>
+</div>
+
+    </template>
+    <script>
+      // --- Internal state ---
+      this.expForm = { payee: '', amount: '', category: '', expense_date: '', note: '', member_id: null, gst: '', pst: '', items: [{ desc: '', amount: '', gst: '', pst: '' }] }
+      this.receipts = []
+      this.expReceiptSlide = 0
+      this.lightboxSrc = ''
+      this.filePickerOpen = false
+      this.memberHits = []
+      this.memberQuery = ''
+      this.vendorHits = []
+      this.expMode = 'create'
+      this.editId = null
+      this.detailExp = null
+      this.expFull = false
+      this.expSaving = false
+      this.expDirty = false
+      this.addErr = null
+      this.extracting = false
+      this.delConfirm = false
+      this.deleting = false
+      this.actioning = false
+      this.actionNote = ''
+      this.payRef = ''
+      this.payMethod = ''
+      this.expRejecting = false
+      this.pendingDeletes = new Set()
+      this.expHistory = []
+      this.expTimelineExpanded = false
+      this.expCats = []
+
+      // --- Private counters ---
+      var _pendingExtracts = 0, _formSession = 0, _receiptUid = 0, _dirtyFields = new Set(), _opened = false
+
+      // --- Helpers ---
+      this._root = function() { return this.host || document }
+      this._policy = function() {
+        var status = this.detailExp?.status || ''
+        var viewOnly = !!this.detailExp && this.expMode !== 'edit'
+        var admin = this.isadmin
+        var editing = this.expMode === 'edit'
+        var lockedAll = viewOnly || (editing && status === 'rejected' && !admin)
+        var paidLocked = editing && status === 'paid'
+        var rejectedLocked = editing && status === 'rejected' && !admin
+        return {
+          status: status, viewOnly: viewOnly, lockedAll: lockedAll,
+          amountLocked: viewOnly || paidLocked || rejectedLocked,
+          payeeLocked: viewOnly || paidLocked || rejectedLocked,
+          dateLocked: viewOnly || paidLocked || rejectedLocked,
+          message: viewOnly ? '' : lockedAll ? 'Rejected — submit a new expense instead.' : paidLocked ? 'Paid expense — only category and note can be updated.' : ''
+        }
+      }
+      this._attachments = function() {
+        var all = this.detailExp?.attachments || []
+        return this.pendingDeletes?.size ? all.filter(function(a) { return !this.pendingDeletes.has(a.id) }.bind(this)) : all
+      }
+      this._receiptItems = function() {
+        var saved = (this._attachments() || []).map(function(x) { return { kind: 'saved', value: x } })
+        var queued = (this.receipts || []).map(function(x) { return { kind: 'queued', value: x } })
+        return saved.concat(queued)
+      }
+      this._timeline = function() {
+        var all = (this.expHistory || []).slice().sort(function(a, b) { return new Date(a.date) - new Date(b.date) })
+        if (all.length <= 3 || this.expTimelineExpanded) return all
+        return [all[0], { collapsed: all.length - 2 }, all[all.length - 1]]
+      }
+      this._shortDate = function(d) {
+        if (!d) return ''
+        var dt = new Date(d)
+        if (isNaN(dt.getTime())) return ''
+        var now = new Date()
+        var sameYear = dt.getFullYear() === now.getFullYear()
+        return dt.toLocaleDateString('en-US', Object.assign({ month: 'short', day: 'numeric' }, !sameYear ? { year: 'numeric' } : {}))
+      }
+      this._hasActions = function() {
+        var st = this.detailExp?.status
+        if (!st || st === 'closed' || st === 'rejected') return false
+        if ((st === 'submitted' || st === 'approved' || st === 'paid') && this.canapprove) return true
+        return st === 'submitted'
+      }
+      this._statusBadge = function() {
+        var st = this.detailExp?.status || 'submitted'
+        return st === 'approved' ? 'approved' : st === 'paid' ? 'paid' : st === 'closed' ? 'closed' : st === 'rejected' ? 'rejected' : 'submitted'
+      }
+      this._statusLabel = function() {
+        var st = this.detailExp?.status || 'submitted'
+        if (st === 'submitted') return 'Approval ' + (this.detailExp?.approval_count || 0) + '/' + (this.detailExp?.approvals_required || '?')
+        if (st === 'approved') return 'Payment'
+        if (st === 'paid') return 'Close'
+        return this.fmtStatus(st)
+      }
+      this._syncSlide = function(e) {
+        var el = e?.currentTarget; if (!el) return
+        this.expReceiptSlide = Math.max(0, Math.round(el.scrollLeft / (el.clientWidth || 1)))
+      }
+      this._jumpSlide = function(i) {
+        this.expReceiptSlide = i
+        var el = this._root().querySelector('#exp-receipt-track')
+        var child = el?.children?.[i]
+        if (child) child.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+      }
+
+      // --- Form lifecycle ---
+      this._resetForm = function() {
+        _formSession++; _pendingExtracts = 0; _dirtyFields.clear()
+        this.receipts = []; this.expReceiptSlide = 0; this.lightboxSrc = ''; this.filePickerOpen = false
+        this.editId = null; this.expMode = 'create'; this.addErr = null; this.detailExp = null
+        this.memberQuery = ''; this.memberHits = []; this.vendorHits = []; this.expFull = false
+        this.expDirty = false; this.pendingDeletes = new Set()
+        this.actionNote = ''; this.payRef = ''; this.payMethod = ''; this.expRejecting = false
+        this.expSaving = false; this.delConfirm = false; this.deleting = false; this.actioning = false; this.extracting = false
+        this.expForm = { payee: '', amount: '', category: '', expense_date: '', note: '', member_id: null, gst: '', pst: '', items: [{ desc: '', amount: '', gst: '', pst: '' }] }
+        this.expHistory = []; this.expTimelineExpanded = false
+        this.expCats = this.EXP_CATS.slice(); this.expMethods = this.EXP_METHODS.slice()
+      }
+      this._close = function() {
+        if (this.detailExp && this.expMode === 'edit') {
+          var hasChanges = this.expDirty || this.pendingDeletes?.size || this.receipts?.length
+          if (hasChanges && !confirm('Discard unsaved changes?')) return
+        }
+        try { this._resetForm() } catch(_) {}
+        this.emit('cancel')
+      }
+      this._openEdit = function(x, editMode, rejecting, autoAttach) {
+        var self = this
+        self._resetForm()
+        self.expMode = editMode || 'edit'
+        var session = _formSession
+        requestAnimationFrame(function() {
+          if (session !== _formSession) return
+          self.editId = x.id
+          self.detailExp = x
+          var cat = x.category || 'other'
+          self.expForm = {
+            member_id: x.member_id || null, payee: x.payee || '',
+            amount: self.rawAmt(x.amount), category: cat,
+            expense_date: (x.expense_date || '').slice(0, 10),
+            note: x.note || x.description || '',
+            gst: x.gst ? self.rawAmt(x.gst) : '', pst: x.pst ? self.rawAmt(x.pst) : '',
+            items: x.details?.items?.length
+              ? x.details.items.map(function(it) { return { _aid: it._aid || null, desc: it.desc || '', amount: it.amount || '', gst: it.gst || '', pst: it.pst || '' } })
+              : [{ desc: x.payee || '', amount: self.rawAmt(x.amount), gst: x.gst ? self.rawAmt(x.gst) : '', pst: x.pst ? self.rawAmt(x.pst) : '' }]
+          }
+          self.memberQuery = x.member_id ? (x.payee || (self.membernames || {})[x.member_id] || '') : ''
+          self.expFull = true; self.expDirty = false; self.expRejecting = !!rejecting
+          self._syncControls()
+          self._hydrate(x.id, session)
+          if (autoAttach) setTimeout(function() { var inp = self._root().querySelector('#exp-receipt-input'); if (inp) inp.click() }, 200)
+        })
+      }
+      this._syncControls = function() {
+        var self = this
+        setTimeout(function() {
+          if (self.expDirty) return
+          var root = self.host || document
+          var cat = root.querySelector('#exp-cat')
+          var date = root.querySelector('#exp-date')
+          var vendor = root.querySelector('#exp-vendor')
+          if (cat) cat.value = self.expForm.category || ''
+          if (date) date.value = self.expForm.expense_date || ''
+          if (vendor) vendor.value = self.expForm.payee || self.memberQuery || ''
+        }, 50)
+      }
+      this._hydrate = function(id, session) {
+        var self = this
+        if (!id) return
+        self.api.getExpense(id).then(function(detail) {
+          if (!detail || session !== _formSession || self.editId !== id) return
+          var merged = Object.assign({}, self.detailExp || {}, detail, {
+            approval_count: detail.approval_count != null ? detail.approval_count : (self.detailExp || {}).approval_count,
+            approvals_required: detail.approvals_required != null ? detail.approvals_required : (self.detailExp || {}).approvals_required
+          })
+          self.detailExp = merged
+          if (!self.expDirty) {
+            self.expForm.member_id = merged.member_id || null
+            self.expForm.payee = merged.payee || ''
+            self.expForm.amount = self.rawAmt(merged.amount)
+            self.expForm.category = merged.category || 'other'
+            self.expForm.expense_date = (merged.expense_date || '').slice(0, 10)
+            self.expForm.note = merged.note || merged.description || ''
+            self.expForm.gst = merged.gst ? self.rawAmt(merged.gst) : ''
+            self.expForm.pst = merged.pst ? self.rawAmt(merged.pst) : ''
+            if (merged.details?.items?.length)
+              self.expForm.items = merged.details.items.map(function(it) { return { _aid: it._aid || null, desc: it.desc || '', amount: it.amount || '', gst: it.gst || '', pst: it.pst || '' } })
+          }
+          self.expHistory = self._metaEntries(merged)
+          self._syncControls()
+        }).catch(function() {})
+      }
+      this._metaEntries = function(item) {
+        var self = this
+        return self.buildMetaHistory(item).map(function(h) {
+          return { badge: self.eventBadge(h), label: self.eventLabel(h), actor: self.actorName(h.user_id, self.usernames || {}, self.myuserid), uid: h.user_id, detail: self.eventDetail(h), date: h.created_at }
+        }).sort(function(a, b) { return new Date(a.date || 0) - new Date(b.date || 0) })
+      }
+
+      // --- Prop-driven lifecycle ---
+      this.onpropchange = function(k, v) {
+        if (k === 'show' && v) {
+          this._resetForm()
+          var self = this
+          queueMicrotask(function() {
+            if (self.detail?.id) self._openEdit(self.detail, self.mode)
+          })
+        }
+      }
+
+      // --- Autocomplete ---
+      this.filterPayees = function(q) {
+        this.memberQuery = q; this.expForm.payee = q; _dirtyFields.add('payee'); this.expDirty = true
+        var allMembers = Object.entries(this.membernames || {}).map(function(e) { return { id: +e[0], name: e[1] } })
+        var hits = (q ? allMembers.filter(function(m) { return m.name.toLowerCase().includes(q.toLowerCase()) }) : allMembers).slice(0, 5)
+        if (!hits.length && this.expForm.member_id && this.memberQuery) hits.push({ id: this.expForm.member_id, name: this.memberQuery })
+        this.memberHits = hits; this.vendorHits = []
+      }
+      this.selectMember = function(m) { this.expForm.member_id = m.id; this.expForm.payee = m.name; this.expDirty = true; this.memberQuery = m.name; this.memberHits = []; this.vendorHits = [] }
+      this.clearMember = function() { this.expForm.member_id = null; this.expForm.payee = ''; this.expDirty = true; this.memberQuery = ''; this.memberHits = []; this.vendorHits = [] }
+      this.markDirty = function(field) { _dirtyFields.add(field); this.expDirty = true }
+
+      // --- Item table ---
+      this.syncItemTotals = function() {
+        var items = this.expForm.items || []; if (!items.length) return
+        this.expForm.amount = items.reduce(function(s, i) { return s + (parseFloat(i.amount) || 0) }, 0).toFixed(2)
+        this.expForm.gst = items.reduce(function(s, i) { return s + (parseFloat(i.gst) || 0) }, 0).toFixed(2)
+        this.expForm.pst = items.reduce(function(s, i) { return s + (parseFloat(i.pst) || 0) }, 0).toFixed(2)
+      }
+      this.addExpItem = function() { this.expForm.items = this.expForm.items.concat([{ desc: '', amount: '', gst: '', pst: '' }]) }
+      this.removeExpItem = function(i) {
+        if (this.expForm.items.length <= 1) return
+        this.expForm.items = this.expForm.items.filter(function(_, idx) { return idx !== i })
+        this.syncItemTotals()
+      }
+
+      // --- Receipt handling ---
+      this.addReceipts = function(fileList) {
+        if (!fileList?.length) return
+        var self = this, session = _formSession
+        var fingerprints = new Set(self.receipts.map(function(r) { return r.name + ':' + r.size }))
+        var files = [].slice.call(fileList).filter(function(f) { return !fingerprints.has(f.name + ':' + f.size) })
+        if (!files.length) { self.toast('Receipt already added'); return }
+        self.addErr = null; _pendingExtracts++; self.extracting = true
+        var startIdx = self.receipts.length
+        var newReceipts = files.map(function(f) { return { _uid: ++_receiptUid, name: f.name, size: f.size, preview: '', data: null, extracting: true, err: null } })
+        self.receipts = self.receipts.concat(newReceipts)
+        var hasReceipt = function(r) { return self.receipts.some(function(x) { return x._uid === r._uid }) }
+        Promise.all(files.map(function(file, i) {
+          var r = self.receipts[startIdx + i]
+          if (file.type.startsWith('image/')) {
+            var rd = new FileReader()
+            rd.onload = function() { if (session === _formSession && hasReceipt(r)) r.preview = rd.result }
+            rd.readAsDataURL(file)
+          }
+          return self.api.uploadDoc(file, 'expense').then(function(res) {
+            if (session !== _formSession || !hasReceipt(r)) return
+            if (res.duplicate) {
+              if (!res.can_claim) { r.duplicate = true; r.data = res.extracted_data || res.attachment?.extracted_data || {}; r.extracting = false; self._syncReceipts(); return }
+              return self.api.claimAttachment(res.attachment.id).then(function(res2) {
+                if (session !== _formSession || !hasReceipt(r)) return
+                r.data = res2.extracted_data || res2.attachment?.extracted_data || {}; r.attachment = res2.attachment || null
+                r.extracting = false; self._syncReceipts()
+              })
+            }
+            r.data = res.extracted_data || res.attachment?.extracted_data || {}; r.attachment = res.attachment || null
+            r.extracting = false; self._syncReceipts()
+          }).catch(function(e) { if (session === _formSession && hasReceipt(r)) { r.err = e.message; self.toast(e.message) } r.extracting = false; self._syncReceipts() })
+        })).finally(function() { if (session === _formSession) { _pendingExtracts = Math.max(0, _pendingExtracts - 1); self.extracting = _pendingExtracts > 0 } })
+      }
+      this.removeReceipt = function(r) {
+        var i = r._uid != null ? this.receipts.findIndex(function(x) { return x._uid === r._uid }) : this.receipts.indexOf(r)
+        if (i >= 0) this.receipts.splice(i, 1)
+        this.expReceiptSlide = Math.max(0, Math.min(this.expReceiptSlide || 0, this.receipts.length - 1))
+        this._syncReceipts()
+      }
+      this.deleteSavedAttachment = function(att) {
+        var self = this
+        if (self.detailExp && self.expMode === 'edit') {
+          if (self.detailExp.status === 'paid' && !confirm('This will break the paid expense record. Delete receipt?')) return
+          self.pendingDeletes = new Set([].concat(Array.from(self.pendingDeletes), [att.id]))
+          var items = self.expForm.items, idx = items.findIndex(function(it) { return it._aid === att.id })
+          if (idx >= 0) { if (items.length > 1) items.splice(idx, 1); else items[0] = { desc: '', amount: '', gst: '', pst: '' }; self.expForm.items = items.slice(); self.syncItemTotals() }
+          self.expDirty = true; return
+        }
+        if (!confirm('Delete "' + (att.original_name || 'attachment') + '"?')) return
+        self.api.deleteAttachment(att.id).then(function() {
+          if (self.detailExp?.attachments) self.detailExp = Object.assign({}, self.detailExp, { attachments: self.detailExp.attachments.filter(function(a) { return a.id !== att.id }) })
+          self.toast('Attachment deleted', 'success')
+        }).catch(function() { self.toast('Failed to delete attachment', 'err') })
+      }
+      this._syncReceipts = function() {
+        var self = this, items = self.expForm.items, earliest = null
+        var parseTax = function(v) { if (v == null) return 0; var n = parseFloat(v); return isNaN(n) ? 0 : n }
+        for (var ri = 0; ri < self.receipts.length; ri++) {
+          var r = self.receipts[ri]; if (!r.data) continue
+          var d = r.data
+          if (d.date) { var dt = new Date(d.date); if (!isNaN(dt) && (!earliest || dt < earliest)) earliest = dt }
+          if (items.find(function(it) { return it._rid === r._uid })) continue
+          var amt = parseFloat(d.amount) || 0
+          var newItem = { _rid: r._uid, _aid: r.attachment?.id || null, desc: d.vendor || d.description || '', amount: amt ? amt.toFixed(2) : '', gst: parseTax(d.taxes?.TPS) ? parseTax(d.taxes?.TPS).toFixed(2) : '', pst: parseTax(d.taxes?.TVQ) ? parseTax(d.taxes?.TVQ).toFixed(2) : '' }
+          if (items.length === 1 && !items[0]._rid && !items[0].desc && !(parseFloat(items[0].amount) > 0)) items[0] = newItem
+          else items.push(newItem)
+        }
+        var activeRids = new Set(self.receipts.map(function(r) { return r._uid }))
+        self.expForm.items = items.filter(function(it) { return !it._rid || activeRids.has(it._rid) })
+        if (!self.expForm.items.length) self.expForm.items = [{ desc: '', amount: '', gst: '', pst: '' }]
+        self.syncItemTotals()
+        var first = self.receipts.find(function(r) { return r.data })?.data
+        if (!first) return
+        if (first.vendor || first.category || first.date) self.expFull = true
+        if (!_dirtyFields.has('date') && !self.expForm.expense_date && earliest) self.expForm.expense_date = earliest.toISOString().slice(0, 10)
+        if (!_dirtyFields.has('category') && !self.expForm.category && first.category) self.expForm.category = first.category
+      }
+
+      // --- Save / Delete ---
+      this.saveExpense = function() {
+        if (_pendingExtracts > 0) { this.addErr = 'Please wait for receipt processing.'; return }
+        var self = this; self.addErr = null; self.expSaving = true
+        var f = self.expForm
+        var payeeVal = (f.payee || '').trim()
+        var memberName = f.member_id ? ((self.membernames || {})[f.member_id] || self.memberQuery || f.payee || '') : ''
+        var keepMember = !!f.member_id && (!payeeVal || payeeVal === memberName)
+        var data = { amount: self.toCents(f.amount), gst: self.toCents(f.gst || '0'), pst: self.toCents(f.pst || '0') }
+        var items = (f.items || []).filter(function(it) { return it.desc || parseFloat(it.amount) > 0 }).map(function(it) { var o = {}; for (var k in it) if (k !== '_rid') o[k] = it[k]; return o })
+        if (items.length) data.details = { items: items }
+        if (payeeVal) data.payee = payeeVal
+        if (f.note) data.note = f.note
+        if (f.category) data.category = f.category
+        data.expense_date = f.expense_date || new Date().toISOString().slice(0, 10)
+        if (keepMember) data.member_id = f.member_id
+        else if (payeeVal || self.detailExp?.member_id) data.member_id = null
+        var attIds = self.receipts.filter(function(r) { return r.attachment }).map(function(r) { return r.attachment.id })
+        if (attIds.length) data.attachment_ids = attIds
+        var promise = self.editId ? self.api.updateExpense(self.editId, data) : self.api.createExpense(data)
+        promise.then(function(saved) {
+          var delErrors = []
+          var delPromises = Array.from(self.pendingDeletes).map(function(id) { return self.api.deleteAttachment(id).catch(function() { delErrors.push(id) }) })
+          return Promise.all(delPromises).then(function() {
+            self.pendingDeletes = new Set()
+            if (delErrors.length) self.toast(delErrors.length + ' attachment(s) failed to delete', 'warn')
+            self.toast(self.editId ? 'Expense updated' : 'Expense saved', 'success')
+            try { self._resetForm() } catch(_) {}
+            self.emit('save', { action: self.editId ? 'update' : 'create', id: saved?.id || self.editId })
+          })
+        }).catch(function(e) { self.addErr = self.setErr(e.message, 'exp', self.EXP_FIELDS) }).finally(function() { self.expSaving = false })
+      }
+      this.delExpense = function() {
+        var self = this; self.deleting = true
+        self.api.deleteExpense(self.editId).then(function() {
+          self._resetForm(); _opened = false
+          self.emit('save', { action: 'delete', id: self.editId })
+        }).catch(function(e) { self.addErr = e.message }).finally(function() { self.deleting = false })
+      }
+
+      // --- Workflow actions ---
+      this._expAction = function(fn, keepOpen) {
+        var self = this; self.actioning = true
+        fn().then(function(msg) {
+          self.toast(msg, 'success')
+          if (keepOpen) {
+            if (self.editId) self._hydrate(self.editId, _formSession)
+          } else {
+            try { self._resetForm() } catch(_) {}
+            self.emit('save', { action: 'workflow' })
+          }
+        }).catch(function(e) { self.addErr = e.message }).finally(function() { self.actioning = false })
+      }
+      this.approveExp = function() {
+        var self = this
+        self._expAction(function() {
+          return self.api.approveExpense(self.editId, self.actionNote).then(function(r) {
+            var exp = r.expense || r
+            if (exp) self.detailExp = Object.assign({}, self.detailExp, exp, { approval_count: r.approval_count, approvals_required: r.approvals_required })
+            return exp.status === 'approved' ? 'Expense approved' : 'Approval recorded (' + r.approval_count + '/' + r.approvals_required + ')'
+          })
+        }, true)
+      }
+      this.rejectExp = function() {
+        if (!this.actionNote.trim()) { this.addErr = 'Reason is required'; return }
+        var self = this
+        self._expAction(function() { return self.api.rejectExpense(self.editId, self.actionNote.trim()).then(function() { return 'Expense rejected' }) })
+      }
+      this.payExp = function() {
+        var self = this
+        self._expAction(function() {
+          return self.api.payExpense(self.editId, self.payRef.trim(), self.payMethod || '').then(function(r) {
+            if (r) self.detailExp = Object.assign({}, self.detailExp, r)
+            return 'Expense marked as paid'
+          })
+        }, true)
+      }
+      this.closeExp = function() {
+        var self = this
+        self._expAction(function() { return self.api.closeExpense(self.editId).then(function() { return 'Expense closed' }) })
+      }
+      this.beginEdit = function() {
+        if (!this.detailExp || !this.editId) return
+        if (!this.isadmin && (this.detailExp.status || '') !== 'submitted') return
+        this.expMode = 'edit'; this.expDirty = false
+      }
+      this.openReject = function() { this.addErr = null; this.expRejecting = true }
+      this.cancelReject = function() { this.expRejecting = false; this.actionNote = ''; this.addErr = null }
+    </script>
+  </expense-form>
+</define-element>

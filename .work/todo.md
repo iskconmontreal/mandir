@@ -1,4 +1,39 @@
-* [x] history field, close status
+
+
+## Componentize
+
+### Phase 1 — Form Modals (biggest win: ~85 props removed, reused on 2 pages)
+* [ ] `expense-form-modal` CE — extract from expense-form.html + form.js state
+* [ ] `donation-form-modal` CE — extract from donation-form.html + form.js state
+
+### Phase 2 — Filter Bars (finance page: ~30 props removed)
+* [ ] `expense-filter-bar` CE — search, category tags, status, amount range, dates
+* [ ] `income-filter-bar` CE — search, method, type, amount range, dates
+
+### Phase 3 — Members Page (~60 props removed)
+* [ ] `member-table` CE — sortable columns, pagination, row click
+* [ ] `member-detail-modal` CE — photo, contact, role, devices, permissions
+* [ ] `member-edit-modal` CE — edit form with photo upload
+
+### Phase 4 — Remaining Pages (assessed: low value, skipped)
+Profile, organization, and roles pages are small, self-contained, with zero cross-page reuse. CE extraction adds boilerplate without meaningful benefit.
+
+### Done
+* [x] `expense-list` CE (finance page — year/month grouped list)
+* [x] `income-list` CE (finance page — year/month grouped list)
+* [x] `transaction-list` CE (finance page — mixed list with net)
+* [x] `recent-expenses` CE (dashboard — flat list with reporter/status)
+* [x] `recent-donations` CE (dashboard — flat list with source/method)
+* [x] `my-expense-table` CE (dashboard — simple table with totals)
+* [x] `expense-form` CE (full expense modal — used on dashboard + finance)
+* [x] `donation-form` CE (full donation modal — used on dashboard + finance)
+* [x] `expense-filter-bar` CE (expense filter UI — finance page)
+* [x] `income-filter-bar` CE (income filter UI — finance page)
+* [x] `member-edit-form` CE (member add/edit modal — members page)
+* [x] `member-detail` CE (member detail + roles modal — members page)
+
+
+## Backlog
 
 * [x] improve add receipt/transaction form
 

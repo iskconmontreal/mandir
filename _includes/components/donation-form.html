@@ -1,0 +1,338 @@
+<define-element>
+  <donation-form show:boolean="false" detail:object mode:string="create" membernames:object usernames:object myuserid:number isfinance:boolean="false">
+    <style>:host { display: contents; }</style>
+    <template>
+
+<div :if="show" class="modal-overlay" :onkeydown.esc.document="e => { _close() }">
+  <div class="modal" :onclick.outside="e => { _close() }">
+    <div class="modal-header">
+      <h2 style="display:flex;align-items:center;gap:var(--s-sm)">
+        <span :text="detailDon ? (isfinance ? 'Edit Income' : 'Edit donation') : (isfinance ? 'Add Income' : 'Add donation')"></span>
+        <span :if="detailDon?.id" class="dim modal-title-sub" :text="'#' + detailDon?.id"></span>
+      </h2>
+      <button class="modal-close" type="button" aria-label="Close dialog" :onclick="_close()" :html="icon('close')"></button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:var(--s-md)">
+        <form id="don-form" :onsubmit.prevent="saveDonation" style="display:flex;flex-direction:column;gap:var(--s-md)">
+
+          <input id="don-receipt-input" type="file" accept="image/*,.pdf" style="display:none"
+            :onchange="e => { scanFile(e.target.files[0]); e.target.value = '' }">
+
+          <div class="field autocomplete">
+            <label>Donor</label>
+            <div style="position:relative">
+              <input id="don-donor" type="text" autocomplete="off" :value="memberQuery"
+                :onfocus="e => filterDonors(memberQuery)"
+                :oninput="e => { donForm.member_id = null; filterDonors(e.target.value) }"
+                :onblur="e => { memberHits = [] }"
+                :style="donForm.member_id ? 'padding-right:2rem' : ''"
+                placeholder="Anonymous">
+              <button :if="donForm.member_id" type="button" class="btn-link"
+                style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%)"
+                :onclick="clearDonor()">&times;</button>
+            </div>
+            <div :if="memberHits.length" class="autocomplete-list">
+              <div class="autocomplete-item" :each="m in memberHits" :onmousedown="e => { e.preventDefault(); queueMicrotask(() => selectDonor(m)) }" :text="m.name"></div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field" :if="isfinance">
+              <label for="don-type">Type</label>
+              <select id="don-type" :oninput="e => { donForm.type = e.target.value; if (e.target.value !== 'donation') donForm.category = ''; else if (!donForm.category) donForm.category = 'general' }" :onchange="e => { donForm.type = e.target.value; if (e.target.value !== 'donation') donForm.category = ''; else if (!donForm.category) donForm.category = 'general' }">
+                <option value="donation" :selected="donForm.type === 'donation'" :text="fmtCat('donation')"></option>
+                <option value="sale" :selected="donForm.type === 'sale'" :text="fmtCat('sale')"></option>
+                <option value="grant" :selected="donForm.type === 'grant'" :text="fmtCat('grant')"></option>
+                <option value="interest" :selected="donForm.type === 'interest'" :text="fmtCat('interest')"></option>
+                <option value="refund" :selected="donForm.type === 'refund'" :text="fmtCat('refund')"></option>
+                <option value="rebate" :selected="donForm.type === 'rebate'" :text="fmtCat('rebate')"></option>
+                <option value="other" :selected="donForm.type === 'other'" :text="fmtCat('other')"></option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="don-amount">Amount ($)</label>
+              <input id="don-amount" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" :value="donForm.amount" :change="v => donForm.amount = v" placeholder="0.00" required>
+            </div>
+            <div class="field">
+              <label for="don-method">Method</label>
+              <select id="don-method" :oninput="e => donForm.method = e.target.value" :onchange="e => donForm.method = e.target.value">
+                <option value="cash" :selected="donForm.method === 'cash'" :text="fmtCat('cash')"></option>
+                <option value="cheque" :selected="donForm.method === 'cheque'" :text="fmtCat('cheque')"></option>
+                <option value="e-transfer" :selected="donForm.method === 'e-transfer'" :text="fmtCat('e-transfer')"></option>
+                <option value="card" :selected="donForm.method === 'card'" :text="fmtCat('card')"></option>
+                <option value="direct-deposit" :selected="donForm.method === 'direct-deposit'" :text="fmtCat('direct-deposit')"></option>
+                <option value="bank-deposit" :selected="donForm.method === 'bank-deposit'" :text="fmtCat('bank-deposit')"></option>
+                <option value="wire" :selected="donForm.method === 'wire'" :text="fmtCat('wire')"></option>
+                <option value="in-kind" :selected="donForm.method === 'in-kind'" :text="fmtCat('in-kind')"></option>
+                <option value="other" :selected="donForm.method === 'other'" :text="fmtCat('other')"></option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="don-note">Note</label>
+            <textarea id="don-note" rows="1" style="field-sizing:content;resize:none"
+              :value="donForm.note" :change="v => donForm.note = v" placeholder="Optional…"></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="field">
+              <label for="don-cat">Category</label>
+              <select id="don-cat" :disabled="donForm.type !== 'donation'" :oninput="e => donForm.category = e.target.value" :onchange="e => donForm.category = e.target.value">
+                <option value="general" :selected="donForm.category === 'general'" :text="fmtCat('general')"></option>
+                <option value="sunday_feast" :selected="donForm.category === 'sunday_feast'" :text="fmtCat('sunday_feast')"></option>
+                <option value="book_distribution" :selected="donForm.category === 'book_distribution'" :text="fmtCat('book_distribution')"></option>
+                <option value="deity_worship" :selected="donForm.category === 'deity_worship'" :text="fmtCat('deity_worship')"></option>
+                <option value="building_fund" :selected="donForm.category === 'building_fund'" :text="fmtCat('building_fund')"></option>
+                <option value="annadana" :selected="donForm.category === 'annadana'" :text="fmtCat('annadana')"></option>
+                <option value="festival" :selected="donForm.category === 'festival'" :text="fmtCat('festival')"></option>
+                <option value="events" :selected="donForm.category === 'events'" :text="fmtCat('events')"></option>
+                <option value="other" :selected="donForm.category === 'other'" :text="fmtCat('other')"></option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="don-date">Date</label>
+              <input id="don-date" type="date" :value="donForm.date_received" :change="v => donForm.date_received = v">
+            </div>
+          </div>
+
+          <div :if="!editId" class="attach-row">
+            <a :if="!receiptName && !extracting" href="#" class="dim attach-link"
+              :onclick.prevent="(host || document).querySelector('#don-receipt-input')?.click()"
+              :ondragover.prevent=""
+              :ondrop="e => { e.preventDefault(); scanFile(e.dataTransfer.files[0]) }">
+              <span :html="icon('attach')"></span> Attach image / cheque
+            </a>
+            <span :if="extracting" class="dim" style="font-size:var(--f-sm)">Scanning…</span>
+            <span :if="receiptName && !extracting" class="attach-badge">
+              <img :if="receiptPreview" :src="receiptPreview" class="attach-thumb">
+              <span :text="receiptName" style="font-size:var(--f-sm)"></span>
+              <a href="#" class="dim" style="font-size:var(--f-sm)" :onclick.prevent="(host || document).querySelector('#don-receipt-input')?.click()">change</a>
+            </span>
+          </div>
+
+          <div class="form-warn" :if="addErr" :text="addErr"></div>
+        </form>
+
+        <div :if="detailDon" style="display:flex;flex-direction:column;gap:var(--s-sm)">
+          <label>History</label>
+          <div class="activity-feed" :if="donHistory.length">
+            <div class="activity-item" :each="h in donHistory">
+              <span class="activity-marker" :class="'activity-marker-' + h.badge" :html="activityIcon(h.badge)"></span>
+              <div class="activity-copy">
+                <div class="activity-line">
+                  <span class="activity-label" :text="h.label"></span>
+                  <span :if="h.actor"> by </span>
+                  <a class="activity-actor-link" :if="h.actor && h.uid" href="/app/members/" :text="h.actor"></a>
+                  <span :if="h.actor && !h.uid" :text="h.actor"></span>
+                  <span :if="h.detail" class="activity-detail" :text="h.detail"></span>
+                  <time class="activity-date-inline" :if="h.date" :text="_shortDate(h.date)" :datetime="h.date" :title="new Date(h.date).toLocaleString()"></time>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div :if="!donHistory.length" class="dim" style="font-size:var(--f-sm)">No activity yet</div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); align-items:center; flex-wrap:wrap">
+          <button :if="editId && !delConfirm" type="button" class="btn btn-danger" style="margin-right:auto" :onclick="delConfirm = true">Delete</button>
+          <button :if="editId && !delConfirm" type="button" class="btn btn-secondary" :onclick="printDonation()">Print</button>
+          <span :if="editId && delConfirm" class="dim" style="font-size:var(--f-sm); margin-right:auto; align-self:center">Delete permanently?</span>
+          <button :if="editId && delConfirm" type="button" class="btn btn-danger" :class="{'btn-loading': deleting}" :onclick="delDonation()">Yes</button>
+          <button :if="editId && delConfirm" type="button" class="btn btn-outline" :onclick="delConfirm = false">No</button>
+          <button :if="!delConfirm" type="button" class="btn btn-outline" :onclick="_close()">Cancel</button>
+          <button :if="!delConfirm && !detailDon" type="submit" form="don-form" :class="donSaving ? 'btn btn-primary btn-loading' : 'btn btn-primary'">Save</button>
+          <button :if="!delConfirm && detailDon" type="submit" form="don-form" :class="donSaving ? 'btn btn-primary btn-loading' : 'btn btn-primary'">Update</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    </template>
+    <script>
+      // --- Internal state ---
+      this.donForm = { type: 'donation', amount: '', method: 'cash', category: 'general', date_received: new Date().toISOString().slice(0,10), note: '', member_id: null, attachment: null }
+      this.memberHits = []
+      this.memberQuery = ''
+      this.editId = null
+      this.detailDon = null
+      this.donHistory = []
+      this.donSaving = false
+      this.addErr = null
+      this.extracting = false
+      this.receiptPreview = ''
+      this.receiptName = ''
+      this.delConfirm = false
+      this.deleting = false
+
+      var _formSession = 0, _today = new Date().toISOString().slice(0,10), AMT_MAX = 99999999
+
+      this._shortDate = function(d) {
+        if (!d) return ''
+        var dt = new Date(d)
+        if (isNaN(dt.getTime())) return ''
+        var now = new Date()
+        return dt.toLocaleDateString('en-US', Object.assign({ month: 'short', day: 'numeric' }, dt.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}))
+      }
+
+      this._resetForm = function() {
+        _formSession++
+        this.donForm = { type: 'donation', amount: '', method: 'cash', category: 'general', date_received: _today, note: '', member_id: null, attachment: null }
+        this.memberHits = []; this.memberQuery = ''; this.editId = null; this.detailDon = null; this.donHistory = []
+        this.donSaving = false; this.addErr = null; this.extracting = false; this.receiptPreview = ''; this.receiptName = ''
+        this.delConfirm = false; this.deleting = false
+      }
+
+      this._close = function() { try { this._resetForm() } catch(_) {} this.emit('cancel') }
+
+      this._openEdit = function(d) {
+        var self = this
+        self._resetForm()
+        self.editId = d.id
+        self.detailDon = d
+        self.donForm = {
+          type: d.type || 'donation',
+          amount: self.rawAmt(d.amount),
+          method: d.method || 'cash',
+          category: d.category || 'general',
+          date_received: (d.date_received || '').slice(0, 10),
+          note: d.note || '',
+          member_id: d.member_id || null,
+          attachment: null,
+        }
+        self.memberQuery = d.member_id ? ((self.membernames || {})[d.member_id] || d.source_name || '') : (d.source_name || '')
+        self.donHistory = self._metaEntries(d)
+        self._syncControls()
+      }
+
+      this._metaEntries = function(item) {
+        var self = this
+        return self.buildMetaHistory(item).map(function(h) {
+          return { badge: self.eventBadge(h), label: self.eventLabel(h), actor: self.actorName(h.user_id, self.usernames || {}, self.myuserid), uid: h.user_id, detail: self.eventDetail(h), date: h.created_at }
+        }).sort(function(a, b) { return new Date(a.date || 0) - new Date(b.date || 0) })
+      }
+
+      this._syncControls = function() {
+        var self = this
+        setTimeout(function() {
+          var root = self.host || document
+          var donor = root.querySelector('#don-donor')
+          var type = root.querySelector('#don-type')
+          var method = root.querySelector('#don-method')
+          var cat = root.querySelector('#don-cat')
+          var date = root.querySelector('#don-date')
+          if (donor) donor.value = self.memberQuery || ''
+          if (type) type.value = self.donForm.type || 'donation'
+          if (method) method.value = self.donForm.method || 'cash'
+          if (cat) cat.value = self.donForm.category || 'general'
+          if (date) date.value = self.donForm.date_received || _today
+        }, 50)
+      }
+
+      // --- Prop-driven lifecycle ---
+      this.onpropchange = function(k, v) {
+        if (k === 'show' && v) {
+          this._resetForm()
+          var self = this
+          queueMicrotask(function() {
+            if (self.detail?.id) self._openEdit(self.detail)
+            else self._syncControls()
+          })
+        }
+      }
+
+      // --- Autocomplete ---
+      this.filterDonors = function(q) {
+        this.memberQuery = q
+        var allMembers = Object.entries(this.membernames || {}).map(function(e) { return { id: +e[0], name: e[1] } })
+        this.memberHits = (q ? allMembers.filter(function(m) { return m.name.toLowerCase().includes(q.toLowerCase()) }) : allMembers).slice(0, 5)
+      }
+      this.selectDonor = function(m) { this.donForm.member_id = m.id; this.memberQuery = m.name; this.memberHits = [] }
+      this.clearDonor = function() { this.donForm.member_id = null; this.memberQuery = ''; this.memberHits = [] }
+
+      // --- File scanning ---
+      this.scanFile = function(file) {
+        if (!file) return
+        var self = this, session = _formSession
+        self.extracting = true; self.addErr = null; self.receiptName = file.name
+        if (file.type.startsWith('image/')) {
+          var reader = new FileReader()
+          reader.onload = function() { if (session === _formSession) self.receiptPreview = reader.result }
+          reader.readAsDataURL(file)
+        } else self.receiptPreview = ''
+        self.api.uploadDoc(file, 'donation').then(function(res) {
+          if (session !== _formSession) return
+          var isDup = false
+          if (res.duplicate) {
+            if (!res.can_claim) { isDup = true; self.toast('Possible duplicate', 'warn') }
+            else return self.api.claimAttachment(res.attachment.id).then(function(r2) { res = r2 })
+          }
+          return res
+        }).then(function(res) {
+          if (!res || session !== _formSession) return
+          var d = res.extracted_data || res.attachment?.extracted_data || {}
+          var amt = parseFloat(d.amount), mismatches = []
+          if (amt > 0 && amt < AMT_MAX) {
+            if (!self.donForm.amount) self.donForm.amount = d.amount
+            else if (parseFloat(self.donForm.amount) !== amt) mismatches.push('amount: $' + d.amount)
+          }
+          if (d.method) {
+            if (!self.donForm.method || self.donForm.method === 'cash') self.donForm.method = d.method
+            else if (self.donForm.method !== d.method) mismatches.push('method: ' + d.method)
+          }
+          if (d.category) {
+            if (!self.donForm.category || self.donForm.category === 'general') self.donForm.category = d.category
+            else if (self.donForm.category !== d.category) mismatches.push('category: ' + d.category)
+          }
+          if (d.date) {
+            if (!self.donForm.date_received || self.donForm.date_received === _today) self.donForm.date_received = d.date
+            else if (self.donForm.date_received !== d.date) mismatches.push('date: ' + d.date)
+          }
+          if (mismatches.length) self.toast('Receipt differs: ' + mismatches.join(', '), 'warn')
+          self.donForm.attachment = res.duplicate && !res.can_claim ? null : (res.attachment || null)
+          self._syncControls()
+        }).catch(function(e) { if (session === _formSession) self.toast(e.message) })
+        .finally(function() { if (session === _formSession) self.extracting = false })
+      }
+
+      // --- Save / Delete ---
+      this.saveDonation = function() {
+        if (this.extracting) { this.addErr = 'Please wait for receipt processing.'; return }
+        var self = this; self.addErr = null; self.donSaving = true
+        var f = self.donForm
+        var data = { amount: self.toCents(f.amount), attachment_ids: f.attachment ? [f.attachment.id] : undefined }
+        if (f.type) data.type = f.type
+        if (f.method) data.method = f.method
+        if ((f.type || 'donation') === 'donation' && f.category) data.category = f.category
+        if (f.date_received) data.date_received = f.date_received
+        if (f.note) data.note = f.note
+        if (f.member_id) data.member_id = f.member_id
+        if (!f.member_id && self.memberQuery?.trim()) data.source_name = self.memberQuery.trim()
+        if (!f.member_id && (self.memberQuery?.trim() || self.detailDon?.member_id)) data.member_id = null
+        var promise = self.editId
+          ? ((f.type || 'donation') === 'donation' ? self.api.updateDonation(self.editId, data) : self.api.updateIncome(self.editId, data))
+          : ((f.type || 'donation') === 'donation' ? self.api.createDonation(data) : self.api.createIncome(data))
+        promise.then(function(saved) {
+          self.toast(self.editId ? 'Income updated' : 'Income saved', 'success')
+          try { self._resetForm() } catch(_) {}
+          self.emit('save', { action: self.editId ? 'update' : 'create', id: saved?.id || self.editId })
+        }).catch(function(e) { console.log('DON_SAVE_ERR', e.message); self.addErr = e.message })
+        .finally(function() { self.donSaving = false })
+      }
+
+      this.delDonation = function() {
+        var self = this; self.deleting = true
+        self.api.deleteDonation(self.editId).then(function() {
+          self._resetForm()
+          self.emit('save', { action: 'delete', id: self.editId })
+        }).catch(function(e) { self.addErr = e.message })
+        .finally(function() { self.deleting = false })
+      }
+
+      // --- Print ---
+      this.printDonation = function() { this.emit('print', this.detailDon) }
+    </script>
+  </donation-form>
+</define-element>

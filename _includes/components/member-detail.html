@@ -1,0 +1,160 @@
+<define-element>
+  <member-detail show:boolean="false" member:object photosrc:string="" sysroles:array>
+    <style>:host { display: contents; }</style>
+    <template>
+<div :if="show" class="modal-overlay" :onkeydown.esc.document="emit('close')" :onclick="e => { if (e.target === e.currentTarget) emit('close') }">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 :text="member?.name || '—'"></h2>
+      <button class="modal-close" type="button" aria-label="Close dialog" :onclick="emit('close')" :html="icon('close')"></button>
+    </div>
+    <div class="modal-body" style="display:flex; flex-direction:column; gap:var(--s-md)">
+      <div style="display:flex; align-items:center; gap:var(--s-md); margin-bottom:var(--s-xs)">
+        <img :if="photosrc" :src="photosrc" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--c-border);flex-shrink:0">
+        <div :if="!photosrc" style="width:64px;height:64px;border-radius:50%;background:var(--c-accent);display:flex;align-items:center;justify-content:center;color:white;font-size:1.4rem;font-weight:600;flex-shrink:0" :text="(member?.name?.[0]||'').toUpperCase()"></div>
+        <span :if="member?.spiritual_name" class="dim" style="font-size:var(--f-sm)" :text="member.spiritual_name"></span>
+      </div>
+      <div style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
+        <div><div class="stat-label">Email</div><div :text="member?.email || '—'"></div></div>
+        <div><div class="stat-label">Phone</div><div :text="member?.phone || '—'"></div></div>
+        <div><div class="stat-label">Role</div><span class="badge" :text="member?.role || '—'"></span></div>
+        <div :if="member?.services?.length"><div class="stat-label">Services</div><div style="display:flex; flex-wrap:wrap; gap:var(--s-xs)"><span class="badge" :each="sv in member.services" :text="sv"></span></div></div>
+        <div><div class="stat-label">Joined</div><div :text="member?.joined || '—'"></div></div>
+      </div>
+      <div :if="member?.spiritual_name || member?.diksa_guru" style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
+        <div :if="member?.spiritual_name"><div class="stat-label">Spiritual Name</div><div :text="member.spiritual_name"></div></div>
+        <div :if="member?.diksa_guru"><div class="stat-label">Diksa Guru</div><div :text="member.diksa_guru"></div></div>
+      </div>
+      <div :if="member?.notes" style="font-size:var(--f-sm); color:var(--c-text-dim)" :text="member.notes"></div>
+
+      <!-- System account section -->
+      <div :if="userDetail?.id" style="border-top:1px solid var(--c-border); padding-top:var(--s-md)">
+        <div style="display:flex; align-items:center; gap:var(--s-sm); margin-bottom:var(--s-sm)">
+          <span class="badge" style="background:rgba(107,92,231,.1); color:var(--c-accent)">System User</span>
+        </div>
+        <div style="display:flex; gap:var(--s-lg); flex-wrap:wrap; font-size:var(--f-sm)">
+          <div>
+            <div class="stat-label">Role</div>
+            <select style="width:auto; font-size:var(--f-sm)" :onchange="e => changeRole(+e.target.value)">
+              <option value="0" :selected="!userDetail.role_id">None</option>
+              <option :each="r in sysroles" :value="r.id" :text="r.name" :selected="r.id === userDetail.role_id"></option>
+            </select>
+          </div>
+          <div :if="pendingRoleId" style="flex-basis:100%; display:flex; gap:var(--s-xs); align-items:center">
+            <input type="password" placeholder="Set password for this role" :value="rolePassword" :oninput="e => rolePassword = e.target.value" style="font-size:var(--f-sm); padding:var(--s-xs) var(--s-sm); width:14rem">
+            <button class="btn btn-primary btn-sm" :onclick="confirmRolePassword()">Set</button>
+            <button class="btn btn-outline btn-sm" :onclick="pendingRoleId = null">Cancel</button>
+            <span :if="rolePasswordErr" class="login-error" style="font-size:var(--f-xs)" :text="rolePasswordErr"></span>
+          </div>
+          <div><div class="stat-label">Last Login</div><div :text="userDetail.last_login?.slice(0, 10) || 'Never'"></div></div>
+          <div :if="userDetail.id">
+            <div class="stat-label">Trusted Devices</div>
+            <div :if="!userDetail.devices?.length" class="dim">None</div>
+            <div :each="d in userDetail.devices || []" style="display:flex; align-items:center; gap:var(--s-sm); font-size:var(--f-sm)">
+              <span :text="d.label || d.device_id?.slice(0, 8) + '…'"></span>
+              <span class="dim" :text="'(' + d.device_id?.slice(0, 8) + '…)'"></span>
+            </div>
+            <button :if="userDetail.devices?.length" class="btn-link" style="color:var(--c-err); font-size:var(--f-sm); margin-top:var(--s-xs)" :onclick="revokeDevice()" :class="{'btn-loading': revoking}">Revoke all</button>
+          </div>
+        </div>
+        <div :if="rolePerms.length" style="margin-top:var(--s-md)">
+          <div class="stat-label" style="margin-bottom:var(--s-xs)">Permissions</div>
+          <div style="display:flex; flex-wrap:wrap; gap:var(--s-xs)">
+            <span class="badge" :each="p in rolePerms" style="font-size:var(--f-sm)" :text="fmtPerm(p)"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Invite section -->
+      <div :if="!member?._user_id && member?.email" style="border-top:1px solid var(--c-border); padding-top:var(--s-md)">
+        <div class="dim" style="font-size:var(--f-sm); margin-bottom:var(--s-sm)">No system account</div>
+        <div style="display:flex; align-items:center; gap:var(--s-sm)">
+          <button :if="!inviteConfirm" class="btn btn-outline btn-sm" :onclick="inviteConfirm = true">Send Invite</button>
+          <span :if="inviteConfirm" class="dim" style="font-size:var(--f-sm)">Send invite to <span :text="member.email"></span>?</span>
+          <button :if="inviteConfirm" class="btn btn-primary btn-sm" :class="{'btn-loading': inviting}" :onclick="inviteMember()">Yes, send</button>
+          <button :if="inviteConfirm" class="btn btn-outline btn-sm" :onclick="inviteConfirm = false">Cancel</button>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); border-top:1px solid var(--c-border); padding-top:var(--s-md)">
+        <button class="btn btn-outline btn-sm" :onclick="emit('edit', member)">Edit</button>
+      </div>
+    </div>
+  </div>
+</div>
+    </template>
+    <script>
+      this.userDetail = {}
+      this.pendingRoleId = null
+      this.rolePassword = ''
+      this.rolePasswordErr = null
+      this.inviteConfirm = false
+      this.inviting = false
+      this.revoking = false
+      this.rolePerms = []
+
+      this.onpropchange = function(k, v) {
+        if (k === 'show' && v) {
+          this.userDetail = {}; this.pendingRoleId = null; this.rolePassword = ''; this.rolePasswordErr = null
+          this.inviteConfirm = false; this.inviting = false; this.revoking = false; this.rolePerms = []
+          if (this.member?._user_id) this.loadUser()
+        }
+      }
+
+      this.loadUser = function() {
+        var self = this
+        self.api.getUser(self.member._user_id).then(function(u) {
+          self.userDetail = u
+          self.updateRolePerms()
+        }).catch(function() {})
+      }
+
+      this.updateRolePerms = function() {
+        var role = (this.sysroles || []).find(function(r) { return r.id === this.userDetail.role_id }.bind(this))
+        this.rolePerms = role?.permissions || []
+      }
+
+      this.fmtPerm = function(key) {
+        var parts = key.split(':')
+        return this.fmtCat(parts[0]) + ' — ' + parts[1]
+      }
+
+      this.changeRole = function(roleId) {
+        var self = this; self.rolePassword = ''; self.rolePasswordErr = null; self.pendingRoleId = null
+        self.api.updateUser(self.userDetail.id, { role_id: roleId }).then(function() {
+          self.userDetail = Object.assign({}, self.userDetail, { role_id: roleId })
+          self.updateRolePerms()
+        }).catch(function(e) {
+          if (e.message === 'Password required for this role') { self.pendingRoleId = roleId; return }
+          self.toast(e.message || 'Failed to change role')
+        })
+      }
+
+      this.confirmRolePassword = function() {
+        if (!this.rolePassword) return
+        var self = this; self.rolePasswordErr = null
+        self.api.updateUser(self.userDetail.id, { role_id: self.pendingRoleId, password: self.rolePassword }).then(function() {
+          self.userDetail = Object.assign({}, self.userDetail, { role_id: self.pendingRoleId })
+          self.pendingRoleId = null; self.rolePassword = ''
+          self.updateRolePerms()
+        }).catch(function(e) { self.rolePasswordErr = e.message || 'Failed to change role' })
+      }
+
+      this.revokeDevice = function() {
+        var self = this; self.revoking = true
+        self.api.revokeDevice(self.userDetail.id).then(function() {
+          self.userDetail = Object.assign({}, self.userDetail, { devices: [] })
+        }).catch(function(e) { self.toast(e.message || 'Failed to revoke') })
+        .finally(function() { self.revoking = false })
+      }
+
+      this.inviteMember = function() {
+        var self = this; self.inviteConfirm = false; self.inviting = true
+        self.api.inviteMember(self.member._id).then(function() {
+          self.toast('Invite sent to ' + self.member.email, 'success')
+        }).catch(function(e) { self.toast(e.message || 'Failed to send invite') })
+        .finally(function() { self.inviting = false })
+      }
+    </script>
+  </member-detail>
+</define-element>

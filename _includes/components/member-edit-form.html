@@ -1,0 +1,142 @@
+<define-element>
+  <member-edit-form show:boolean="false" member:object roles:array photosrc:string="" services:array>
+    <style>:host { display: contents; }</style>
+    <template>
+<div :if="show" class="modal-overlay" :onkeydown.esc.document="emit('cancel')" :onclick="e => { if (e.target === e.currentTarget) emit('cancel') }">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 :text="member?.name ? 'Edit Member' : 'Add Member'"></h2>
+      <button class="modal-close" type="button" aria-label="Close dialog" :onclick="emit('cancel')" :html="icon('close')"></button>
+    </div>
+    <div class="modal-body">
+      <form :onsubmit.prevent="save">
+        <div class="form-row">
+          <div class="field"><label for="m-name">Name</label><input id="m-name" type="text" :value="form.name" :change="v => form.name = v" placeholder="Full name" required></div>
+          <div class="field"><label for="m-spiritual">Spiritual Name</label><input id="m-spiritual" type="text" :value="form.spiritual_name" :change="v => form.spiritual_name = v" placeholder="Initiated name (optional)"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label for="m-email">Email</label><input id="m-email" type="email" :value="form.email" :change="v => form.email = v" placeholder="email@example.com"></div>
+          <div class="field"><label for="m-phone">Phone</label><input id="m-phone" type="tel" :value="form.phone" :change="v => form.phone = v" placeholder="514-000-0000"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label for="m-role">Role</label><select id="m-role" :value="form.role" :change="v => form.role = v"><option :each="r in roles" :value="r" :text="r"></option></select></div>
+          <div class="field"><label for="m-joined">Joined</label><input id="m-joined" type="date" :value="form.joined" :change="v => form.joined = v"></div>
+        </div>
+        <div class="field"><label for="m-notes">Notes</label><textarea id="m-notes" :value="form.notes" :change="v => form.notes = v" placeholder="Optional…" rows="2"></textarea></div>
+
+        <details>
+          <summary style="cursor:pointer; font-weight:600; margin-bottom:var(--s-sm); color:var(--c-text-dim)">Personal Details</summary>
+          <div style="gap:var(--s-md); display:flex; flex-direction:column">
+            <div class="form-row">
+              <div class="field"><label for="m-dob">Date of Birth</label><input id="m-dob" type="date" :value="form.dob" :change="v => form.dob = v"></div>
+              <div class="field"><label for="m-gender">Gender</label><select id="m-gender" :value="form.gender" :change="v => form.gender = v"><option value="">—</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label for="m-nationality">Nationality</label><input id="m-nationality" type="text" :value="form.nationality" :change="v => form.nationality = v"></div>
+              <div class="field"><label for="m-occupation">Occupation</label><input id="m-occupation" type="text" :value="form.occupation" :change="v => form.occupation = v"></div>
+            </div>
+            <div class="field"><label for="m-address">Address</label><textarea id="m-address" :value="form.address" :change="v => form.address = v" placeholder="For tax receipts…" rows="2"></textarea></div>
+            <div class="form-row">
+              <div class="field"><label for="m-marriage">Marriage Status</label><select id="m-marriage" :value="form.marriage_status" :change="v => form.marriage_status = v"><option value="">—</option><option value="Single">Single</option><option value="Married">Married</option><option value="Widowed">Widowed</option></select></div>
+              <div class="field"><label for="m-spouse">Spouse</label><input id="m-spouse" type="text" :value="form.spouse" :change="v => form.spouse = v" placeholder="Name; KC status"></div>
+            </div>
+            <div class="field"><label for="m-children">Children</label><input id="m-children" type="text" :value="form.children" :change="v => form.children = v" placeholder="Names and ages"></div>
+          </div>
+        </details>
+
+        <details>
+          <summary style="cursor:pointer; font-weight:600; margin-bottom:var(--s-sm); color:var(--c-text-dim)">Spiritual Details</summary>
+          <div style="gap:var(--s-md); display:flex; flex-direction:column">
+            <div class="field"><label for="m-guru">Diksa Guru</label><input id="m-guru" type="text" :value="form.diksa_guru" :change="v => form.diksa_guru = v" placeholder="Initiating spiritual master"></div>
+            <div class="field"><label for="m-guide">Guiding Devotee</label><input id="m-guide" type="text" :value="form.guiding_devotee" :change="v => form.guiding_devotee = v" placeholder="Siksa guru / mentor"></div>
+            <div class="form-row">
+              <div class="field"><label for="m-rounds">Japa Rounds</label><input id="m-rounds" type="number" :value="form.rounds" :change="v => form.rounds = v" placeholder="16" min="0"></div>
+              <div class="field"><label for="m-rounds-years">Chanting for (years)</label><input id="m-rounds-years" type="number" :value="form.rounds_years" :change="v => form.rounds_years = v" min="0"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label for="m-regs-years">4 Regs for (years)</label><input id="m-regs-years" type="number" :value="form.four_regs_years" :change="v => form.four_regs_years = v" min="0"></div>
+              <div class="field"><label for="m-kc-years">Years in KC</label><input id="m-kc-years" type="number" :value="form.kc_years" :change="v => form.kc_years = v" min="0"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label for="m-temple">Temple</label><input id="m-temple" type="text" :value="form.temple" :change="v => form.temple = v" placeholder="ISKCON Montreal"></div>
+              <div class="field"><label>Services</label>
+                <div style="display:flex; flex-wrap:wrap; gap:var(--s-xs); margin-top:var(--s-xs)">
+                  <button type="button" :each="sv in services" :class="(form.services||[]).includes(sv) ? 'badge badge-active' : 'badge'" :onclick="toggleService(sv)" :text="sv"></button>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field" style="display:flex; align-items:center; gap:var(--s-sm); min-height:2.5rem"><input id="m-temple-live" type="checkbox" :value="form.lives_in_temple" :change="v => form.lives_in_temple = v" style="width:auto"><label for="m-temple-live" style="margin:0">Lives in temple</label></div>
+              <div class="field" style="display:flex; align-items:center; gap:var(--s-sm); min-height:2.5rem"><input id="m-namahatta" type="checkbox" :value="form.namahatta" :change="v => form.namahatta = v" style="width:auto"><label for="m-namahatta" style="margin:0">Namahatta member</label></div>
+            </div>
+          </div>
+        </details>
+
+        <div class="field" :if="member?.name" style="margin-bottom:var(--s-md)">
+          <label for="m-status">Status</label>
+          <input id="m-status" type="text" :value="form.status" :change="v => form.status = v" placeholder="Leave blank if active. E.g. Moved away, Passed away…">
+        </div>
+        <div class="field" :if="member?.name" style="margin-bottom:var(--s-md)">
+          <label>Photo</label>
+          <div style="display:flex; align-items:center; gap:var(--s-md)">
+            <img :if="photosrc" :src="photosrc" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--c-border);flex-shrink:0">
+            <div :if="!photosrc" style="width:52px;height:52px;border-radius:50%;background:var(--c-accent);display:flex;align-items:center;justify-content:center;color:white;font-size:1.2rem;font-weight:600;flex-shrink:0" :text="(form.name?.[0]||'').toUpperCase()"></div>
+            <div style="flex:1; min-width:0">
+              <input type="file" accept="image/jpeg,image/png,image/webp" :onchange="e => photoFile = e.target.files[0]" style="font-size:var(--f-sm); width:100%">
+              <div :if="photoErr" class="login-error" style="font-size:var(--f-xs); margin-top:var(--s-xs)" :text="photoErr"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="login-error" :if="formErr" :text="formErr" style="margin-bottom:var(--s-sm)"></div>
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); margin-top:var(--s-lg)">
+          <button type="button" class="btn btn-outline" :onclick="emit('cancel')">Cancel</button>
+          <button type="submit" class="btn btn-primary" :class="{'btn-loading': saving}">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+    </template>
+    <script>
+      var _today = new Date().toISOString().slice(0, 10)
+      this.form = { name: '', spiritual_name: '', email: '', phone: '', role: '', joined: _today, address: '', notes: '', status: '', diksa_guru: '', guiding_devotee: '', services: [], rounds: '', rounds_years: '', four_regs_years: '', kc_years: '', temple: '', dob: '', gender: '', nationality: '', occupation: '', marriage_status: '', spouse: '', children: '', lives_in_temple: false, namahatta: false }
+      this.saving = false
+      this.formErr = null
+      this.photoFile = null
+      this.photoErr = null
+
+      this.onpropchange = function(k, v) {
+        if (k === 'show' && v) {
+          this.formErr = null; this.photoFile = null; this.photoErr = null; this.saving = false
+          if (this.member?.name) this.form = Object.assign({}, this.member)
+          else this.form = { name: '', spiritual_name: '', email: '', phone: '', role: this.roles?.[0] || '', joined: _today, address: '', notes: '', status: '', diksa_guru: '', guiding_devotee: '', services: [], rounds: '', rounds_years: '', four_regs_years: '', kc_years: '', temple: '', dob: '', gender: '', nationality: '', occupation: '', marriage_status: '', spouse: '', children: '', lives_in_temple: false, namahatta: false }
+        }
+      }
+
+      this.toggleService = function(sv) {
+        var svcs = (this.form.services || []).slice()
+        var i = svcs.indexOf(sv)
+        if (i >= 0) svcs.splice(i, 1); else svcs.push(sv)
+        this.form.services = svcs
+      }
+
+      this.save = function() {
+        var self = this; self.formErr = null; self.photoErr = null; self.saving = true
+        var data = Object.assign({}, self.form)
+        delete data._id; delete data._public; delete data._user_id
+        var isEdit = !!self.member?.name
+        var promise = isEdit ? self.api.updateMember(self.member._id, data) : self.api.createMember(data)
+        promise.then(function() {
+          if (isEdit && self.photoFile) {
+            return self.api.uploadMemberPhoto(self.member._id, self.photoFile).then(function() { self.photoFile = null }).catch(function(e) { self.photoErr = e.message || 'Photo upload failed' })
+          }
+        }).then(function() {
+          self.toast(isEdit ? 'Member updated' : 'Member added', 'success')
+          self.emit('save', { member: Object.assign({}, self.member || {}, data) })
+        }).catch(function(e) { self.formErr = e.message || 'Failed to save member' })
+        .finally(function() { self.saving = false })
+      }
+    </script>
+  </member-edit-form>
+</define-element>
