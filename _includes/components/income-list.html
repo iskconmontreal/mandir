@@ -1,5 +1,5 @@
 <define-element>
-  <income-list years:array loading:boolean="false" error:string="" search:string="" hasmore:boolean="false" empty:boolean="false" nomatch:boolean="false">
+  <income-list years:array mopen:object mfresh:string="" loading:boolean="false" error:string="" search:string="" hasmore:boolean="false" empty:boolean="false" nomatch:boolean="false">
     <style>:host { display: contents; }</style>
     <template>
       <div :if="error" class="login-error" :text="error" style="margin:var(--s-md)"></div>
@@ -9,8 +9,8 @@
       <div :each="yr in years" class="finance-year-section">
         <div class="finance-year-sticky" :if="yr.key !== 'unknown'" :text="yr.key"></div>
         <div class="finance-year-months">
-          <div :each="g in yr.items" :class="{'finance-month-wrap-open': _open[g.key]}">
-            <button type="button" class="exp-group-header" :class="{'exp-group-header-open': _open[g.key]}" :aria-expanded="_open[g.key] ? 'true' : 'false'" :onclick="e => _toggle(g.key)">
+          <div :each="(g, gi) in yr.items" :class="{'finance-month-wrap-open': mopen[g.key], 'finance-month-wrap-divider': gi > 0}">
+            <button type="button" class="exp-group-header" :class="{'exp-group-header-open': mopen[g.key], 'exp-group-header-empty': !g.count}" :aria-expanded="mopen[g.key] ? 'true' : 'false'" :disabled="!g.count" :onclick="e => g.count && _toggle(g.key)">
               <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
               <span class="exp-group-heading">
                 <span class="exp-group-label">
@@ -19,10 +19,13 @@
                 </span>
                 <span :if="g.count" class="exp-group-count" :text="g.count"></span>
               </span>
-              <span :if="g.total" class="exp-group-total" :text="'$' + fmtAmt(g.total)"></span>
+              <span class="exp-group-total" :text="'$' + fmtAmt(g.total || 0)"></span>
+              <span :if="g.breakdown?.length" class="exp-group-breakdown">
+                <span :each="seg in g.breakdown" class="exp-group-breakdown-seg" :title="seg.title" :style="seg.style"></span>
+              </span>
             </button>
-            <div class="recent-inc-list finance-exp-list finance-inc-list-group" :class="{'finance-exp-list-open': _open[g.key]}" :aria-hidden="_open[g.key] ? 'false' : 'true'">
-              <div :each="d in g.items" class="recent-inc-item row-link" :onclick="e => _emit('view', d)">
+            <div class="recent-inc-list finance-exp-list finance-inc-list-group" :class="{'finance-exp-list-open': mopen[g.key], 'finance-exp-list-fresh': mfresh === g.key}" :aria-hidden="mopen[g.key] ? 'false' : 'true'">
+              <div :each="d in g.items" class="recent-inc-item row-link finance-inc-item" :onclick="e => _emit('view', d)">
                 <span class="recent-inc-icon-col" :class="'recent-inc-icon-' + (d.method || 'cash')">
                   <span class="recent-inc-icon" :html="methodIcon(d.method || 'cash')"></span>
                 </span>
@@ -36,7 +39,7 @@
                     </div>
                     <div class="recent-inc-subtitle">
                       <span class="recent-inc-method" :class="'recent-inc-method-' + (d.method || 'cash')" :text="d.method || 'cash'"></span>
-                      <span class="recent-inc-time" :text="fmtDate(d.updated_at || d.created_at || d.date_received)"></span>
+                      <time class="recent-inc-time" :datetime="d.date_received || d.created_at || ''" :title="(d.date_received || d.created_at) ? new Date(d.date_received || d.created_at).toLocaleString() : ''" :text="fmtDate(d.date_received || d.created_at)"></time>
                     </div>
                   </div>
                   <div :if="d.attachments?.length" class="row-attachments">

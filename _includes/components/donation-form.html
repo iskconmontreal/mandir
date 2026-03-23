@@ -24,7 +24,7 @@
             <div style="position:relative">
               <input id="don-donor" type="text" autocomplete="off" :value="memberQuery"
                 :onfocus="e => filterDonors(memberQuery)"
-                :oninput="e => { donForm.member_id = null; filterDonors(e.target.value) }"
+                :oninput="ev => { donForm.member_id = null; filterDonors(ev.target.value) }"
                 :onblur="e => { memberHits = [] }"
                 :style="donForm.member_id ? 'padding-right:2rem' : ''"
                 placeholder="Anonymous">
@@ -236,10 +236,19 @@
         if (k === 'show' && v) {
           this._resetForm()
           var self = this
-          queueMicrotask(function() {
+          self.donSaving = false; self.deleting = false
+          self.addErr = null; self.delConfirm = false
+          // setTimeout(0) — let all prop updates from parent settle before reading detail
+          setTimeout(function() {
+            if (!self.show) return
             if (self.detail?.id) self._openEdit(self.detail)
             else self._syncControls()
-          })
+            setTimeout(function() {
+              self.donSaving = false; self.deleting = false
+              var root = self.host || document
+              root.querySelectorAll('.btn-loading').forEach(function(el) { el.classList.remove('btn-loading') })
+            }, 50)
+          }, 0)
         }
       }
 
@@ -315,6 +324,7 @@
           ? ((f.type || 'donation') === 'donation' ? self.api.updateDonation(self.editId, data) : self.api.updateIncome(self.editId, data))
           : ((f.type || 'donation') === 'donation' ? self.api.createDonation(data) : self.api.createIncome(data))
         promise.then(function(saved) {
+          self.donSaving = false
           self.toast(self.editId ? 'Income updated' : 'Income saved', 'success')
           try { self._resetForm() } catch(_) {}
           self.emit('save', { action: self.editId ? 'update' : 'create', id: saved?.id || self.editId })

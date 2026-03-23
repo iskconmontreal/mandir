@@ -16,16 +16,6 @@
   0% { width: 72%; }
   100% { width: 86%; }
 }
-@keyframes finance-exp-reveal {
-  0% {
-    opacity: 0;
-    transform: translateY(calc(var(--s-xs) * -1));
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 .progress {
   position: fixed;
   top: 0;
@@ -1174,7 +1164,7 @@ form {
   min-height: 0;
   max-height: none;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--c-white) 2%, var(--c-text) 98%);
 }
@@ -1340,7 +1330,7 @@ form {
     height: 12rem;
     min-height: 12rem;
     width: 100%;
-    object-fit: cover;
+    object-fit: contain;
   }
   .receipt-dots {
     bottom: var(--s-sm);
@@ -1672,7 +1662,8 @@ form {
   min-width: var(--recent-exp-amt-min);
   text-align: right;
 }
-.finance-inc-list-group > :last-child .finance-inc-item {
+.finance-inc-list-group > :last-child .recent-inc-item,
+.finance-inc-list-group > .recent-inc-item:last-child {
   border-bottom: none;
 }
 .recent-exp-time {
@@ -1701,7 +1692,8 @@ form {
   border-bottom: 1px solid var(--c-border);
   border-radius: 0;
 }
-.recent-inc-list > :last-child .recent-inc-item { border-bottom: none; }
+.recent-inc-list > :last-child .recent-inc-item,
+.recent-inc-list > .recent-inc-item:last-child { border-bottom: none; }
 .recent-inc-icon-col {
   display: inline-flex;
   align-items: center;
@@ -1807,6 +1799,10 @@ form {
   font-size: var(--f-sm);
   color: var(--c-text-dim);
   background: color-mix(in srgb, var(--c-neutral-active) 80%, transparent);
+}
+.recent-row-action-stub {
+  visibility: hidden;
+  pointer-events: none;
 }
 .recent-list-footer {
   display: flex;
@@ -2086,7 +2082,7 @@ form {
   align-items: center;
   gap: var(--s-sm);
   width: 100%;
-  grid-template-columns: auto minmax(0, 1fr) auto 8rem minmax(var(--recent-exp-amt-min, 6rem), auto);
+  grid-template-columns: auto minmax(0, 1fr) 8rem minmax(var(--recent-exp-amt-min, 6rem), auto);
   font-size: var(--f-md);
   font-weight: var(--f-wt-b);
   color: var(--c-text-dim);
@@ -2094,10 +2090,18 @@ form {
   text-align: left;
   cursor: pointer;
   scroll-margin-top: calc(var(--s-xl) * 2);
-  transition: color .18s ease, border-color .18s ease;
+  transition: color .18s ease;
+  -webkit-tap-highlight-color: transparent;
 }
-.exp-group-header:hover {
+.exp-group-header:hover:not(:disabled) {
   color: color-mix(in srgb, var(--c-text) 78%, var(--c-accent) 22%);
+}
+.exp-group-header:disabled {
+  cursor: default;
+  opacity: .5;
+}
+.exp-group-header-empty .exp-group-chevron {
+  visibility: hidden;
 }
 .exp-group-heading {
   min-width: 0;
@@ -2150,7 +2154,7 @@ form {
   justify-self: start;
   transition: color .18s ease, border-color .18s ease, background-color .18s ease;
 }
-.exp-group-header:hover .exp-group-count {
+.exp-group-header:hover:not(:disabled) .exp-group-count {
   color: color-mix(in srgb, var(--c-text) 72%, var(--c-accent) 28%);
   border-color: color-mix(in srgb, var(--c-accent) 24%, var(--c-border));
   background: color-mix(in srgb, var(--c-accent-soft, var(--c-neutral-active)) 42%, var(--c-surface));
@@ -2163,7 +2167,8 @@ form {
   min-width: 0;
   height: 0.5rem;
   gap: 2px;
-  grid-column: 4;
+  grid-column: 3;
+  grid-row: 1;
 }
 .exp-group-breakdown-seg {
   position: relative;
@@ -2174,7 +2179,7 @@ form {
   background: var(--seg-color, var(--c-cat-gray));
   transition: background-color .16s ease, filter .16s ease, transform .16s ease;
 }
-.exp-group-header:hover .exp-group-breakdown-seg {
+.exp-group-header:hover:not(:disabled) .exp-group-breakdown-seg {
   filter: saturate(1.08) brightness(.95);
 }
 .exp-group-breakdown-seg:hover {
@@ -2182,7 +2187,8 @@ form {
   filter: saturate(1.08) brightness(1.08);
 }
 .exp-group-total {
-  grid-column: 5;
+  grid-column: 4;
+  grid-row: 1;
   justify-self: end;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -2196,7 +2202,7 @@ form {
   font-size: var(--f-xl);
   transition: transform .15s ease, color .18s ease;
 }
-.exp-group-header:hover .exp-group-chevron {
+.exp-group-header:hover:not(:disabled) .exp-group-chevron {
   color: color-mix(in srgb, var(--c-accent) 56%, var(--c-text-dim));
 }
 
@@ -2205,18 +2211,31 @@ form {
 }
 .finance-exp-list {
   max-height: 0;
-  opacity: 0;
   overflow: clip;
   visibility: hidden;
   pointer-events: none;
-  transition: max-height .28s ease, opacity .2s ease, visibility 0s linear .28s;
 }
 .finance-exp-list-open {
-  max-height: 80rem;
-  opacity: 1;
+  max-height: none;
   visibility: visible;
   pointer-events: auto;
-  transition: max-height .34s ease, opacity .22s ease;
+}
+@keyframes finance-item-in {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+.finance-exp-list-fresh > .row-link,
+.finance-exp-list-fresh > .finance-exp-list-loader {
+  animation: finance-item-in .18s cubic-bezier(.25,1,.5,1) both;
+}
+.finance-exp-list-fresh > :nth-child(2) { animation-delay: 20ms; }
+.finance-exp-list-fresh > :nth-child(3) { animation-delay: 35ms; }
+.finance-exp-list-fresh > :nth-child(4) { animation-delay: 50ms; }
+.finance-exp-list-fresh > :nth-child(5) { animation-delay: 60ms; }
+.finance-exp-list-fresh > :nth-child(n+6) { animation-delay: 70ms; }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes finance-item-in {
+    from { opacity: 0; }
+  }
 }
 .finance-inc-list-shell {
   overflow: visible;
@@ -2230,11 +2249,6 @@ form {
   justify-content: center;
   gap: var(--s-sm);
   padding: var(--s-md) var(--s-md) calc(var(--s-md) + var(--s-xs));
-}
-.finance-exp-list-fx .finance-exp-list-loader,
-.finance-exp-list-fx .recent-exp-item,
-.finance-exp-list-fx .recent-inc-item {
-  animation: finance-exp-reveal .2s ease both;
 }
 .finance-exp-list-shell-refreshing {
   opacity: .58;
@@ -2614,19 +2628,19 @@ form {
     grid-row: 1 / 3;
     align-self: center;
   }
-  .finance-exp-item {
+  .finance-exp-list .recent-exp-item {
     grid-template-columns: var(--s-lg) minmax(0, 1fr) minmax(0, auto) 8rem minmax(var(--recent-exp-amt-min), auto);
   }
-  .finance-exp-item .recent-exp-attach { display: none; }
-  .finance-exp-item .recent-exp-actions {
+  .finance-exp-list .recent-exp-attach { display: none; }
+  .finance-exp-list .recent-exp-actions {
     grid-column: auto;
   }
-  .finance-exp-item .recent-exp-cat {
+  .finance-exp-list .recent-exp-cat {
     grid-column: auto;
     justify-content: flex-start;
     align-self: center;
   }
-  .finance-exp-item .recent-exp-amount {
+  .finance-exp-list .recent-exp-amount {
     min-width: var(--recent-exp-amt-min);
     grid-column: auto;
     grid-row: auto;
@@ -2649,12 +2663,12 @@ form {
     grid-row: 1 / 4;
     align-self: center;
   }
-  .finance-inc-item {
+  .finance-inc-list-group .recent-inc-item {
     grid-template-columns: var(--recent-inc-icon-size) minmax(0, 1fr) minmax(0, auto) 8rem minmax(var(--recent-inc-amt-min), auto);
   }
-  .finance-inc-item .recent-inc-actions { grid-column: auto; }
-  .finance-inc-item .recent-inc-type { grid-column: auto; }
-  .finance-inc-item .recent-inc-amount {
+  .finance-inc-list-group .recent-inc-actions { grid-column: auto; }
+  .finance-inc-list-group .recent-inc-type { grid-column: auto; }
+  .finance-inc-list-group .recent-inc-amount {
     min-width: var(--recent-inc-amt-min);
     grid-column: auto;
     grid-row: auto;
@@ -2837,14 +2851,16 @@ form {
 .exp-items-table td { padding: 3px; border-bottom: 1px solid var(--c-border); }
 .exp-items-table input { width: 100%; height: auto; border: 1px solid transparent; background: transparent; padding: var(--s-xs); font-size: var(--f-sm); color: inherit; border-radius: var(--r-sm); }
 .exp-items-table input:focus { outline: none; border-color: var(--c-accent); box-shadow: var(--focus-ring); }
-.exp-items-table input[type="number"] { font-variant-numeric: tabular-nums; }
+.exp-items-table input[type="number"] { font-variant-numeric: tabular-nums; text-align: right; -moz-appearance: textfield; appearance: textfield; }
+.exp-items-table input[type="number"]::-webkit-inner-spin-button,
+.exp-items-table input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .exp-items-table td:not(:first-child) { text-align: right; width: 5.5rem; }
-.exp-items-table th:not(:first-child) { width: 5.5rem; padding-left: calc(3px + var(--s-xs) + 1px); }
+.exp-items-table th:not(:first-child) { width: 5.5rem; text-align: right; padding-right: calc(3px + var(--s-xs) + 1px); }
 .exp-items-table th:first-child,
 .exp-items-table td:first-child { min-width: 8rem; }
 .exp-items-table tfoot td { border-bottom: none; border-top: 2px solid var(--c-border); padding: 3px; }
 .exp-items-table tfoot td:first-child { padding: 3px 0; }
-.exp-items-table tfoot input { font-weight: var(--f-wt-b); }
+.exp-items-table tfoot output { font-weight: var(--f-wt-b); padding: var(--s-xs); font-size: var(--f-sm); font-variant-numeric: tabular-nums; text-align: right; display: block; }
 .exp-item-desc { position: relative; }
 .exp-item-remove { position: absolute; right: var(--s-sm); top: 50%; transform: translateY(-50%); display: none; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; border: none; background: transparent; color: var(--c-text-dim); font-size: var(--f-md); line-height: 1; cursor: pointer; border-radius: var(--r-sm); padding: 0; }
 .exp-items-table tr:hover .exp-item-remove { display: flex; }

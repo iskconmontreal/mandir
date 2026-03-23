@@ -12,8 +12,8 @@
 
       <div :class="{'hidden': _attachments().length || receipts.length}" class="expense-media-empty"
         :onclick="() => { filePickerOpen = true; _root().querySelector('#exp-receipt-input')?.click() }">
-        <div class="scan-icon"><span :html="icon('scan_receipts')"></span></div>
-        <div class="expense-media-empty-title">Scan receipts</div>
+        <div class="scan-icon"><span :html="icon('file_plus')"></span></div>
+        <div class="expense-media-empty-title">Attach documents</div>
       </div>
 
       <div :class="{'hidden': !_attachments().length && !receipts.length}" class="receipt-carousel">
@@ -74,21 +74,21 @@
 
           <div class="exp-items">
             <table class="exp-items-table">
-              <thead><tr><th>Receipts</th><th>Amount</th><th>GST</th><th>PST</th></tr></thead>
+              <thead><tr><th>Items</th><th>Amount</th><th>GST</th><th>PST</th></tr></thead>
               <tbody>
                 <tr :each="(item, i) in expForm.items">
-                  <td class="exp-item-desc"><input type="text" :value="item.desc" :oninput="e => { expForm.items[i].desc = e.target.value }" placeholder="Item" :disabled="_policy().lockedAll"><button :if="!_policy().lockedAll && expForm.items.length > 1" type="button" class="exp-item-remove" :onclick="removeExpItem(i)" tabindex="-1">&times;</button></td>
-                  <td><input type="number" step="0.01" min="0" :value="item.amount" :oninput="e => { expForm.items[i].amount = e.target.value; syncItemTotals() }" placeholder="0.00" :disabled="_policy().amountLocked"></td>
-                  <td><input type="number" step="0.01" min="0" :value="item.gst" :oninput="e => { expForm.items[i].gst = e.target.value; syncItemTotals() }" placeholder="0.00" :disabled="_policy().amountLocked"></td>
-                  <td><input type="number" step="0.01" min="0" :value="item.pst" :oninput="e => { expForm.items[i].pst = e.target.value; syncItemTotals() }" placeholder="0.00" :disabled="_policy().amountLocked"></td>
+                  <td class="exp-item-desc"><input type="text" :value="item.desc" :oninput="e => { expForm.items[i].desc = e.target.value; expDirty = true }" placeholder="Item" :disabled="_policy().lockedAll"><button :if="!_policy().lockedAll && expForm.items.length > 1" type="button" class="exp-item-remove" :onclick="removeExpItem(i)" tabindex="-1">&times;</button></td>
+                  <td><input type="number" step="0.01" min="0" :value="item.amount" :oninput="e => { expForm.items[i].amount = e.target.value; syncItemTotals(); expDirty = true }" placeholder="0.00" :disabled="_policy().amountLocked"></td>
+                  <td><input type="number" step="0.01" min="0" :value="item.gst" :oninput="e => { expForm.items[i].gst = e.target.value; syncItemTotals(); expDirty = true }" placeholder="0.00" :disabled="_policy().amountLocked"></td>
+                  <td><input type="number" step="0.01" min="0" :value="item.pst" :oninput="e => { expForm.items[i].pst = e.target.value; syncItemTotals(); expDirty = true }" placeholder="0.00" :disabled="_policy().amountLocked"></td>
                 </tr>
               </tbody>
               <tfoot>
                 <tr>
                   <td><button :if="!_policy().lockedAll" type="button" class="btn btn-outline btn-sm" :onclick="addExpItem()">+ Add item</button><span :if="_policy().lockedAll">Total</span></td>
-                  <td><input type="number" :value="expForm.amount" readonly tabindex="-1"></td>
-                  <td><input type="number" :value="expForm.gst" readonly tabindex="-1" :placeholder="'0.00'"></td>
-                  <td><input type="number" :value="expForm.pst" readonly tabindex="-1" :placeholder="'0.00'"></td>
+                  <td><output :text="expForm.amount || '0.00'"></output></td>
+                  <td><output :text="expForm.gst || '0.00'"></output></td>
+                  <td><output :text="expForm.pst || '0.00'"></output></td>
                 </tr>
               </tfoot>
             </table>
@@ -100,7 +100,7 @@
               <label>Payee</label>
               <div style="position:relative">
                 <input id="exp-vendor" type="text" autocomplete="off" :value="expForm.payee"
-                  :onfocus="e => filterPayees(expForm.payee)"
+                  :onfocus="e => filterPayees(expForm.payee, true)"
                   :oninput="e => { expForm.member_id = null; filterPayees(e.target.value) }"
                   :onblur="e => { memberHits = [] }"
                   placeholder="Member name…" :required="!editId" :disabled="_policy().payeeLocked">
@@ -116,7 +116,7 @@
               <label>Category</label>
               <select id="exp-cat" :value="expForm.category" :change="v => { expForm.category = v; markDirty('category') }" :disabled="_policy().lockedAll">
                 <option value="" disabled hidden :selected="!(expForm.category || '')">Select…</option>
-                <option :each="cat in EXP_CATS" :value="cat" :text="fmtCat(cat)" :selected="expForm.category === cat"></option>
+                <option value="admin">Admin</option><option value="annadana">Annadana</option><option value="bhoga">Bhoga</option><option value="book_distribution">Book Distribution</option><option value="books">Books</option><option value="building_fund">Building Fund</option><option value="deity">Deity</option><option value="deity_worship">Deity Worship</option><option value="equipment">Equipment</option><option value="events">Events</option><option value="festival">Festival</option><option value="flowers">Flowers</option><option value="general">General</option><option value="insurance">Insurance</option><option value="kitchen">Kitchen</option><option value="maintenance">Maintenance</option><option value="renovation">Renovation</option><option value="rent">Rent</option><option value="salary">Salary</option><option value="sunday_feast">Sunday Feast</option><option value="travel">Travel</option><option value="utilities">Utilities</option><option value="vehicle">Vehicle</option><option value="other">Other</option>
               </select>
             </div>
             <div class="field">
@@ -182,7 +182,7 @@
                     <input type="text" :value="payRef" :change="v => payRef = v" placeholder="Reference" class="input input-sm" style="width:10rem">
                     <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :onclick="payExp()">Paid</button>
                   </div>
-                  <div :if="detailExp?.status === 'paid' && canapprove" class="activity-followup-actions activity-followup-actions-inline">
+                  <div :if="detailExp?.status === 'paid' && !detailExp?.closed_at && canapprove" class="activity-followup-actions activity-followup-actions-inline">
                     <button class="btn btn-primary btn-sm" :class="{'btn-loading': actioning}" :disabled="!_attachments().length" :title="_attachments().length ? '' : 'Attach receipt before closing'" :onclick="closeExp()">Close</button>
                     <span :if="!_attachments().length" class="activity-hint dim">Attach receipt first</span>
                   </div>
@@ -202,7 +202,7 @@
           <button :if="!delConfirm && detailExp && expMode !== 'edit'" type="button" class="btn btn-outline" :onclick="_close()">Close</button>
           <button :if="!delConfirm && detailExp && expMode !== 'edit' && (detailExp?.status === 'submitted' || isadmin)" type="button" class="btn btn-primary" :onclick="beginEdit()">Edit</button>
           <button :if="!delConfirm && detailExp && expMode === 'edit'" type="button" class="btn btn-outline" :onclick="_close()">Cancel</button>
-          <button :if="!delConfirm && detailExp && expMode === 'edit'" type="submit" form="exp-form" class="btn btn-primary" :class="{'btn-loading': expSaving}" :disabled="_policy().lockedAll || expSaving">Update</button>
+          <button :if="!delConfirm && detailExp && expMode === 'edit'" type="submit" form="exp-form" class="btn btn-primary" :class="{'btn-loading': expSaving}" :disabled="_policy().lockedAll || expSaving || !_isDirty()">Update</button>
         </div>
       </div>
     </div>
@@ -251,6 +251,7 @@
 
       // --- Helpers ---
       this._root = function() { return this.host || document }
+      this._isDirty = function() { return this.expDirty || (this.pendingDeletes?.size > 0) || (this.receipts?.length > 0) }
       this._policy = function() {
         var status = this.detailExp?.status || ''
         var viewOnly = !!this.detailExp && this.expMode !== 'edit'
@@ -332,7 +333,7 @@
       }
       this._close = function() {
         if (this.detailExp && this.expMode === 'edit') {
-          var hasChanges = this.expDirty || this.pendingDeletes?.size || this.receipts?.length
+          var hasChanges = this._isDirty()
           if (hasChanges && !confirm('Discard unsaved changes?')) return
         }
         try { this._resetForm() } catch(_) {}
@@ -373,7 +374,16 @@
           var cat = root.querySelector('#exp-cat')
           var date = root.querySelector('#exp-date')
           var vendor = root.querySelector('#exp-vendor')
-          if (cat) cat.value = self.expForm.category || ''
+          if (cat) {
+            var cv = self.expForm.category || ''
+            if (cv && !cat.querySelector('option[value="' + cv + '"]')) {
+              var opt = document.createElement('option')
+              opt.value = cv
+              opt.textContent = cv.charAt(0).toUpperCase() + cv.slice(1).replace(/_/g, ' ')
+              cat.appendChild(opt)
+            }
+            cat.value = cv
+          }
           if (date) date.value = self.expForm.expense_date || ''
           if (vendor) vendor.value = self.expForm.payee || self.memberQuery || ''
         }, 50)
@@ -414,17 +424,28 @@
       // --- Prop-driven lifecycle ---
       this.onpropchange = function(k, v) {
         if (k === 'show' && v) {
-          this._resetForm()
           var self = this
-          queueMicrotask(function() {
-            if (self.detail?.id) self._openEdit(self.detail, self.mode)
-          })
+          try { self._resetForm() } catch(_) {}
+          // Force-reset UI flags after _resetForm (which may throw, leaving stale state)
+          self.expSaving = false; self.deleting = false; self.actioning = false
+          self.addErr = null; self.delConfirm = false; self.expRejecting = false
+          // setTimeout(0) — let all prop updates from parent settle before reading detail/mode
+          setTimeout(function() {
+            if (!self.show) return
+            if (self.mode !== 'create' && self.detail?.id) self._openEdit(self.detail, self.mode)
+            // Clear stale btn-loading from :if re-activation (sprae :class effect disconnects)
+            setTimeout(function() {
+              self.expSaving = false; self.deleting = false; self.actioning = false
+              var root = self.host || document
+              root.querySelectorAll('.btn-loading').forEach(function(el) { el.classList.remove('btn-loading') })
+            }, 50)
+          }, 0)
         }
       }
 
       // --- Autocomplete ---
-      this.filterPayees = function(q) {
-        this.memberQuery = q; this.expForm.payee = q; _dirtyFields.add('payee'); this.expDirty = true
+      this.filterPayees = function(q, fromFocus) {
+        this.memberQuery = q; this.expForm.payee = q; if (!fromFocus) { _dirtyFields.add('payee'); this.expDirty = true }
         var allMembers = Object.entries(this.membernames || {}).map(function(e) { return { id: +e[0], name: e[1] } })
         var hits = (q ? allMembers.filter(function(m) { return m.name.toLowerCase().includes(q.toLowerCase()) }) : allMembers).slice(0, 5)
         if (!hits.length && this.expForm.member_id && this.memberQuery) hits.push({ id: this.expForm.member_id, name: this.memberQuery })
@@ -441,11 +462,11 @@
         this.expForm.gst = items.reduce(function(s, i) { return s + (parseFloat(i.gst) || 0) }, 0).toFixed(2)
         this.expForm.pst = items.reduce(function(s, i) { return s + (parseFloat(i.pst) || 0) }, 0).toFixed(2)
       }
-      this.addExpItem = function() { this.expForm.items = this.expForm.items.concat([{ desc: '', amount: '', gst: '', pst: '' }]) }
+      this.addExpItem = function() { this.expForm.items = this.expForm.items.concat([{ desc: '', amount: '', gst: '', pst: '' }]); this.expDirty = true }
       this.removeExpItem = function(i) {
         if (this.expForm.items.length <= 1) return
         this.expForm.items = this.expForm.items.filter(function(_, idx) { return idx !== i })
-        this.syncItemTotals()
+        this.syncItemTotals(); this.expDirty = true
       }
 
       // --- Receipt handling ---
@@ -525,6 +546,8 @@
         if (first.vendor || first.category || first.date) self.expFull = true
         if (!_dirtyFields.has('date') && !self.expForm.expense_date && earliest) self.expForm.expense_date = earliest.toISOString().slice(0, 10)
         if (!_dirtyFields.has('category') && !self.expForm.category && first.category) self.expForm.category = first.category
+        if (!_dirtyFields.has('payee') && !self.expForm.payee && first.vendor) { self.expForm.payee = first.vendor; self.memberQuery = first.vendor }
+        self._syncControls()
       }
 
       // --- Save / Delete ---

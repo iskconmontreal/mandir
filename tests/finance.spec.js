@@ -1259,6 +1259,76 @@ test.describe('finance section', () => {
     await expect(page.locator('.scan-icon')).toBeVisible()
   })
 
+  test('transactions income detail and create stay isolated', async ({ page }) => {
+    const donations = [
+      { id: 1, source_name: 'Hari Das', amount: 5000, method: 'wire', category: 'general', date_received: isoMonthDate(0, '15'), note: 'invoice paid' },
+    ]
+    await mockFinance(page, { donations })
+    await openFinance(page, 'transactions')
+
+    await page.locator('.finance-net-list .recent-inc-item').first().click()
+    const editModal = page.locator('.modal-overlay:visible').first()
+    await expect(editModal.getByRole('heading', { name: 'Edit Income' })).toBeVisible()
+    await expect(editModal.locator('#don-amount')).toHaveValue('50.00')
+    await expect(editModal.locator('#don-note')).toHaveValue('invoice paid')
+
+    await editModal.locator('.modal-close').click()
+    await expect(page.locator('.modal-overlay')).toBeHidden()
+
+    await page.getByRole('button', { name: '+ Transaction' }).click()
+    await page.locator('.quick-add:visible').getByText('Income').click()
+
+    const addModal = page.locator('.modal-overlay:visible').first()
+    await expect(addModal.getByRole('heading', { name: 'Add Income' })).toBeVisible()
+    await expect(addModal.locator('#don-donor')).toHaveValue('')
+    await expect(addModal.locator('#don-amount')).toHaveValue('')
+    await expect(addModal.locator('#don-note')).toHaveValue('')
+  })
+
+  test('transactions income reorder follows income date after edit', async ({ page }) => {
+    const donations = [
+      { id: 1, source_name: 'Hari Das', amount: 5000, method: 'wire', category: 'general', date_received: isoMonthDate(0, '20'), updated_at: `${isoMonthDate(0, '20')}T10:00:00Z`, note: 'older invoice' },
+      { id: 2, source_name: 'Gopi Devi', amount: 7500, method: 'cash', category: 'general', date_received: isoMonthDate(0, '22'), updated_at: `${isoMonthDate(0, '22')}T10:00:00Z`, note: 'latest date' },
+    ]
+    await mockFinance(page, { donations })
+    await openFinance(page, 'transactions')
+
+    const rows = page.locator('.finance-net-list .recent-inc-item')
+    await expect(rows.first()).toContainText('Gopi Devi')
+
+    await rows.nth(1).click()
+    const editModal = page.locator('.modal-overlay:visible').first()
+    await expect(editModal.getByRole('heading', { name: 'Edit Income' })).toBeVisible()
+    await editModal.locator('#don-date').fill(isoMonthDate(0, '10'))
+    await editModal.getByRole('button', { name: 'Update' }).click()
+    await expect(page.locator('.modal-overlay')).toBeHidden()
+
+    await expect(rows.first()).toContainText('Gopi Devi')
+    await expect(rows.nth(1)).toContainText('Hari Das')
+  })
+
+  test('transactions income reopen clears update loading state', async ({ page }) => {
+    const donations = [
+      { id: 1, source_name: 'Hari Das', amount: 5000, method: 'wire', category: 'general', date_received: isoMonthDate(0, '20'), updated_at: `${isoMonthDate(0, '20')}T10:00:00Z`, note: 'invoice paid' },
+    ]
+    await mockFinance(page, { donations })
+    await openFinance(page, 'transactions')
+
+    const row = page.locator('.finance-net-list .recent-inc-item').first()
+    await row.click()
+    const firstModal = page.locator('.modal-overlay:visible').first()
+    await expect(firstModal.getByRole('heading', { name: 'Edit Income' })).toBeVisible()
+    await firstModal.locator('#don-note').fill('invoice updated')
+    await firstModal.getByRole('button', { name: 'Update' }).click()
+    await expect(page.locator('.modal-overlay')).toBeHidden()
+
+    await row.click()
+    const reopenedModal = page.locator('.modal-overlay:visible').first()
+    await expect(reopenedModal.getByRole('heading', { name: 'Edit Income' })).toBeVisible()
+    await expect(reopenedModal.locator('#don-note')).toHaveValue('invoice updated')
+    await expect(reopenedModal.getByRole('button', { name: 'Update' })).not.toHaveClass(/btn-loading/)
+  })
+
   test('editing expense keeps attachment area isolated per record', async ({ page }) => {
     const expenses = [
       {
@@ -1290,7 +1360,7 @@ test.describe('finance section', () => {
     const firstEdit = page.locator('.modal-overlay:visible').first()
     await expect(firstEdit.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
     await expect(firstEdit.locator('.receipt-thumb')).toHaveCount(1)
-    await expect(firstEdit.getByText('Scan receipts')).not.toBeVisible()
+    await expect(firstEdit.getByText('Attach documents')).not.toBeVisible()
 
     await page.click('button:has-text("Cancel")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible()
@@ -1299,7 +1369,7 @@ test.describe('finance section', () => {
     const secondEdit = page.locator('.modal-overlay:visible').first()
     await expect(secondEdit.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
     await expect(secondEdit.locator('.receipt-thumb')).toHaveCount(0)
-    await expect(secondEdit.getByText('Scan receipts')).toBeVisible()
+    await expect(secondEdit.getByText('Attach documents')).toBeVisible()
     await expect(page.locator('.lightbox')).not.toBeVisible()
 
     await page.click('button:has-text("Cancel")')
@@ -1308,7 +1378,7 @@ test.describe('finance section', () => {
     await page.locator('.finance-exp-item').filter({ hasText: 'Receipt Expense' }).click()
     const reopenedFirstEdit = page.locator('.modal-overlay:visible').first()
     await expect(reopenedFirstEdit.locator('.receipt-thumb')).toHaveCount(1)
-    await expect(reopenedFirstEdit.getByText('Scan receipts')).not.toBeVisible()
+    await expect(reopenedFirstEdit.getByText('Attach documents')).not.toBeVisible()
   })
 
   test('ESC closes modal when file picker is not open', async ({ page }) => {
@@ -1401,7 +1471,6 @@ test.describe('finance section', () => {
     await page.setInputFiles('#exp-receipt-input', { name: 'r1.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
 
-    await page.locator('.receipt-add').click()
     await page.setInputFiles('#exp-receipt-input', { name: 'r2.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
     await expect(page.locator('#exp-amount')).toHaveValue('50.00', { timeout: 5000 })
@@ -1444,7 +1513,7 @@ test.describe('finance section', () => {
       el.dispatchEvent(new Event('input', { bubbles: true }))
       el.dispatchEvent(new Event('change', { bubbles: true }))
     }, '75.00')
-    await expect(itemAmount).toHaveValue('75')
+    await expect(itemAmount).toHaveValue('75.00')
     await page.click('button:has-text("Update")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
@@ -1761,7 +1830,6 @@ test.describe('finance section', () => {
     // User manually enters payee
     await page.fill('#exp-vendor', 'My Override')
 
-    await page.locator('.receipt-add').click()
     await page.setInputFiles('#exp-receipt-input', { name: 'r2.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
 
@@ -2146,7 +2214,6 @@ test.describe('finance section', () => {
     await expect(page.locator('#exp-date')).toHaveValue('2025-03-01', { timeout: 5000 })
 
     // Second receipt — should NOT overwrite date, should show mismatch toast
-    await page.locator('.receipt-add').click()
     await page.setInputFiles('#exp-receipt-input', { name: 'b.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
 
@@ -2195,7 +2262,6 @@ test.describe('finance section', () => {
     await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
 
     // Add another one too
-    await page.locator('.receipt-add').click()
     await page.setInputFiles('#exp-receipt-input', { name: 'd.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
   })
@@ -2603,6 +2669,121 @@ test.describe('finance section', () => {
     expect(title).toBeTruthy()
     const datetime = await timeEl.getAttribute('datetime')
     expect(datetime).toContain('2025-01-15')
+  })
+
+  test('expense month header click toggles item list', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 1000, payee: 'A', category: 'kitchen', expense_date: isoMonthDate(0, '05'), status: 'submitted' },
+      { id: 2, amount: 2000, payee: 'B', category: 'utilities', expense_date: isoMonthDate(0, '10'), status: 'submitted' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    const section = page.locator('section').first()
+    const header = section.locator('.exp-group-header').first()
+    const list = section.locator('.finance-exp-list').first()
+
+    // First month auto-opens
+    await expect(header).toHaveClass(/exp-group-header-open/)
+    await expect(list).toHaveClass(/finance-exp-list-open/)
+
+    // Click to close
+    await header.click()
+    await expect(header).not.toHaveClass(/exp-group-header-open/)
+    await expect(list).not.toHaveClass(/finance-exp-list-open/)
+
+    // Click to re-open
+    await header.click()
+    await expect(header).toHaveClass(/exp-group-header-open/)
+    await expect(list).toHaveClass(/finance-exp-list-open/)
+  })
+
+  test('income month header click toggles item list', async ({ page }) => {
+    const donations = [
+      { id: 1, amount: 5000, method: 'cash', category: 'general', date_received: isoMonthDate(0, '05') },
+      { id: 2, amount: 3000, method: 'etransfer', category: 'general', date_received: isoMonthDate(0, '10') },
+    ]
+    await mockFinance(page, { donations })
+    await openFinance(page, 'donations')
+
+    const section = page.locator('section').nth(1)
+    const header = section.locator('.exp-group-header').first()
+    const list = section.locator('.finance-exp-list').first()
+
+    // First month auto-opens
+    await expect(header).toHaveClass(/exp-group-header-open/)
+    await expect(list).toHaveClass(/finance-exp-list-open/)
+
+    // Click to close
+    await header.click()
+    await expect(header).not.toHaveClass(/exp-group-header-open/)
+    await expect(list).not.toHaveClass(/finance-exp-list-open/)
+
+    // Click to re-open
+    await header.click()
+    await expect(header).toHaveClass(/exp-group-header-open/)
+    await expect(list).toHaveClass(/finance-exp-list-open/)
+  })
+
+  test('expense empty month shows $0 and is not expandable', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 500, payee: 'A', category: 'kitchen', expense_date: isoMonthDate(0, '05'), status: 'submitted' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page)
+
+    const section = page.locator('section').first()
+    const emptyHeader = section.locator('.exp-group-header').nth(1)
+
+    await expect(emptyHeader).toHaveClass(/exp-group-header-empty/)
+    await expect(emptyHeader).toBeDisabled()
+    await expect(emptyHeader.locator('.exp-group-total')).toHaveText('$0.00')
+    await expect(emptyHeader.locator('.exp-group-count')).not.toBeVisible()
+  })
+
+  test('income empty month shows $0 and is not expandable', async ({ page }) => {
+    const donations = [
+      { id: 1, amount: 5000, method: 'cash', category: 'general', date_received: isoMonthDate(0, '05') },
+    ]
+    await mockFinance(page, { donations })
+    await openFinance(page, 'donations')
+
+    const section = page.locator('section').nth(1)
+    const emptyHeader = section.locator('.exp-group-header').nth(1)
+
+    await expect(emptyHeader).toHaveClass(/exp-group-header-empty/)
+    await expect(emptyHeader).toBeDisabled()
+    await expect(emptyHeader.locator('.exp-group-total')).toHaveText('$0.00')
+    await expect(emptyHeader.locator('.exp-group-count')).not.toBeVisible()
+  })
+
+  test('transaction month header click toggles item list', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 1000, payee: 'A', category: 'kitchen', expense_date: isoMonthDate(0, '05'), status: 'submitted' },
+    ]
+    const donations = [
+      { id: 1, amount: 5000, method: 'cash', category: 'general', date_received: isoMonthDate(0, '05') },
+    ]
+    await mockFinance(page, { expenses, donations })
+    await openFinance(page, 'transactions')
+
+    const section = page.locator('section').nth(2)
+    const header = section.locator('.exp-group-header').first()
+    const list = section.locator('.finance-exp-list').first()
+
+    // First month auto-opens
+    await expect(header).toHaveClass(/exp-group-header-open/)
+    await expect(list).toHaveClass(/finance-exp-list-open/)
+
+    // Click to close
+    await header.click()
+    await expect(header).not.toHaveClass(/exp-group-header-open/)
+    await expect(list).not.toHaveClass(/finance-exp-list-open/)
+
+    // Click to re-open
+    await header.click()
+    await expect(header).toHaveClass(/exp-group-header-open/)
+    await expect(list).toHaveClass(/finance-exp-list-open/)
   })
 
 })

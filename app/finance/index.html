@@ -33,7 +33,7 @@
     <expense-filter-bar :search="expSearch" :filtercats="expFilterCats" :filterstatus="expFilterStatus"
       :amtmin="expAmtMin" :amtmax="expAmtMax" :amtlo="expAmtLo" :amthi="expAmtHi" :amtceil="expAmtCeil" :amthist="expAmtHist"
       :datefrom="expDateFrom" :dateto="expDateTo" :cats="expCats" :resultcount="expFiltered.length"
-      :onchange="e => patchState({ expSearch: e.detail.search ?? expSearch, expFilterCats: e.detail.filtercats ?? expFilterCats, expFilterStatus: e.detail.filterstatus ?? expFilterStatus, expAmtMin: e.detail.amtmin ?? expAmtMin, expAmtMax: e.detail.amtmax ?? expAmtMax, expDateFrom: e.detail.datefrom ?? expDateFrom, expDateTo: e.detail.dateto ?? expDateTo, expPage: 1 })">
+      :onchange="e => { if (!e.detail) return; patchState({ expSearch: e.detail.search ?? expSearch, expFilterCats: e.detail.filtercats ?? expFilterCats, expFilterStatus: e.detail.filterstatus ?? expFilterStatus, expAmtMin: e.detail.amtmin ?? expAmtMin, expAmtMax: e.detail.amtmax ?? expAmtMax, expDateFrom: e.detail.datefrom ?? expDateFrom, expDateTo: e.detail.dateto ?? expDateTo, expPage: 1 }) }">
     </expense-filter-bar>
     <div class="filter-bar-actions">
       <div style="position:relative">
@@ -80,7 +80,7 @@
               <button :if="x.status === 'submitted' && !myApprovals[x.id]" class="btn-quick btn-quick-reject" :onclick="rejectExpense(x)">Reject</button>
               <button :if="x.status === 'submitted' && !myApprovals[x.id]" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickApprove(x)">Approve</button>
               <span :if="x.status === 'submitted' && myApprovals[x.id]" class="dim" style="font-size:var(--f-sm)" title="You approved this — awaiting co-approval">✓ Approved</span>
-              <button :if="x.status === 'approved'" class="btn-quick btn-quick-pay" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickPay(x)">Paid</button>
+              <button :if="x.status === 'approved'" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickPay(x)">Paid</button>
               <button :if="x.status === 'paid' && x.attachments?.length" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickClose(x)">Close</button>
               <button :if="x.status === 'paid' && !x.attachments?.length" class="btn-quick" :onclick="attachExpense(x)" title="Attach receipt to close">Attach receipt</button>
             </td>
@@ -106,13 +106,17 @@
 
   <!-- List view -->
   <expense-list :if="expView === 'list'" :class="{'finance-exp-list-shell-refreshing': expRefreshing}"
-    :years="expYearGroups" :search="expSearch" :loading="loading" :error="loadErr"
+    :years="expYearGroups" :mopen="expMonthOpen" :mloading="expMonthLoading" :mfresh="expMonthFresh" :search="expSearch" :loading="loading" :error="loadErr"
+    :quickloading="quickLoading" :myapprovals="myApprovals"
     :hasmore="expHasMore" :canapprove="can('expenses:approve')"
     :empty="!loading && !expRefreshing && !expSearchLoading && !expenses.length && !expSearch"
     :nomatch="!loading && !expRefreshing && !expSearchLoading && !expFiltered.length && (expenses.length || expSearch)"
-    :onview="e => setTimeout(() => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' })"
+    :onview.delay-0="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"
     :onapprove="e => expenseQuickApprove(e.detail)"
-    :onpay="e => expenseQuickPay(e.detail)">
+    :onpay="e => expenseQuickPay(e.detail)"
+    :onprime="e => primeExpMonth(e.detail)"
+    :ontoggle.delay-0="e => toggleExpMonth(e.detail)"
+    :onattach="e => attachExpense(e.detail)">
   </expense-list>
 
 </section>
@@ -124,7 +128,7 @@
     <income-filter-bar :search="donSearch" :filtermethods="donFilterMethods" :filtertype="donFilterType"
       :amtmin="donAmtMin" :amtmax="donAmtMax" :amtlo="donAmtLo" :amthi="donAmtHi" :amtceil="donAmtCeil" :amthist="donAmtHist"
       :datefrom="donDateFrom" :dateto="donDateTo" :methods="donMethods" :resultcount="donFiltered.length"
-      :onchange="e => patchState({ donSearch: e.detail.search ?? donSearch, donFilterMethods: e.detail.filtermethods ?? donFilterMethods, donFilterType: e.detail.filtertype ?? donFilterType, donAmtMin: e.detail.amtmin ?? donAmtMin, donAmtMax: e.detail.amtmax ?? donAmtMax, donDateFrom: e.detail.datefrom ?? donDateFrom, donDateTo: e.detail.dateto ?? donDateTo, donPage: 1 })">
+      :onchange="e => { if (!e.detail) return; patchState({ donSearch: e.detail.search ?? donSearch, donFilterMethods: e.detail.filtermethods ?? donFilterMethods, donFilterType: e.detail.filtertype ?? donFilterType, donAmtMin: e.detail.amtmin ?? donAmtMin, donAmtMax: e.detail.amtmax ?? donAmtMax, donDateFrom: e.detail.datefrom ?? donDateFrom, donDateTo: e.detail.dateto ?? donDateTo, donPage: 1 }) }">
     </income-filter-bar>
     <div class="filter-bar-actions">
       <div style="position:relative">
@@ -134,16 +138,17 @@
           <a class="quick-add-item" :onclick="printTable(); showExport = false">Print / PDF</a>
         </div>
       </div>
-      <button class="btn btn-primary filter-bar-create" :onclick="showDonForm = true; donFormDetail = null">+ Income</button>
+      <button class="btn btn-primary filter-bar-create" :onclick="openDonCreate()">+ Income</button>
     </div>
   </div>
   <income-list
-    :years="donRenderYearGroups" :search="donSearch" :loading="loading" :error="loadErr"
+    :years="donRenderYearGroups" :mopen="donMonthOpen" :mfresh="donMonthFresh" :search="donSearch" :loading="loading" :error="loadErr"
     :hasmore="donHasMore"
     :empty="!donations.length && !loading"
     :nomatch="donations.length && !donFiltered.length && !loading"
-    :onview="e => { showDonForm = true; donFormDetail = e.detail }"
-    :onprint="e => printDonation(e.detail)">
+    :onview.delay-0="e => openDonDetail(e.detail)"
+    :onprint="e => printDonation(e.detail)"
+    :ontoggle.delay-0="e => toggleDonMonth(e.detail)">
   </income-list>
 
 </section>
@@ -152,10 +157,11 @@
 <section :class="{'hidden': activeTab !== 'transactions'}" :scope="{showExport: false, showAddMenu: false}">
 
   <div class="filter-bar">
-    <div class="filter-search-wrap">
-      <input class="filter-search filter-search-input" type="search" placeholder="Search all transactions…"
-        :value="netSearch" :oninput.debounce-150="e => patchState({ netSearch: e.target.value })">
-    </div>
+    <transaction-filter-bar :search="netSearch" :filtertype="netFilterType"
+      :amtmin="netAmtMin" :amtmax="netAmtMax" :amtlo="netAmtLo" :amthi="netAmtHi" :amtceil="netAmtCeil" :amthist="netAmtHist"
+      :datefrom="netDateFrom" :dateto="netDateTo" :resultcount="netFiltered.length"
+      :onchange="e => { if (!e.detail) return; patchState({ netSearch: e.detail.search ?? netSearch, netFilterType: e.detail.filtertype ?? netFilterType, netAmtMin: e.detail.amtmin ?? netAmtMin, netAmtMax: e.detail.amtmax ?? netAmtMax, netDateFrom: e.detail.datefrom ?? netDateFrom, netDateTo: e.detail.dateto ?? netDateTo }) }">
+    </transaction-filter-bar>
     <div class="filter-bar-actions">
       <div style="position:relative">
         <button class="btn btn-outline btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export</button>
@@ -168,19 +174,20 @@
         <button class="btn btn-primary filter-bar-create" :onclick="showAddMenu = !showAddMenu" :onclick.outside="showAddMenu = false">+ Transaction</button>
         <div :if="showAddMenu" class="quick-add" style="right:0;left:auto">
           <a :if="can('expenses:create')" class="quick-add-item" :onclick="showExpForm = true; expFormDetail = null; expFormMode = 'create'; showAddMenu = false">Expense</a>
-          <a :if="can('income:create')" class="quick-add-item" :onclick="showDonForm = true; donFormDetail = null; showAddMenu = false">Income</a>
+          <a :if="can('income:create')" class="quick-add-item" :onclick="openDonCreate(); showAddMenu = false">Income</a>
         </div>
       </div>
     </div>
   </div>
 
   <transaction-list
-    :years="netYearGroups" :search="netSearch" :loading="loading" :error="loadErr"
+    :years="netYearGroups" :mopen="netMonthOpen" :mfresh="netMonthFresh" :search="netSearch" :loading="loading" :error="loadErr"
     :empty="!loading && !netFiltered.length" :canapprove="can('expenses:approve')"
-    :onviewexp="e => setTimeout(() => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' })"
-    :onviewinc="e => { showDonForm = true; donFormDetail = e.detail }"
+    :onviewexp.delay-0="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"
+    :onviewinc.delay-0="e => openDonDetail(e.detail)"
     :onapprove="e => expenseQuickApprove(e.detail)"
-    :onpay="e => expenseQuickPay(e.detail)">
+    :onpay="e => expenseQuickPay(e.detail)"
+    :ontoggle.delay-0="e => toggleNetMonth(e.detail)">
   </transaction-list>
 
 </section>
@@ -191,6 +198,7 @@
 {% include components/transaction-list.html %}
 {% include components/expense-filter-bar.html %}
 {% include components/income-filter-bar.html %}
+{% include components/transaction-filter-bar.html %}
 {% include components/expense-form.html %}
 {% include components/donation-form.html %}
 
@@ -201,16 +209,22 @@
   :oncancel="() => { showExpForm = false }">
 </expense-form>
 
-<donation-form :show="showDonForm" :detail="donFormDetail"
+<donation-form :show="showDonCreateForm"
   :isfinance="true" :membernames="memberNames" :usernames="userNames" :myuserid="MY_USER_ID"
-  :onsave="e => { showDonForm = false; freshId = e.detail?.id || null; if (freshId) setTimeout(() => freshId = null, 5000); loadAll() }"
-  :oncancel="() => { showDonForm = false }"
+  :onsave="e => { closeDonCreate(); freshId = e.detail?.id || null; if (freshId) setTimeout(() => freshId = null, 5000); loadAll() }"
+  :oncancel="() => { closeDonCreate() }">
+</donation-form>
+
+<donation-form :show="showDonDetailForm" :detail="donFormDetail"
+  :isfinance="true" :membernames="memberNames" :usernames="userNames" :myuserid="MY_USER_ID"
+  :onsave="e => { closeDonDetail(); freshId = e.detail?.id || null; if (freshId) setTimeout(() => freshId = null, 5000); loadAll() }"
+  :oncancel="() => { closeDonDetail() }"
   :onprint="e => printDonation(e.detail)">
 </donation-form>
 
 <script type="module">
   import { init, fmtCat, fmtAmt, rawAmt, toCents, toast, auth, hl } from '../../lib/app.js'
-  import sprae from '../../lib/sprae.js'
+  import sprae, { batch } from '../../lib/sprae.js'
   import { setupProcessor } from '../../lib/processor.js'
   import { icon, actionIcon, statusIcon, methodIcon, activityIcon } from '../../lib/icons.js'
   import { api, BASE } from '../../lib/api.js'
@@ -231,18 +245,11 @@
   }, {
     extras: {
       _emit: (name, detail) => {}, // placeholder — overridden per-instance below
-      _open: {}, _toggle: () => {},
+      _toggle: () => {},
     },
     onInit(sp) {
-      sp._open = {}
-      sp._toggle = key => sp._open = { ...sp._open, [key]: !sp._open[key] }
       sp._emit = (name, detail) => sp.host?.dispatchEvent(new CustomEvent(name, { detail, bubbles: true }))
-    },
-    onPropChange(sp, k, v) {
-      if (k === 'years' && v?.length && !Object.keys(sp._open || {}).length) {
-        let first = v[0]?.items?.[0]?.key
-        if (first) sp._open = { [first]: true }
-      }
+      sp._toggle = key => sp._emit('toggle', key)
     }
   })
 
@@ -314,6 +321,11 @@
       donDateTo: url.searchParams.get('inc_to') || '',
       donorSearch: url.searchParams.get('donor_q') || '',
       netSearch: url.searchParams.get('net_q') || '',
+      netFilterType: (['expense', 'income'].includes(url.searchParams.get('net_type')) ? url.searchParams.get('net_type') : ''),
+      netAmtMin: normAmt(url.searchParams.get('net_amt_min')),
+      netAmtMax: normAmt(url.searchParams.get('net_amt_max')),
+      netDateFrom: url.searchParams.get('net_from') || '',
+      netDateTo: url.searchParams.get('net_to') || '',
     }
   }
   const initUrl = urlState()
@@ -345,9 +357,9 @@
     const keys = new Set(baseKeys)
     for (const item of items || []) {
       const key = keyOf(item)
-      if (key) keys.add(key)
+      if (key && key !== 'unknown' && key <= currentMonthKey) keys.add(key)
     }
-    return [...keys].sort((a, b) => {
+    return [...keys].filter(k => k === 'unknown' || k <= currentMonthKey).sort((a, b) => {
       if (a === 'unknown') return 1
       if (b === 'unknown') return -1
       return b.localeCompare(a)
@@ -363,7 +375,8 @@
     return map
   }
   const buildMonthGroups = ({ keys, itemsByKey, metaByKey = {}, filterItem = null, sortItems = list => list, useMeta = false }) => (keys || []).map(key => {
-    const items = sortItems((itemsByKey?.[key] || []).filter(item => filterItem ? filterItem(item) : true))
+    const raw = itemsByKey?.[key] || []
+    const items = sortItems(raw.filter(item => filterItem ? filterItem(item) : true))
     const meta = metaByKey?.[key] || { count: 0, total: 0 }
     const count = useMeta ? (meta.count || 0) : items.length
     const total = useMeta ? (meta.total || 0) : items.reduce((sum, item) => sum + (item.amount || 0), 0)
@@ -391,11 +404,15 @@
     if (ae !== be) return be > ae ? 1 : -1
     return (b?.id || 0) - (a?.id || 0)
   })
-  const incomeSortDate = x => changedAt(x) || x?.date_received || x?.created_at || ''
+  const incomeSortDate = x => x?.date_received || x?.created_at || changedAt(x) || ''
+  const incomeChangedDate = x => changedAt(x) || x?.created_at || ''
   const sortIncome = list => [...list].sort((a, b) => {
     const ad = incomeSortDate(a)
     const bd = incomeSortDate(b)
     if (ad !== bd) return bd > ad ? 1 : -1
+    const au = incomeChangedDate(a)
+    const bu = incomeChangedDate(b)
+    if (au !== bu) return bu > au ? 1 : -1
     const ae = a?.date_received || ''
     const be = b?.date_received || ''
     if (ae !== be) return be > ae ? 1 : -1
@@ -422,6 +439,11 @@
     if (state.donDateTo) params.set('inc_to', state.donDateTo)
     if (state.donorSearch) params.set('donor_q', state.donorSearch)
     if (state.netSearch) params.set('net_q', state.netSearch)
+    if (state.netFilterType) params.set('net_type', state.netFilterType)
+    if (state.netAmtMin) params.set('net_amt_min', state.netAmtMin)
+    if (state.netAmtMax) params.set('net_amt_max', state.netAmtMax)
+    if (state.netDateFrom) params.set('net_from', state.netDateFrom)
+    if (state.netDateTo) params.set('net_to', state.netDateTo)
     url.search = params.toString()
     url.hash = '#' + normTab(state.activeTab || 'transactions')
     history[mode](null, '', url)
@@ -461,6 +483,7 @@
   const s = init({
     ...formDefaults(BASE, MY_USER_ID),
     activeTab: initUrl.activeTab,
+    fmtAmt,
     hl, observe, statusIcon, catCls, catHex, catBgHex, changedAt,
     editIcon: actionIcon('edit'),
     printIcon: actionIcon('print'),
@@ -472,7 +495,7 @@
     year: initUrl.year, years, curYear, monthLabel,
     loading: false, loadErr: null,
     showExpForm: false, expFormDetail: null, expFormMode: 'create',
-    showDonForm: false, donFormDetail: null,
+    showDonCreateForm: false, showDonDetailForm: false, donFormDetail: null,
     expRefreshing: false,
     donations: [], expenses: [],
     expTotal: 0, donTotal: 0,
@@ -489,12 +512,12 @@
     expMonthItems: {},
     expMonthLoaded: {},
     expMonthLoading: {},
-    expMonthFxKey: '',
     expRangeLoaded: false,
     expSearchResults: null, expSearchLoading: false,
     expMonthOpen: monthOpenState(expenseMonthKeys),
+    expMonthFresh: '',
     donMonthOpen: monthOpenState(defaultMonthKeys),
-    donMonthFxKey: '',
+    donMonthFresh: '',
     actionAmt: '',
     freshId: null,
     isFresh(id) { return id && id === this.freshId },
@@ -534,6 +557,23 @@
       const who = this.userNames?.[uid]
       return who ? `by ${who}` : ''
     },
+    openDonCreate() {
+      this.showDonDetailForm = false
+      this.donFormDetail = null
+      this.showDonCreateForm = true
+    },
+    openDonDetail(detail) {
+      this.showDonCreateForm = false
+      this.donFormDetail = detail || null
+      this.showDonDetailForm = !!detail
+    },
+    closeDonCreate() {
+      this.showDonCreateForm = false
+    },
+    closeDonDetail() {
+      this.showDonDetailForm = false
+      this.donFormDetail = null
+    },
     get incomeMethodCounts() {
       const counts = {}
       for (const r of this.donations) {
@@ -569,6 +609,11 @@
     },
     expensePaidNoReceipt(x) {
       return this.can('expenses:approve') && (x?.status || '') === 'paid' && !x.attachments?.length && !this.quickLoading[x.id]
+    },
+    attachExpense(x) {
+      this.showExpForm = true
+      this.expFormDetail = x
+      this.expFormMode = 'edit'
     },
     expenseApprovedByMe(x) {
       return this.can('expenses:approve') && (x?.status || 'submitted') === 'submitted' && this.myApprovals[x.id] && !this.quickLoading[x.id]
@@ -702,7 +747,15 @@
       })
     },
     get expYearGroups() {
-      return groupMonthsByYear(this.expGrouped)
+      const years = groupMonthsByYear(this.expGrouped)
+      for (const yr of years) for (const g of yr.items) {
+        g.breakdown = this.expMonthBreakdown(g.key).map(seg => ({
+          ...seg,
+          title: this.expMonthBreakdownSegmentTooltip(seg),
+          style: `--seg-color:${seg.color};--seg-hover-color:${seg.isOther ? 'var(--c-cat-gray)' : catHex(seg.category || 'other')};width:${Math.max(seg.pct, 2)}%`,
+        }))
+      }
+      return years
     },
     fmtMonth(key) {
       if (!key?.includes('-')) return 'Undated'
@@ -809,25 +862,16 @@
       if (!key) return
       this.primeExpMonth(key)
     },
-    async toggleExpMonth(key, event) {
-      event?.preventDefault?.()
-      event?.currentTarget?.blur?.()
-      const scrollY = window.scrollY
+    async toggleExpMonth(key) {
       const next = !this.isExpMonthOpen(key)
-      if (next) setExpMonthFx(key)
-      else if (this.expMonthFxKey === key) this.expMonthFxKey = ''
       this.expMonthOpen = { ...this.expMonthOpen, [key]: next }
-      stabilizeMonthScroll(scrollY)
       if (next && !this.isExpMonthLoaded(key)) {
         await loadExpenseMonth(key)
-        stabilizeMonthScroll(scrollY)
+      } else if (next) {
+        this.expMonthFresh = key
+        clearTimeout(freshTimer)
+        freshTimer = setTimeout(() => { if (this.expMonthFresh === key) this.expMonthFresh = '' }, 400)
       }
-      if (next) clearExpMonthFxAfter(key)
-    },
-    toggleExpMonthFromEvent(event) {
-      const key = event?.currentTarget?.dataset?.monthKey
-      if (!key) return
-      return this.toggleExpMonth(key, event)
     },
     async setExpView(view) {
       this.expView = view
@@ -880,7 +924,15 @@
       return this.donGrouped.filter(group => group.count || group.total).map(group => group.key)
     },
     get donYearGroups() {
-      return groupMonthsByYear(this.donGrouped)
+      const years = groupMonthsByYear(this.donGrouped)
+      for (const yr of years) for (const g of yr.items) {
+        g.breakdown = this.donMonthBreakdown(g.key).map(seg => ({
+          ...seg,
+          title: this.donMonthBreakdownSegmentTooltip(seg),
+          style: `--seg-color:${seg.color};--seg-hover-color:${seg.isOther ? 'var(--c-cat-gray)' : catHex(seg.category || 'other')};width:${Math.max(seg.pct, 2)}%`,
+        }))
+      }
+      return years
     },
     get donRenderYearGroups() {
       return this.donFiltered.length ? this.donYearGroups : []
@@ -943,35 +995,45 @@
     donMonthHasVisibleData(key) {
       return this.donVisibleMonthKeys.includes(key)
     },
-    toggleDonMonth(key, event) {
-      event?.preventDefault?.()
-      event?.currentTarget?.blur?.()
-      const scrollY = window.scrollY
+    toggleDonMonth(key) {
       const next = !this.isDonMonthOpen(key)
-      if (next) setDonMonthFx(key)
-      else if (this.donMonthFxKey === key) this.donMonthFxKey = ''
       this.donMonthOpen = { ...this.donMonthOpen, [key]: next }
-      stabilizeMonthScroll(scrollY)
-      if (next) clearDonMonthFxAfter(key)
-    },
-    toggleDonMonthFromEvent(event) {
-      const key = event?.currentTarget?.dataset?.monthKey
-      if (!key) return
-      return this.toggleDonMonth(key, event)
+      if (next) {
+        this.donMonthFresh = key
+        clearTimeout(donFreshTimer)
+        donFreshTimer = setTimeout(() => { if (this.donMonthFresh === key) this.donMonthFresh = '' }, 400)
+      }
     },
 
     // Net tab (unified transactions)
     netSearch: initUrl.netSearch,
+    netFilterType: initUrl.netFilterType,
+    netAmtMin: initUrl.netAmtMin,
+    netAmtMax: initUrl.netAmtMax,
+    netDateFrom: initUrl.netDateFrom,
+    netDateTo: initUrl.netDateTo,
+    get netAmtLo() { return this.netAmtMin || 0 },
+    get netAmtHi() { return this.netAmtMax || this.netAmtCeil },
+    get netAmtCeil() { return Math.ceil(Math.max(AMT_MAX, ...this.netTransactions.map(r => r.amount || 0)) / 100) },
+    get netAmtHist() { return amtHist(this.netTransactions, this.netAmtCeil * 100) },
     netMonthOpen: monthOpenState(defaultMonthKeys),
+    netMonthFresh: '',
     get netTransactions() {
-      const exp = this.expenses.map(x => ({ ...x, _isExp: true, _date: x.expense_date || x.created_at || '' }))
-      const inc = this.donations.map(d => ({ ...d, _isExp: false, _date: d.date_received || d.created_at || '' }))
+      const exp = this.expenses.map(x => ({ ...x, _isExp: true, _date: x.expense_date || x.created_at || '', _changedAt: changedAt(x) || x.expense_date || '' }))
+      const inc = this.donations.map(d => ({ ...d, _isExp: false, _date: d.date_received || d.created_at || '', _changedAt: changedAt(d) || d.date_received || '' }))
       return [...exp, ...inc]
     },
     get netFiltered() {
       const q = this.netSearch?.toLowerCase() || ''
-      if (!q) return this.netTransactions
       return this.netTransactions.filter(tx => {
+        if (this.netFilterType === 'expense' && !tx._isExp) return false
+        if (this.netFilterType === 'income' && tx._isExp) return false
+        if (this.netAmtMin && (tx.amount || 0) < this.netAmtMin * 100) return false
+        if (this.netAmtMax && (tx.amount || 0) > this.netAmtMax * 100) return false
+        const dt = (tx._date || '').slice(0, 10)
+        if (this.netDateFrom && dt < this.netDateFrom) return false
+        if (this.netDateTo && dt > this.netDateTo) return false
+        if (!q) return true
         if (tx._isExp) return [tx.payee, tx.note, tx.category, tx.expense_no, fmtCat(tx.category)].filter(Boolean).join(' ').toLowerCase().includes(q)
         return [tx.note, tx.method, tx.type, bucketOf(tx), sourceOf(tx, this.memberNames)].filter(Boolean).join(' ').toLowerCase().includes(q)
       })
@@ -985,7 +1047,7 @@
       const keys = this.netMonthKeys
       const byKey = monthItemMap(keys, this.netFiltered, keyOf)
       return keys.map(key => {
-        const items = (byKey[key] || []).sort((a, b) => (b._date || '').localeCompare(a._date || '') || (b.id || 0) - (a.id || 0))
+        const items = (byKey[key] || []).sort((a, b) => (b._date || '').localeCompare(a._date || '') || (b._changedAt || '').localeCompare(a._changedAt || '') || (b.id || 0) - (a.id || 0))
         const income = items.filter(tx => !tx._isExp).reduce((s, tx) => s + (tx.amount || 0), 0)
         const expense = items.filter(tx => tx._isExp).reduce((s, tx) => s + (tx.amount || 0), 0)
         return { key, items, count: items.length, total: income + expense, net: income - expense }
@@ -998,15 +1060,14 @@
       if (idx <= 0) return false
       return !this.isNetMonthOpen(this.netMonthKeys[idx - 1])
     },
-    toggleNetMonthFromEvent(event) {
-      const key = event?.currentTarget?.dataset?.monthKey
-      if (!key) return
-      event?.preventDefault?.()
-      event?.currentTarget?.blur?.()
-      const scrollY = window.scrollY
+    toggleNetMonth(key) {
       const next = !this.isNetMonthOpen(key)
       this.netMonthOpen = { ...this.netMonthOpen, [key]: next }
-      stabilizeMonthScroll(scrollY)
+      if (next) {
+        this.netMonthFresh = key
+        clearTimeout(netFreshTimer)
+        netFreshTimer = setTimeout(() => { if (this.netMonthFresh === key) this.netMonthFresh = '' }, 400)
+      }
     },
 
     patchState(patch) {
@@ -1223,9 +1284,10 @@
 
   const BATCH = 200
   const expMonthPrimeReq = {}
-  let expMonthFxTimer = 0
-  let donMonthFxTimer = 0
   let expSearchTimer = 0
+  let freshTimer
+  let donFreshTimer
+  let netFreshTimer
 
   async function runExpSearch(q) {
     if (!q || q.length < 2) { s.expSearchResults = null; s.expSearchLoading = false; return }
@@ -1234,9 +1296,9 @@
       let page = 1, items = []
       while (true) {
         const res = await api.getExpenses({ search: q, limit: BATCH, page })
-        const batch = res.items || []
-        items = items.concat(batch)
-        if (!batch.length || items.length >= (res.total ?? items.length)) break
+        const chunk = res.items || []
+        items = items.concat(chunk)
+        if (!chunk.length || items.length >= (res.total ?? items.length)) break
         page++
       }
       if (s.expSearch === q) {
@@ -1319,10 +1381,10 @@
     let total = 0
     while (true) {
       const res = await api.getExpenses({ ...params, limit: BATCH, page })
-      const batch = res.items || []
-      total = res.total ?? (items.length + batch.length)
-      items = items.concat(batch)
-      if (!batch.length || items.length >= total) break
+      const chunk = res.items || []
+      total = res.total ?? (items.length + chunk.length)
+      items = items.concat(chunk)
+      if (!chunk.length || items.length >= total) break
       page++
     }
     return items
@@ -1333,13 +1395,22 @@
     s.expMonthLoading = { ...s.expMonthLoading, [key]: true }
     try {
       const items = await (expMonthPrimeReq[key] || fetchExpenseMonthItems(key))
-      s.expMonthItems = { ...s.expMonthItems, [key]: items }
-      s.expMonthLoaded = { ...s.expMonthLoaded, [key]: true }
-      syncLoadedExpenses()
-      refreshExpMonthOpen()
+      // Save scroll — batch triggers expGrouped recalc → :each rebuilds month DOM → focused button removed → scroll jumps
+      const scrollY = window.scrollY
+      batch(() => {
+        s.expMonthFresh = key
+        s.expMonthItems = { ...s.expMonthItems, [key]: items }
+        s.expMonthLoaded = { ...s.expMonthLoaded, [key]: true }
+        s.expMonthLoading = { ...s.expMonthLoading, [key]: false }
+        syncLoadedExpenses()
+      })
+      window.scrollTo(0, scrollY)
+      clearTimeout(freshTimer)
+      freshTimer = setTimeout(() => { if (s.expMonthFresh === key) s.expMonthFresh = '' }, 400)
+    } catch {
+      s.expMonthLoading = { ...s.expMonthLoading, [key]: false }
     } finally {
       delete expMonthPrimeReq[key]
-      s.expMonthLoading = { ...s.expMonthLoading, [key]: false }
     }
   }
 
@@ -1352,9 +1423,9 @@
     let page = 2
     while (items.length < total) {
       const next = await api.getExpenses({ ...params, page })
-      const batch = next.items || []
-      if (!batch.length) break
-      items = items.concat(batch)
+      const chunk = next.items || []
+      if (!chunk.length) break
+      items = items.concat(chunk)
       total = next.total ?? total
       page++
     }
@@ -1365,11 +1436,12 @@
       if (!nextItems[key]) nextItems[key] = []
       nextItems[key].push(item)
     }
-    s.expMonthItems = nextItems
-    s.expMonthLoaded = Object.fromEntries(s.expMonthKeys.map(key => [key, true]))
-    s.expRangeLoaded = true
-    syncLoadedExpenses()
-    refreshExpMonthOpen()
+    batch(() => {
+      s.expMonthItems = nextItems
+      s.expMonthLoaded = Object.fromEntries(s.expMonthKeys.map(key => [key, true]))
+      s.expRangeLoaded = true
+      syncLoadedExpenses()
+    })
   }
 
   async function loadAll() {
@@ -1393,31 +1465,32 @@
       const visibleOpenKeys = nextOpenKeys.length ? nextOpenKeys : []
       const nextMonthEntries = await Promise.all(visibleOpenKeys.map(async key => [key, await fetchExpenseMonthItems(key)]))
       const nextMonthItems = Object.fromEntries(nextMonthEntries)
-      s.donations = inc.items || []
-      s.donTotal = inc.total ?? s.donations.length
-      s.expMonthMeta = nextMonthMeta
-      s.expMonthItems = nextMonthItems
-      s.expMonthLoaded = Object.fromEntries(visibleOpenKeys.map(key => [key, true]))
-      s.expMonthLoading = {}
-      s.expMonthFxKey = ''
-      s.expRangeLoaded = false
-      s.expMonthOpen = nextExpMonthOpen
-      s.expTotal = 0
-      s.expMonth = summary.exp_month || 0
-      s.expPrevMonth = summary.exp_prev_month || 0
-      s.donorsMonth = summary.donors_month || 0
-      s.donorsPrevMonth = summary.donors_prev_month || 0
-      s.donorRows = (donors.items || []).map(d => ({ ...d, lastDate: d.last_date }))
-      s.donorTotal = donors.total || 0
-      const { names, unames } = parseMemberNames(mem.items || [])
-      s.memberNames = names
-      s.userNames = unames
-      syncLoadedExpenses()
-      refreshExpMonthOpen()
-      refreshDonMonthOpen()
-      refreshNetMonthOpen()
-      refreshIncomeStats()
-      syncRangeVars()
+      batch(() => {
+        s.donations = inc.items || []
+        s.donTotal = inc.total ?? s.donations.length
+        s.expMonthMeta = nextMonthMeta
+        s.expMonthItems = nextMonthItems
+        s.expMonthLoaded = Object.fromEntries(visibleOpenKeys.map(key => [key, true]))
+        s.expMonthLoading = {}
+        s.expRangeLoaded = false
+        s.expMonthOpen = nextExpMonthOpen
+        s.expTotal = 0
+        s.expMonth = summary.exp_month || 0
+        s.expPrevMonth = summary.exp_prev_month || 0
+        s.donorsMonth = summary.donors_month || 0
+        s.donorsPrevMonth = summary.donors_prev_month || 0
+        s.donorRows = (donors.items || []).map(d => ({ ...d, lastDate: d.last_date }))
+        s.donorTotal = donors.total || 0
+        const { names, unames } = parseMemberNames(mem.items || [])
+        s.memberNames = names
+        s.userNames = unames
+        syncLoadedExpenses()
+        refreshExpMonthOpen()
+        refreshDonMonthOpen()
+        refreshNetMonthOpen()
+        refreshIncomeStats()
+        syncRangeVars()
+      })
     } catch (e) {
       s.loadErr = e.message || 'Failed to load finance data'
     } finally {
@@ -1425,72 +1498,60 @@
       s.expRefreshing = false
     }
     loadRemaining(api.getIncome, dateP, 'donations', 'donTotal').then(() => {
-      refreshIncomeStats()
-      refreshDonMonthOpen()
-      refreshNetMonthOpen()
+      batch(() => {
+        refreshIncomeStats()
+        refreshDonMonthOpen()
+        refreshNetMonthOpen()
+      })
     })
   }
 
   s.loadAll = loadAll
 
-  function refreshExpMonthOpen() {
-    const keys = s.expMonthKeys
-    if (!keys.length) {
-      s.expMonthOpen = {}
-      return
+  function refreshMonthOpen(prop, keys, ensureFirst) {
+    const prev = s[prop]
+    const keySet = new Set(keys)
+    let changed = false
+    // remove stale keys
+    for (const k of Object.keys(prev)) {
+      if (!keySet.has(k)) { delete prev[k]; changed = true }
     }
-    s.expMonthOpen = monthOpenState(keys, s.expMonthOpen)
+    // add new keys with defaults
+    for (const key of keys) {
+      if (!(key in prev)) {
+        prev[key] = key === currentMonthKey || key === prevMonthKey
+        changed = true
+      }
+    }
+    // ensure at least one open
+    if (ensureFirst && keys.length && !Object.values(prev).some(Boolean)) {
+      prev[keys[0]] = true
+      changed = true
+    }
+    if (changed) s[prop] = { ...prev }
+  }
+
+  function refreshExpMonthOpen() {
+    refreshMonthOpen('expMonthOpen', s.expMonthKeys)
   }
 
   function refreshDonMonthOpen() {
     const keys = s.donMonthKeys
-    if (!keys.length) {
-      s.donMonthOpen = {}
-      return
-    }
-    const next = monthOpenState(keys, s.donMonthOpen)
+    refreshMonthOpen('donMonthOpen', keys)
+    // ensure first visible month is open
     const visibleKeys = s.donVisibleMonthKeys
-    next[visibleKeys[0] || keys[0]] = true
-    s.donMonthOpen = next
+    const first = visibleKeys[0] || keys[0]
+    if (first && !s.donMonthOpen[first]) {
+      s.donMonthOpen[first] = true
+      s.donMonthOpen = { ...s.donMonthOpen }
+    }
   }
 
   function refreshNetMonthOpen() {
-    const keys = s.netMonthKeys
-    if (!keys.length) { s.netMonthOpen = {}; return }
-    s.netMonthOpen = monthOpenState(keys, s.netMonthOpen)
+    refreshMonthOpen('netMonthOpen', s.netMonthKeys)
   }
 
-  function setExpMonthFx(key) {
-    clearTimeout(expMonthFxTimer)
-    s.expMonthFxKey = key
-  }
 
-  function setDonMonthFx(key) {
-    clearTimeout(donMonthFxTimer)
-    s.donMonthFxKey = key
-  }
-
-  function clearExpMonthFxAfter(key, delay = 220) {
-    clearTimeout(expMonthFxTimer)
-    expMonthFxTimer = setTimeout(() => {
-      if (s.expMonthFxKey === key) s.expMonthFxKey = ''
-    }, delay)
-  }
-
-  function clearDonMonthFxAfter(key, delay = 220) {
-    clearTimeout(donMonthFxTimer)
-    donMonthFxTimer = setTimeout(() => {
-      if (s.donMonthFxKey === key) s.donMonthFxKey = ''
-    }, delay)
-  }
-
-  function stabilizeMonthScroll(scrollY) {
-    if (typeof scrollY !== 'number') return
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (Math.abs(window.scrollY - scrollY) <= 1) return
-      window.scrollTo({ top: scrollY, behavior: 'auto' })
-    }))
-  }
 
   function applyUrlStateFromLocation() {
     const next = urlState()

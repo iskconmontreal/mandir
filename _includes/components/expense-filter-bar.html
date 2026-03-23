@@ -76,9 +76,15 @@
     </template>
     <script>
       this.panel = false
+      this._amtTimer = null
 
       this._change = function(patch) {
         this.emit('change', patch)
+      }
+
+      this._changeDebounced = function(patch) {
+        clearTimeout(this._amtTimer)
+        this._amtTimer = setTimeout(() => this._change(patch), 500)
       }
 
       this._rangeSync = function(e, v, isLo) {
@@ -87,8 +93,11 @@
           if (isLo) slider.style.setProperty('--lh', (v / this.amtceil * 100) + '%')
           else slider.style.setProperty('--rh', (v / this.amtceil * 100) + '%')
         }
+        if (isLo) this.amtlo = v; else this.amthi = v >= this.amtceil ? this.amtceil : v
+        var numEl = this.host.querySelector('input[type="number"][placeholder="' + (isLo ? 'Min' : 'Max') + '"]')
+        if (numEl) numEl.value = isLo ? v : (v >= this.amtceil ? '' : v)
         var patch = isLo ? { amtmin: v } : { amtmax: v >= this.amtceil ? '' : v }
-        this._change(patch)
+        this._changeDebounced(patch)
       }
     </script>
   </expense-filter-bar>

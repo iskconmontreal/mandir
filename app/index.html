@@ -26,7 +26,7 @@
     </div>
     <div :if="recentExpenses.length" class="recent-exp-list">
       <recent-expenses :items="recentExpenses" :actors="recentExpenseActors" :usernames="userNames" :myuserid="MY_USER_ID"
-        :onview="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"></recent-expenses>
+        :onview.delay-0="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"></recent-expenses>
     </div>
     <div :if="!recentExpenses.length" class="dim" style="font-size:var(--f-sm); padding:var(--s-sm) 0">No recent expenses</div>
   </div>
@@ -41,7 +41,7 @@
     </div>
     <div :if="recentIncome.length" class="recent-inc-list">
       <recent-donations :items="recentIncome" :membernames="memberNames"
-        :onview="e => { showDonForm = true; donFormDetail = e.detail }"></recent-donations>
+        :onview.delay-0="e => { showDonForm = true; donFormDetail = e.detail }"></recent-donations>
     </div>
     <div :if="!recentIncome.length" class="dim" style="font-size:var(--f-sm); padding:var(--s-sm) 0">No recent donations</div>
   </div>
@@ -67,7 +67,7 @@
   <div class="card-header">
     <h3>My Expenses</h3>
   </div>
-  <my-expense-table :items="myExpenses" :onview="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"></my-expense-table>
+  <my-expense-table :items="myExpenses" :onview.delay-0="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"></my-expense-table>
 </div>
 
 <!-- My Giving -->
@@ -126,6 +126,8 @@
   .recent-grid .recent-inc-actions { display: none; }
   .recent-grid .recent-exp-meta-row,
   .recent-grid .recent-inc-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recent-grid .recent-inc-list .recent-inc-item { border-bottom: 1px solid var(--c-border); }
+  .recent-grid .recent-inc-list .recent-inc-item:last-child { border-bottom: none; }
 </style>
 
 <script src="../lib/define-element.js"></script>

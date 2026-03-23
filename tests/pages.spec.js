@@ -40,12 +40,14 @@ test.describe('overview donations', () => {
   test('overview renders recent expenses and donations', async ({ page }) => {
     await loginAs(page, 'treasurer')
 
-    const today = new Date().toISOString().slice(0, 10)
+    const now = new Date()
+    const today = now.toISOString().slice(0, 10)
+    const recentTime = new Date(now - 3600000).toISOString() // 1 hour ago — always in past
     const expenses = [
-      { id: 1, amount: 4200, payee: 'Govindas Supplies', category: 'kitchen', expense_date: today, created_at: `${today}T10:00:00Z`, status: 'submitted', approval_count: 0, approvals_required: 1, created_by: 2 },
+      { id: 1, amount: 4200, payee: 'Govindas Supplies', category: 'kitchen', expense_date: today, created_at: recentTime, status: 'submitted', approval_count: 0, approvals_required: 1, created_by: 2 },
     ]
     const incomes = [
-      { id: 7, type: 'donation', amount: 8800, method: 'card', category: 'festival', date_received: today, created_at: `${today}T09:00:00Z`, updated_at: `${today}T09:00:00Z`, created_by: 2, source_name: 'Sunday Guest' },
+      { id: 7, type: 'donation', amount: 8800, method: 'card', category: 'festival', date_received: today, created_at: recentTime, updated_at: recentTime, created_by: 2, source_name: 'Sunday Guest' },
     ]
 
     await page.route(`${API}/**`, async route => {
@@ -331,7 +333,7 @@ test.describe('overview donations', () => {
     await expect(page.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
     await expect(page.locator('#exp-vendor')).toBeDisabled()
     await expect(page.locator('#exp-cat')).toHaveValue('utilities')
-    await expect(page.locator('#exp-amount')).toBeDisabled()
+    await expect(page.locator('.exp-items-table tbody input[type="number"]').first()).toBeDisabled()
     await expect(page.locator('#exp-date')).toBeDisabled()
     await expect(page.locator('#exp-cat')).toBeEnabled()
     await expect(page.locator('#exp-desc')).toBeEnabled()
@@ -346,7 +348,7 @@ test.describe('overview donations', () => {
     await expect(reopenedModal.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
     await expect(reopenedModal.locator('#exp-vendor')).toBeDisabled()
     await expect(reopenedModal.locator('#exp-date')).toBeDisabled()
-    await expect(reopenedModal.locator('#exp-amount')).toBeDisabled()
+    await expect(reopenedModal.locator('.exp-items-table tbody input[type="number"]').first()).toBeDisabled()
     await expect(reopenedModal.locator('#exp-cat')).toBeEnabled()
     await expect(reopenedModal.locator('#exp-desc')).toBeEnabled()
   })
@@ -420,7 +422,7 @@ test.describe('overview donations', () => {
 
     await page.getByRole('button', { name: '+ Expense' }).click()
     const reopenedModal = page.locator('.modal-overlay:visible').first()
-    await expect(reopenedModal.getByText('Scan receipts')).toBeVisible()
+    await expect(reopenedModal.getByText('Attach documents')).toBeVisible()
     await expect(reopenedModal.locator('.receipt-thumb')).toHaveCount(0)
     await expect(reopenedModal.locator('.receipt-add:not(.hidden)')).toHaveCount(0)
   })
@@ -597,7 +599,7 @@ test.describe('overview donations', () => {
     const secondEdit = page.locator('.modal-overlay:visible').first()
     await expect(secondEdit.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
     await expect(secondEdit.locator('.receipt-thumb')).toHaveCount(0)
-    await expect(secondEdit.getByText('Scan receipts')).toBeVisible()
+    await expect(secondEdit.getByText('Attach documents')).toBeVisible()
 
     await secondEdit.getByRole('button', { name: 'Cancel' }).click()
     await expect(page.locator('.modal-overlay')).toBeHidden()
@@ -606,5 +608,49 @@ test.describe('overview donations', () => {
     const reopenedFirstEdit = page.locator('.modal-overlay:visible').first()
     await expect(reopenedFirstEdit.locator('.receipt-thumb')).toHaveCount(1)
     await expect(reopenedFirstEdit.locator('.expense-media-empty:not(.hidden)')).toHaveCount(0)
+  })
+
+  test('view expense then add new expense opens blank form', async ({ page }) => {
+    await loginAs(page, 'treasurer')
+
+    const today = new Date().toISOString().slice(0, 10)
+    const expenses = [
+      { id: 1, amount: 4200, payee: 'Existing Vendor', category: 'kitchen', expense_date: today, created_at: `${today}T10:00:00Z`, updated_at: `${today}T10:00:00Z`, status: 'submitted', approval_count: 0, approvals_required: 1, created_by: 2 },
+    ]
+
+    await page.route(`${API}/**`, async route => {
+      const url = new URL(route.request().url())
+      const path = url.pathname
+      const method = route.request().method()
+      if (path === '/api/expenses' && method === 'GET') return route.fulfill({ json: { items: expenses, total: 1 } })
+      if (path === '/api/expenses/1' && method === 'GET') return route.fulfill({ json: expenses[0] })
+      if (path === '/api/income' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
+      if (path === '/api/members' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
+      if (path === '/api/me/expenses' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
+      if (path === '/api/me/donations/summary' && method === 'GET') return route.fulfill({ json: { total: 0, count: 0, by_category: {} } })
+      if (path === '/api/me/tax-receipts' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
+      return route.fulfill({ json: { items: [], total: 0 } })
+    })
+
+    await page.goto('/app/')
+
+    // Step 1: View existing expense
+    const expenseRow = page.locator('.recent-exp-item').first()
+    await expenseRow.click()
+    await page.waitForTimeout(200)
+    const viewModal = page.locator('.modal-overlay:visible').first()
+    await expect(viewModal.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
+
+    // Step 2: Close
+    await viewModal.locator('.modal-close').click()
+    await expect(page.locator('.modal-overlay')).toBeHidden()
+
+    // Step 3: Click "+ Expense" to add NEW
+    await page.click('button:has-text("+ Expense")')
+    const addModal = page.locator('.modal-overlay:visible').first()
+    await expect(addModal.getByRole('heading', { name: 'Add Expense' })).toBeVisible()
+
+    // Step 4: Assert form is BLANK — not populated with old expense data
+    await expect(addModal.locator('#exp-amount')).toHaveValue('')
   })
 })

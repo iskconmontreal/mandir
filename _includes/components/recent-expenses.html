@@ -14,7 +14,7 @@
             <div class="recent-exp-meta-row">
               <span class="recent-exp-status-text" :class="'status-' + (x.status || 'submitted')" :text="statusText(x)"></span>
               <span :if="reporter(x)" class="recent-exp-meta" :text="reporter(x)"></span>
-              <span class="recent-exp-time" :text="fmtDate(x.updated_at || x.created_at || x.expense_date)"></span>
+              <time class="recent-exp-time" :datetime="x.expense_date || x.created_at || ''" :title="(x.expense_date || x.created_at) ? new Date(x.expense_date || x.created_at).toLocaleString() : ''" :text="fmtDate(x.expense_date || x.created_at)"></time>
             </div>
           </div>
           <div :if="x.attachments?.length" class="row-attachments">

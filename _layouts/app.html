@@ -17,9 +17,9 @@
       :scope="{loading: true, mouse: .5}"
       :style="{'--progress-mouse': mouse}"
       :class="{loading, done: !loading}"
-      :onmousemove.document.throttle-raf="event => { mouse = Math.max(0, Math.min(1, (event?.clientX || 0) / Math.max(window.innerWidth, 1))) }"
       :onload.window="loading = false"></div>
-  <div class="app" id="app">
+      <div class="app" id="app">
+    <!-- :onmousemove.document.throttle-raf="event => { mouse = Math.max(0, Math.min(1, (event?.clientX || 0) / Math.max(window.innerWidth, 1))) }" -->
 
     <!-- Top navigation -->
     <header class="topbar">

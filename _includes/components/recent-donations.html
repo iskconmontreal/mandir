@@ -13,7 +13,7 @@
             </div>
             <div class="recent-inc-subtitle">
               <span class="recent-inc-method" :class="'recent-inc-method-' + method(d)" :text="method(d)"></span>
-              <span class="recent-inc-time" :text="fmtDate(d.updated_at || d.created_at || d.date_received)"></span>
+              <time class="recent-inc-time" :datetime="d.date_received || d.created_at || ''" :title="(d.date_received || d.created_at) ? new Date(d.date_received || d.created_at).toLocaleString() : ''" :text="fmtDate(d.date_received || d.created_at)"></time>
             </div>
           </div>
           <div :if="d.attachments?.length" class="row-attachments">

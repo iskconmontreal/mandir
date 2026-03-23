@@ -1,39 +1,25 @@
 <define-element>
-  <income-filter-bar search:string="" filtermethods:array filtertype:string="" amtmin:string="" amtmax:string="" amtlo:number amthi:number amtceil:number amthist:array datefrom:string="" dateto:string="" methods:array resultcount:number="0">
+  <transaction-filter-bar search:string="" filtertype:string="" amtmin:string="" amtmax:string="" amtlo:number amthi:number amtceil:number amthist:array datefrom:string="" dateto:string="" resultcount:number="0">
     <style>:host { display: contents; }</style>
     <template>
       <div class="filter-search-wrap" :onclick.outside="panel = false">
-        <input class="filter-search filter-search-input" type="search" placeholder="Search source or note…"
+        <input class="filter-search filter-search-input" type="search" placeholder="Search all transactions…"
           :value="search" :oninput.debounce-150="e => _change({ search: e.target.value })">
-        <div :class="{'hidden': !(filtermethods.length || filtertype || datefrom || dateto || amtmin || amtmax)}" class="filter-inline-chips">
-          <span :each="m in filtermethods" class="chip filter-inline-chip" :onclick="_change({ filtermethods: filtermethods.filter(x => x !== m) })" :text="fmtCat(m) + ' ×'"></span>
-          <span :if="filtertype" class="chip filter-inline-chip" :onclick="_change({ filtertype: '' })" :text="fmtCat(filtertype) + ' ×'"></span>
+        <div :class="{'hidden': !(filtertype || datefrom || dateto || amtmin || amtmax)}" class="filter-inline-chips">
+          <span :if="filtertype" class="chip filter-inline-chip" :onclick="_change({ filtertype: '' })" :text="(filtertype === 'expense' ? 'Expenses' : 'Income') + ' ×'"></span>
           <span :if="amtmin || amtmax" class="chip filter-inline-chip" :onclick="_change({ amtmin: '', amtmax: '' })" :text="'$' + amtlo + '–$' + amthi + ' ×'"></span>
           <span :if="datefrom" class="chip filter-inline-chip" :onclick="_change({ datefrom: '' })" :text="'From ' + datefrom + ' ×'"></span>
           <span :if="dateto" class="chip filter-inline-chip" :onclick="_change({ dateto: '' })" :text="'To ' + dateto + ' ×'"></span>
         </div>
         <div class="filter-search-seg">
-          <button class="btn btn-filter filter-search-btn" :class="{'filter-search-btn-active': panel || filtermethods.length || filtertype || datefrom || dateto || amtmin || amtmax}" :onclick="panel = !panel">Filter</button>
+          <button class="btn btn-filter filter-search-btn" :class="{'filter-search-btn-active': panel || filtertype || datefrom || dateto || amtmin || amtmax}" :onclick="panel = !panel">Filter</button>
           <div class="filter-dropdown hidden" :class="{'hidden': !panel}">
-            <div class="field">
-              <label>Method</label>
-              <div class="tag-cloud">
-                <span :each="m in methods" class="tag cat-gray" :class="{'tag-active': filtermethods.includes(m)}"
-                  :onclick="_change({ filtermethods: filtermethods.includes(m) ? filtermethods.filter(x => x !== m) : [].concat(filtermethods, [m]) })"
-                  :text="fmtCat(m)"></span>
-              </div>
-            </div>
             <div class="field">
               <label>Type</label>
               <select :onchange="e => _change({ filtertype: e.target.value })">
-                <option value="" :selected="!filtertype">All income</option>
-                <option value="donation" :selected="filtertype === 'donation'">Donation</option>
-                <option value="sale" :selected="filtertype === 'sale'">Sale</option>
-                <option value="grant" :selected="filtertype === 'grant'">Grant</option>
-                <option value="interest" :selected="filtertype === 'interest'">Interest</option>
-                <option value="refund" :selected="filtertype === 'refund'">Refund</option>
-                <option value="rebate" :selected="filtertype === 'rebate'">Rebate</option>
-                <option value="other" :selected="filtertype === 'other'">Other</option>
+                <option value="" :selected="!filtertype">All transactions</option>
+                <option value="expense" :selected="filtertype === 'expense'">Expenses only</option>
+                <option value="income" :selected="filtertype === 'income'">Income only</option>
               </select>
             </div>
             <div class="field">
@@ -53,10 +39,10 @@
               </div>
               <div style="display:flex;gap:var(--s-sm);align-items:center">
                 <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Min" :value="amtmin"
-                  :onchange="e => { var v = Math.max(0, Math.min(+e.target.value || 0, amthi)); _change({ amtmin: e.target.value === '' ? '' : v }) }"></span>
+                  :onchange="e => { var v = Math.max(0, Math.min(+e.target.value || 0, amthi)); _changeDebounced({ amtmin: e.target.value === '' ? '' : v }) }"></span>
                 <span class="dim">—</span>
                 <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Max" :value="amtmax"
-                  :onchange="e => { var v = Math.min(amtceil, Math.max(+e.target.value || 0, amtlo)); _change({ amtmax: v >= amtceil ? '' : v }) }"></span>
+                  :onchange="e => { var v = Math.min(amtceil, Math.max(+e.target.value || 0, amtlo)); _changeDebounced({ amtmax: v >= amtceil ? '' : v }) }"></span>
               </div>
             </div>
             <div class="field">
@@ -68,9 +54,9 @@
               </div>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">
-              <button class="btn-link" :if="filtermethods.length || filtertype || datefrom || dateto || amtmin || amtmax"
-                :onclick="_change({ filtermethods: [], filtertype: '', datefrom: '', dateto: '', amtmin: '', amtmax: '' }); panel = false" :text="'Clear all'"></button>
-              <span :if="!filtermethods.length && !filtertype && !datefrom && !dateto && !amtmin && !amtmax"></span>
+              <button class="btn-link" :if="filtertype || datefrom || dateto || amtmin || amtmax"
+                :onclick="_change({ filtertype: '', datefrom: '', dateto: '', amtmin: '', amtmax: '' }); panel = false" :text="'Clear all'"></button>
+              <span :if="!filtertype && !datefrom && !dateto && !amtmin && !amtmax"></span>
               <button class="btn btn-primary btn-sm" :onclick="panel = false" :text="'Show ' + resultcount + ' results'"></button>
             </div>
           </div>
@@ -103,5 +89,5 @@
         this._changeDebounced(patch)
       }
     </script>
-  </income-filter-bar>
+  </transaction-filter-bar>
 </define-element>
