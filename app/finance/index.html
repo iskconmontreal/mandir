@@ -10,7 +10,7 @@
     :onclick="e => { switchTab('transactions'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
     <div class="stat-label">Transactions</div>
     <div class="stat-value"><span :class="net > 0 ? 'stat-ok' : net < 0 ? 'stat-err' : ''" :text="(net >= 0 ? '+' : '\u2212') + '$' + fmtAmt(Math.abs(net))"></span></div>
-    <div class="stat-sub dim"><span :text="monthLabel"></span></div>
+    <div class="stat-sub dim"><span :if="netTrend.dir" class="trend-arrow" :class="netTrend.cls" :html="trendIcon(netTrend.dir)"></span><span :text="netTrend.num"></span><span :text="netTrend.label"></span></div>
   </div>
   <div class="card-tab" :class="{['card-tab-active']: activeTab === 'expenses'}"
     :onclick="e => { switchTab('expenses'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
@@ -81,8 +81,8 @@
               <button :if="x.status === 'submitted' && !myApprovals[x.id]" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickApprove(x)">Approve</button>
               <span :if="x.status === 'submitted' && myApprovals[x.id]" class="dim" style="font-size:var(--f-sm)" title="You approved this — awaiting co-approval">✓ Approved</span>
               <button :if="x.status === 'approved'" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickPay(x)">Paid</button>
-              <button :if="x.status === 'paid' && x.attachments?.length" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickClose(x)">Close</button>
-              <button :if="x.status === 'paid' && !x.attachments?.length" class="btn-quick" :onclick="attachExpense(x)" title="Attach receipt to close">Attach receipt</button>
+              <button :if="x.status === 'paid' && x.attachment_count" class="btn-quick btn-quick-approve" :class="{'btn-loading': quickLoading[x.id]}" :onclick="quickClose(x)">Close</button>
+              <button :if="x.status === 'paid' && !x.attachment_count" class="btn-quick" :onclick="attachExpense(x)" title="Attach receipt to close">Attach receipt</button>
             </td>
           </tr>
           <tr :if="!expenses.length && !loading && !expSearch">
@@ -229,12 +229,10 @@
   import { icon, actionIcon, statusIcon, methodIcon, activityIcon } from '../../lib/icons.js'
   import { api, BASE } from '../../lib/api.js'
 
-  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, EXP_METHODS, AMT_MAX, catCls, catHex, catBgHex, fmtStatus, fmtDate, changedAt, parseMemberNames, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName } from '../../lib/finance.js'
+  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, EXP_METHODS, AMT_MAX, catCls, catHex, catBgHex, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, changedAt, parseMemberNames, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName } from '../../lib/finance.js'
   import { formDefaults, createPrintDonation } from '../../lib/form.js'
 
   // CE processor + registration (must be before init() so CEs are defined when sprae processes DOM)
-  const fmtMonthShort = k => { if (!k?.includes('-')) return 'Undated'; const [y, m] = k.split('-'); return new Date(+y, +m - 1).toLocaleString('default', { month: 'long' }) }
-  const fmtMonth = k => { if (!k?.includes('-')) return 'Undated'; const [y, m] = k.split('-'); return new Date(+y, +m - 1).toLocaleString('default', { month: 'long', year: 'numeric' }) }
   setupProcessor(sprae, {
     fmtAmt, fmtCat, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, catCls, rawAmt, toCents, toast, hl,
     statusIcon, icon, methodIcon, activityIcon,
@@ -253,9 +251,7 @@
     }
   })
 
-  const MY_USER_ID = auth.user?.id || auth.user?.user_id || (() => {
-    try { return JSON.parse(atob(auth.token.split('.')[1])).user_id || null } catch { return null }
-  })()
+  const MY_USER_ID = auth.userId
 
   if (!auth.can('income:view') && !auth.can('expenses:view')) {
     location.replace(new URL('../', location.href).href)
@@ -605,10 +601,10 @@
       return this.can('expenses:approve') && (x?.status || 'submitted') === 'approved' && !this.quickLoading[x.id]
     },
     expenseCanQuickClose(x) {
-      return this.can('expenses:approve') && (x?.status || '') === 'paid' && x.attachments?.length > 0 && !this.quickLoading[x.id]
+      return this.can('expenses:approve') && (x?.status || '') === 'paid' && x.attachment_count > 0 && !this.quickLoading[x.id]
     },
     expensePaidNoReceipt(x) {
-      return this.can('expenses:approve') && (x?.status || '') === 'paid' && !x.attachments?.length && !this.quickLoading[x.id]
+      return this.can('expenses:approve') && (x?.status || '') === 'paid' && !x.attachment_count && !this.quickLoading[x.id]
     },
     attachExpense(x) {
       this.showExpForm = true
@@ -654,6 +650,14 @@
     },
 
     get net() { return this.incMonth - this.expMonth },
+    get netTrend() {
+      const cur = this.net, prev = this.incPrevMonth - this.expPrevMonth
+      if (!cur && !prev) return { cls: '', dir: '', num: '', label: 'No data yet' }
+      const d = cur - prev
+      if (d === 0) return { cls: '', dir: '', num: '', label: 'Same as last month' }
+      const sign = d > 0 ? '+' : '\u2212'
+      return { cls: d > 0 ? 'stat-ok' : 'stat-err', dir: d > 0 ? 'up' : 'down', num: sign + '$' + fmtAmt(Math.abs(d)), label: ' from last month' }
+    },
 
     trend(cur, prev, invert) {
       if (!cur && !prev) return { cls: '', dir: '', num: '', label: 'No data yet' }

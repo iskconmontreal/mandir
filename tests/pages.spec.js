@@ -82,7 +82,7 @@ test.describe('overview donations', () => {
 
     const now = new Date().toISOString()
     const expenses = [
-      { id: 1, amount: 4200, payee: 'Govindas Supplies', category: 'kitchen', expense_date: now.slice(0, 10), created_at: now, updated_at: now, status: 'approved', created_by: 2 },
+      { id: 1, amount: 4200, payee: 'Govindas Supplies', category: 'kitchen', expense_date: now.slice(0, 10), created_at: now, updated_at: now, status: 'approved', created_by: 2, updated_by: 9 },
     ]
     const members = [
       { id: 101, user_id: 9, data: { name: 'Madhava Prabhu' } },
@@ -100,9 +100,6 @@ test.describe('overview donations', () => {
       if (path === '/api/me/donations/summary' && method === 'GET') return route.fulfill({ json: { total: 0, count: 0, by_category: {} } })
       if (path === '/api/me/tax-receipts' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
       if (path === '/api/finance/summary' && method === 'GET') return route.fulfill({ json: { items: [], total: 0 } })
-      if (path === '/api/audit' && method === 'GET') {
-        return route.fulfill({ json: { items: [{ id: 1, entity_id: 1, entity_type: 'expense', user_id: 9, action: 'update', created_at: now }], total: 1 } })
-      }
       return route.fulfill({ json: { items: [], total: 0 } })
     })
 

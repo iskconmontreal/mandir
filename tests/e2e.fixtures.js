@@ -46,10 +46,10 @@ export async function freshLogin(role = 'admin') {
 export async function loginAsReal(page, role = 'admin') {
   const { token, user, refresh_token } = await fetchToken(role)
   await page.addInitScript(([t, u, api, rt]) => {
-    localStorage.setItem('mandala_token', t)
-    localStorage.setItem('mandala_user', JSON.stringify(u))
-    localStorage.setItem('mandala_api', api)
-    if (rt) localStorage.setItem('mandala_refresh', rt)
+    localStorage.setItem('mandir_token', t)
+    localStorage.setItem('mandir_user', JSON.stringify(u))
+    localStorage.setItem('mandir_api', api)
+    if (rt) localStorage.setItem('mandir_refresh', rt)
   }, [token, user, API, refresh_token])
   return token
 }

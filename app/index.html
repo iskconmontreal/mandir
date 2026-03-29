@@ -25,7 +25,7 @@
       <button :if="can('expenses:create')" class="btn btn-primary" :onclick="showExpForm = true; expFormDetail = null; expFormMode = 'create'">+ Expense</button>
     </div>
     <div :if="recentExpenses.length" class="recent-exp-list">
-      <recent-expenses :items="recentExpenses" :actors="recentExpenseActors" :usernames="userNames" :myuserid="MY_USER_ID"
+      <recent-expenses :items="recentExpenses" :usernames="userNames" :myuserid="MY_USER_ID"
         :onview.delay-0="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"></recent-expenses>
     </div>
     <div :if="!recentExpenses.length" class="dim" style="font-size:var(--f-sm); padding:var(--s-sm) 0">No recent expenses</div>
@@ -167,13 +167,11 @@
   const monthStart = `${y}-${m}-01`
   const monthEnd = `${y}-${m}-31`
 
-  const prev = +localStorage.getItem('mandala_last_visit') || 0
-  localStorage.setItem('mandala_last_visit', Date.now())
+  const prev = +localStorage.getItem('mandir_last_visit') || 0
+  localStorage.setItem('mandir_last_visit', Date.now())
   const vis = prev ? (Date.now() - prev) / 3600000 : Infinity
 
-  const MY_USER_ID = auth.user?.id || auth.user?.user_id || (() => {
-    try { return JSON.parse(atob(auth.token.split('.')[1])).user_id || null } catch { return null }
-  })()
+  const MY_USER_ID = auth.userId
 
   setupProcessor(sprae, {
     fmtAmt, fmtCat, fmtStatus, fmtDate, catCls, rawAmt, toCents, toast,
@@ -196,7 +194,6 @@
     giving: { total: 0, count: 0, byCategory: {}, receipts: [] },
     myExpenses: [],
     recentExpenses: [],
-    recentExpenseActors: {},
     recentIncome: [],
     showOwnExpenses: !auth.can('income:create') && !auth.can('expenses:approve'),
     showExpForm: false,
@@ -238,16 +235,7 @@
       auth.can('expenses:view') ? api.getExpenses({ limit: 8, sortBy: 'updated_at', sortDesc: 'true' }).catch(() => ({ items: [] })) : { items: [] },
       auth.can('income:view') ? api.getIncome({ limit: 8, sortBy: 'updated_at', sortDesc: 'true', dateFrom: monthStart, dateTo: monthEnd }).catch(() => ({ items: [] })) : { items: [] },
     ])
-    const recentExpenses = exp.items || []
-    const recentExpenseLogs = await Promise.all(recentExpenses.map(async row => {
-      if (!row?.id || row?.updated_by || row?._recentActorId) return null
-      const logs = await api.getAuditLogs({ entity_type: 'expense', entity_id: row.id, limit: 10, sortBy: 'created_at', sortDesc: 'true' }).catch(() => ({ items: [] }))
-      const items = logs?.items || logs || []
-      return [row.id, items.find(log => log?.user_id)?.user_id || null]
-    }))
-    const actorById = Object.fromEntries(recentExpenseLogs.filter(Boolean))
-    s.recentExpenseActors = { ...s.recentExpenseActors, ...actorById }
-    s.recentExpenses = recentExpenses.map(row => actorById[row.id] ? { ...row, _recentActorId: actorById[row.id] } : row)
+    s.recentExpenses = exp.items || []
     s.recentIncome = (inc.items || []).filter(d => (d?.type || 'income') === 'donation')
   }
 

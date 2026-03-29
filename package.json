@@ -1,5 +1,5 @@
 {
-  "name": "mandala",
+  "name": "mandir",
   "private": true,
   "scripts": {
     "start": "bundle exec jekyll serve",

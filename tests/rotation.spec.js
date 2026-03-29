@@ -20,10 +20,10 @@ async function freshLogin(role = 'admin') {
 
 function setupSession(page, session, withRefresh = true) {
   return page.evaluate(({ token, user, refresh_token, api, store_refresh }) => {
-    localStorage.setItem('mandala_token', token)
-    localStorage.setItem('mandala_user', JSON.stringify(user))
-    localStorage.setItem('mandala_api', api)
-    if (store_refresh && refresh_token) localStorage.setItem('mandala_refresh', refresh_token)
+    localStorage.setItem('mandir_token', token)
+    localStorage.setItem('mandir_user', JSON.stringify(user))
+    localStorage.setItem('mandir_api', api)
+    if (store_refresh && refresh_token) localStorage.setItem('mandir_refresh', refresh_token)
   }, { ...session, api: API, store_refresh: withRefresh })
 }
 
@@ -48,7 +48,7 @@ test.describe('jwt rotation (10s expiry)', () => {
     })
 
     expect(result).toBe('ok')
-    const newToken = await page.evaluate(() => localStorage.getItem('mandala_token'))
+    const newToken = await page.evaluate(() => localStorage.getItem('mandir_token'))
     expect(newToken).toBeTruthy()
     expect(newToken).not.toBe(session.token)
   })
@@ -93,7 +93,7 @@ test.describe('jwt rotation (10s expiry)', () => {
 
     const failed = results.filter(r => !r.ok)
     expect(failed).toHaveLength(0)
-    const newToken = await page.evaluate(() => localStorage.getItem('mandala_token'))
+    const newToken = await page.evaluate(() => localStorage.getItem('mandir_token'))
     expect(newToken).not.toBe(session.token)
   })
 })

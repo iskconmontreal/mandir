@@ -27,13 +27,13 @@ npm run start:https # https://localhost:4000 (HTTPS, optional)
 Point to a local Goloka instance via browser console:
 
 ```js
-localStorage.setItem('mandala_api', 'http://localhost:8080')
+localStorage.setItem('mandir_api', 'http://localhost:8080')
 ```
 
 Revert to production:
 
 ```js
-localStorage.removeItem('mandala_api')
+localStorage.removeItem('mandir_api')
 ```
 
 ## Tests
@@ -45,9 +45,19 @@ npm test        # headless
 npm run test:ui # interactive UI
 ```
 
+## Deploy
+
+GitHub Pages builds and serves the site automatically on push to `main`.
+
+```sh
+git push origin main
+```
+
+Live at `https://iskconmontreal.github.io/mandir`. Backend API at `https://api.iskconmontreal.ca` (CORS + Bearer token).
+
 ## HTTPS mode (optional)
 
-Production is served over HTTPS natively (GitHub Pages). For local HTTPS testing:
+For local HTTPS testing:
 
 ```sh
 mkdir -p .ssl

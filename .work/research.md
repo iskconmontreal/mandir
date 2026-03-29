@@ -33,6 +33,14 @@
   * Courses?
 * Archive/library?
 * Aratis boards
+* Issues / Tickets
+  * Anyone can submit a request, feedback, or report a problem
+  * Temple management tracks projects and tasks
+  * Categories: maintenance, suggestion, complaint, request, project
+  * Visibility: public (community can see status) vs internal (admin-only)
+  * Simple states: open → in progress → done / closed
+  * Assignable to a person or team
+  * Could tie into volunteering (issue needs hands → volunteer opportunity)
 
 ## Inventory
 
@@ -42,7 +50,6 @@
 
 ## Ideas
 
-* Report / Feedback system
 * LLM: Agent/chatbot
 * Legal info
 * Documents: initiation, pledge etc.

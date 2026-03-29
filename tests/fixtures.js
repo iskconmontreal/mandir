@@ -26,8 +26,8 @@ export function loginAs(page, role = 'treasurer') {
   const token = TOKENS[role]
   const user = USERS[role] ?? USERS.treasurer
   return page.addInitScript(([t, u]) => {
-    localStorage.setItem('mandala_token', t)
-    localStorage.setItem('mandala_user', JSON.stringify(u))
+    localStorage.setItem('mandir_token', t)
+    localStorage.setItem('mandir_user', JSON.stringify(u))
   }, [token, user])
 }
 

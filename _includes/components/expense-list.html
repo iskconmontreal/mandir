@@ -43,22 +43,18 @@
                       <time class="recent-exp-time" :datetime="x.expense_date || x.created_at || ''" :title="(x.expense_date || x.created_at) ? new Date(x.expense_date || x.created_at).toLocaleString() : ''" :text="fmtDate(x.expense_date || x.created_at)"></time>
                     </div>
                   </div>
-                  <div :if="x.attachments?.length" class="row-attachments">
-                    <img :each="a in (x.attachments || []).slice(0, 4)" :if="a.mime_type?.startsWith('image/')" class="row-attach-thumb" :src="apiBase + '/' + a.file_path" :alt="a.original_name">
-                    <span :each="a in (x.attachments || []).slice(0, 4)" :if="!a.mime_type?.startsWith('image/')" class="row-attach-file" :title="a.original_name" :html="icon('attach')"></span>
-                  </div>
                 </div>
                 <span :if="canapprove" class="recent-exp-actions" :onclick.stop="">
                   <span :if="quickloading[x.id]" class="load-spinner" aria-label="Working"></span>
                   <button :if="x.status === 'submitted' && !quickloading[x.id] && !myapprovals[x.id]" type="button" class="btn btn-sm btn-outline" aria-label="Quick approve expense" :onclick.stop="e => _emit('approve', x)" :html="approveIcon + ' Approve'"></button>
                   <span :if="x.status === 'submitted' && myapprovals[x.id] && !quickloading[x.id]" class="dim" aria-label="Approved by you" style="font-size:var(--f-sm)" title="You approved this — awaiting co-approval">✓ Approved</span>
                   <button :if="x.status === 'approved' && !quickloading[x.id]" type="button" class="btn btn-sm btn-outline" aria-label="Mark as paid" :onclick.stop="e => _emit('pay', x)" :html="payIcon + ' Paid'"></button>
-                  <button :if="x.status === 'paid' && !x.attachments?.length && !quickloading[x.id]" type="button" class="btn btn-sm btn-outline" :onclick.stop="e => _emit('attach', x)">Attach receipt</button>
+                  <button :if="x.status === 'paid' && !x.attachment_count && !quickloading[x.id]" type="button" class="btn btn-sm btn-outline" :onclick.stop="e => _emit('attach', x)">Attach receipt</button>
                 </span>
                 <div class="recent-exp-cat">
-                  <span :if="x.attachments?.length" class="recent-exp-attach" :title="x.attachments.length + ' document' + (x.attachments.length > 1 ? 's' : '')">
+                  <span :if="x.attachment_count" class="recent-exp-attach" :title="x.attachment_count + ' document' + (x.attachment_count > 1 ? 's' : '')">
                     <span class="recent-exp-attach-icon" :html="icon('attach')"></span>
-                    <span :if="x.attachments.length > 1" class="recent-exp-attach-count" :text="x.attachments.length"></span>
+                    <span :if="x.attachment_count > 1" class="recent-exp-attach-count" :text="x.attachment_count"></span>
                   </span>
                   <span class="badge" :class="catCls(x.category || 'other')" :text="fmtCat(x.category || 'other')"></span>
                 </div>

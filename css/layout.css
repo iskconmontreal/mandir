@@ -2077,6 +2077,9 @@ form {
 .finance-month-wrap-open {
   padding-bottom: var(--s-sm);
 }
+.finance-month-wrap-open + .finance-month-wrap-divider .exp-group-header {
+  border-top-color: transparent;
+}
 .exp-group-header {
   display: grid;
   align-items: center;

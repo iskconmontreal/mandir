@@ -16,10 +16,6 @@
               <time class="recent-inc-time" :datetime="d.date_received || d.created_at || ''" :title="(d.date_received || d.created_at) ? new Date(d.date_received || d.created_at).toLocaleString() : ''" :text="fmtDate(d.date_received || d.created_at)"></time>
             </div>
           </div>
-          <div :if="d.attachments?.length" class="row-attachments">
-            <img :each="a in (d.attachments || []).slice(0, 4)" :if="a.mime_type?.startsWith('image/')" class="row-attach-thumb" :src="apiBase + '/' + a.file_path" :alt="a.original_name">
-            <span :each="a in (d.attachments || []).slice(0, 4)" :if="!a.mime_type?.startsWith('image/')" class="row-attach-file" :title="a.original_name" :html="icon('attach')"></span>
-          </div>
         </div>
         <div class="recent-inc-type">
           <span class="badge" :class="catCls(kind(d))" :text="fmtCat(kind(d))"></span>

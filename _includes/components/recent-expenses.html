@@ -1,5 +1,5 @@
 <define-element>
-  <recent-expenses items:array actors:object usernames:object myuserid:number>
+  <recent-expenses items:array usernames:object myuserid:number>
     <style>:host { display: contents; }</style>
     <template>
       <div :each="x in items" class="recent-exp-item row-link" :onclick="e => emit('view', x)">
@@ -17,16 +17,11 @@
               <time class="recent-exp-time" :datetime="x.expense_date || x.created_at || ''" :title="(x.expense_date || x.created_at) ? new Date(x.expense_date || x.created_at).toLocaleString() : ''" :text="fmtDate(x.expense_date || x.created_at)"></time>
             </div>
           </div>
-          <div :if="x.attachments?.length" class="row-attachments">
-            <img :each="a in (x.attachments || []).slice(0, 4)" :if="a.mime_type?.startsWith('image/')" class="row-attach-thumb" :src="apiBase + '/' + a.file_path" :alt="a.original_name">
-            <span :each="a in (x.attachments || []).slice(0, 4)" :if="!a.mime_type?.startsWith('image/')" class="row-attach-file" :title="a.original_name" :html="icon('attach')"></span>
-            <span :if="(x.attachments || []).length > 4" class="row-attach-more" :text="'+' + (x.attachments.length - 4)"></span>
-          </div>
         </div>
         <div class="recent-exp-cat">
-          <span :if="x.attachments?.length" class="recent-exp-attach" :title="x.attachments.length + ' receipt' + (x.attachments.length > 1 ? 's' : '')">
+          <span :if="x.attachment_count" class="recent-exp-attach" :title="x.attachment_count + ' document' + (x.attachment_count > 1 ? 's' : '')">
             <span class="recent-exp-attach-icon" :html="icon('attach')"></span>
-            <span :if="x.attachments.length > 1" class="recent-exp-attach-count" :text="x.attachments.length"></span>
+            <span :if="x.attachment_count > 1" class="recent-exp-attach-count" :text="x.attachment_count"></span>
           </span>
           <span class="badge" :class="catCls(x.category || 'other')" :text="fmtCat(x.category || 'other')"></span>
         </div>
@@ -43,8 +38,8 @@
       this.reporter = function(x) {
         const st = x?.status || 'submitted'
         const uid = st === 'submitted'
-          ? (this.actors?.[x?.id] || x?._recentActorId || x?.created_by || x?.updated_by)
-          : (this.actors?.[x?.id] || x?._recentActorId || x?.updated_by || x?.created_by)
+          ? (x?.created_by || x?.updated_by)
+          : (x?.updated_by || x?.created_by)
         if (!uid) return ''
         if (uid === this.myuserid) return 'by you'
         const who = this.usernames?.[uid]

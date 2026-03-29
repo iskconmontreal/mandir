@@ -196,7 +196,7 @@ test.describe('otp flow', () => {
       return auth.deviceId
     })
     expect(deviceId).toMatch(/^[0-9a-f]{8}-/)
-    const same = await page.evaluate(() => localStorage.getItem('mandala_device'))
+    const same = await page.evaluate(() => localStorage.getItem('mandir_device'))
     expect(same).toBe(deviceId)
   })
 
@@ -229,7 +229,7 @@ test.describe('otp flow', () => {
 
     expect(verifyOtpBody.device_id).toMatch(/^[0-9a-f]{8}-/)
 
-    await page.evaluate(() => { localStorage.removeItem('mandala_token'); localStorage.removeItem('mandala_user') })
+    await page.evaluate(() => { localStorage.removeItem('mandir_token'); localStorage.removeItem('mandir_user') })
     await page.goto('/login.html')
 
     await page.locator('#email').fill('admin@test.local')
@@ -294,8 +294,8 @@ test.describe('logout', () => {
     await loginAs(page, 'viewer')
     await page.addInitScript(() => {
       if (location.pathname.endsWith('login.html')) {
-        localStorage.removeItem('mandala_token')
-        localStorage.removeItem('mandala_user')
+        localStorage.removeItem('mandir_token')
+        localStorage.removeItem('mandir_user')
       }
     })
     await page.route('https://api.iskconmontreal.ca/**', route => route.fulfill({ json: { items: [], total: 0 } }))
@@ -379,9 +379,9 @@ test.describe('keepAlive token refresh', () => {
   test('proactively refreshes token before expiry', async ({ page }) => {
     const token = mkToken([], 90)
     await page.addInitScript(([t, u]) => {
-      localStorage.setItem('mandala_token', t)
-      localStorage.setItem('mandala_user', JSON.stringify(u))
-      localStorage.setItem('mandala_refresh', 'test-refresh')
+      localStorage.setItem('mandir_token', t)
+      localStorage.setItem('mandir_user', JSON.stringify(u))
+      localStorage.setItem('mandir_refresh', 'test-refresh')
     }, [token, { name: 'Test', email: 'test@test.local' }])
 
     let refreshCalled = false
@@ -403,9 +403,9 @@ test.describe('keepAlive token refresh', () => {
   test('does not logout when proactive refresh fails', async ({ page }) => {
     const token = mkToken([], 90)
     await page.addInitScript(([t, u]) => {
-      localStorage.setItem('mandala_token', t)
-      localStorage.setItem('mandala_user', JSON.stringify(u))
-      localStorage.setItem('mandala_refresh', 'test-refresh')
+      localStorage.setItem('mandir_token', t)
+      localStorage.setItem('mandir_user', JSON.stringify(u))
+      localStorage.setItem('mandir_refresh', 'test-refresh')
     }, [token, { name: 'Test', email: 'test@test.local' }])
 
     await page.route(`${API}/auth/refresh`, route => route.fulfill({ status: 500, json: { error: 'server down' } }))
@@ -423,9 +423,9 @@ test.describe('keepAlive token refresh', () => {
   test('does not refresh when user is idle', async ({ page }) => {
     const token = mkToken([], 90)
     await page.addInitScript(([t, u]) => {
-      localStorage.setItem('mandala_token', t)
-      localStorage.setItem('mandala_user', JSON.stringify(u))
-      localStorage.setItem('mandala_refresh', 'test-refresh')
+      localStorage.setItem('mandir_token', t)
+      localStorage.setItem('mandir_user', JSON.stringify(u))
+      localStorage.setItem('mandir_refresh', 'test-refresh')
     }, [token, { name: 'Test', email: 'test@test.local' }])
 
     let refreshCalled = false
