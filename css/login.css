@@ -74,6 +74,10 @@
 }
 .quote figcaption {
   margin-top: var(--s-sm);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .quote figcaption a {
   font-size: var(--f-sm);
@@ -120,7 +124,7 @@
 }
 
 .login-form .field {
-  margin-bottom: var(--s-md);
+  margin-bottom: 0;
 }
 
 .login-form .field-password {
@@ -231,7 +235,54 @@
 
 /* Responsive */
 @media (max-width: 48rem) {
-  .login-page { grid-template-columns: 1fr; }
-  .login-brand { display: none; }
-  .login-form-panel { padding: var(--s-lg); }
+  .login-page {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100dvh;
+    background:
+      linear-gradient(
+        135deg,
+        rgba(26, 10, 62, .85) 0%,
+        rgba(74, 45, 142, .75) 30%,
+        rgba(107, 92, 231, .7) 50%,
+        rgba(167, 139, 250, .6) 70%,
+        rgba(196, 181, 253, .5) 90%
+      ),
+      url('../assets/login-bg.webp') center / cover no-repeat;
+  }
+  .login-brand { display: contents; }
+  .login-brand::before { display: none; }
+
+  .login-brand-logo {
+    order: -1;
+    justify-content: center;
+    padding: var(--s-lg) var(--s-lg) 0;
+    margin-bottom: 0;
+  }
+  .login-brand-logo img { width: 80px; height: 80px; }
+
+  .login-brand-text {
+    order: 1;
+    padding: 0 var(--s-md) var(--s-lg);
+    text-align: center;
+    margin-top: auto;
+    overflow: hidden;
+  }
+  .login-brand-text .quote blockquote {
+    font-size: var(--f-sm);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .login-form-panel {
+    padding: var(--s-lg);
+    margin: 0 var(--s-md);
+    border-radius: var(--r-lg);
+    box-shadow: var(--sh-lg);
+    align-self: center;
+  }
+  .login-form-wrap h1 { font-size: var(--f-xl); }
+  .login-form-wrap > p { margin-bottom: var(--s-md); }
+  .login-divider { margin: var(--s-md) 0; }
 }

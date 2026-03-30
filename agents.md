@@ -1,4 +1,4 @@
-# Mandala
+# Mandir
 
 Frontend for ISKCON Montreal temple internal organization management. CRM for charity: donors, expenses, members, tax receipts, reports.
 

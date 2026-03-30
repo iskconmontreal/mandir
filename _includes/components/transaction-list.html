@@ -1,5 +1,5 @@
 <define-element>
-  <transaction-list years:array mopen:object mfresh:string="" loading:boolean="false" error:string="" search:string="" empty:boolean="false" canapprove:boolean="false">
+  <transaction-list years:array mopen:object mfresh:string="" loading:boolean="false" error:string="" search:string="" empty:boolean="false" canapprove:boolean="false" quickloading:object myapprovals:object>
     <style>:host { display: contents; }</style>
     <template>
       <div :if="error" class="login-error" :text="error" style="margin:var(--s-md)"></div>
@@ -42,10 +42,17 @@
                     </div>
                   </div>
                   <span :if="canapprove" class="recent-exp-actions" :onclick.stop="">
-                    <button :if="tx.status === 'submitted'" type="button" class="btn btn-sm btn-outline" aria-label="Quick approve expense" :onclick.stop="e => _emit('approve', tx)" :html="approveIcon + ' Approve'"></button>
-                    <button :if="tx.status === 'approved'" type="button" class="btn btn-sm btn-outline" aria-label="Mark as paid" :onclick.stop="e => _emit('pay', tx)" :html="payIcon + ' Paid'"></button>
+                    <span :if="quickloading[tx.id]" class="load-spinner" aria-label="Working"></span>
+                    <button :if="tx.status === 'submitted' && !quickloading[tx.id] && !myapprovals[tx.id]" type="button" class="btn btn-sm btn-outline" aria-label="Quick approve expense" :onclick.stop="e => _emit('approve', tx)" :html="approveIcon + ' Approve'"></button>
+                    <span :if="tx.status === 'submitted' && myapprovals[tx.id] && !quickloading[tx.id]" class="dim" aria-label="Approved by you" style="font-size:var(--f-sm)" title="You approved this — awaiting co-approval">✓ Approved</span>
+                    <button :if="tx.status === 'approved' && !quickloading[tx.id]" type="button" class="btn btn-sm btn-outline" aria-label="Mark as paid" :onclick.stop="e => _emit('pay', tx)" :html="payIcon + ' Paid'"></button>
+                    <button :if="tx.status === 'paid' && !tx.attachment_count && !quickloading[tx.id]" type="button" class="btn btn-sm btn-outline" :onclick.stop="e => _emit('attach', tx)">Attach receipt</button>
                   </span>
                   <div class="recent-exp-cat">
+                    <span :if="tx.attachment_count" class="recent-exp-attach" :title="tx.attachment_count + ' document' + (tx.attachment_count > 1 ? 's' : '')">
+                      <span class="recent-exp-attach-icon" :html="icon('attach')"></span>
+                      <span :if="tx.attachment_count > 1" class="recent-exp-attach-count" :text="tx.attachment_count"></span>
+                    </span>
                     <span class="badge" :class="catCls(tx.category || 'other')" :text="fmtCat(tx.category || 'other')"></span>
                   </div>
                   <div class="recent-exp-amount">

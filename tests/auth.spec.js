@@ -289,6 +289,68 @@ test.describe('otp flow', () => {
   })
 })
 
+test.describe('login payload verification', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok' } }))
+  })
+
+  test('email step sends email in request body', async ({ page }) => {
+    await page.goto('/login.html')
+    let captured
+    await page.route('**/auth/login', route => {
+      captured = route.request().postDataJSON()
+      route.fulfill({ json: { step: 'otp_required' } })
+    })
+    await page.locator('#email').fill('devotee@temple.local')
+    await page.locator('button[type="submit"]').click()
+    await expect(page.locator('#otp')).toBeVisible()
+    expect(captured.email).toBe('devotee@temple.local')
+  })
+
+  test('password step sends email and password in request body', async ({ page }) => {
+    await page.goto('/login.html')
+    const payloads = []
+    await page.route('**/auth/login', route => {
+      const body = route.request().postDataJSON()
+      payloads.push(body)
+      if (!body.password) {
+        return route.fulfill({ json: { step: 'password_required' } })
+      }
+      return route.fulfill({ json: { step: 'otp_required' } })
+    })
+    await page.locator('#email').fill('admin@temple.local')
+    await page.locator('button[type="submit"]').click()
+    await expect(page.locator('#password')).toBeVisible()
+    await page.locator('#password').fill('s3cret!')
+    await page.locator('button[type="submit"]').click()
+    await expect(page.locator('#otp')).toBeVisible()
+    // First call: email step
+    expect(payloads[0].email).toBe('admin@temple.local')
+    expect(payloads[0].password).toBe('')
+    // Second call: password step
+    expect(payloads[1].email).toBe('admin@temple.local')
+    expect(payloads[1].password).toBe('s3cret!')
+  })
+
+  test('otp verify sends email and otp in request body', async ({ page }) => {
+    await page.goto('/login.html')
+    await page.route('**/auth/login', route => route.fulfill({ json: { step: 'otp_required' } }))
+    let verifyBody
+    await page.route('**/auth/verify-otp', route => {
+      verifyBody = route.request().postDataJSON()
+      route.fulfill({ json: { token: 'jwt', user: { name: 'Test', email: 'otp@temple.local' } } })
+    })
+    await page.locator('#email').fill('otp@temple.local')
+    await page.locator('button[type="submit"]').click()
+    await expect(page.locator('#otp')).toBeVisible()
+    await page.locator('#otp').fill('987654')
+    await page.locator('button[type="submit"]').click()
+    await expect(page).toHaveURL(/app\/index\.html/)
+    expect(verifyBody.email).toBe('otp@temple.local')
+    expect(verifyBody.otp).toBe('987654')
+  })
+})
+
 test.describe('logout', () => {
   test('sign out clears auth and redirects to login', async ({ page }) => {
     await loginAs(page, 'viewer')

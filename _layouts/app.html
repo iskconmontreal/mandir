@@ -3,11 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ page.title | default: "Home" }} — Mandala</title>
+  <title>{{ page.title | default: "Home" }} — Mandir</title>
   <link rel="modulepreload" href="{{ '/lib/sprae.js' | relative_url }}">
   <link rel="modulepreload" href="{{ '/lib/auth.js' | relative_url }}">
   <link rel="modulepreload" href="{{ '/lib/api.js' | relative_url }}">
   <link rel="modulepreload" href="{{ '/lib/app.js' | relative_url }}">
+  {% for path in page.preloads %}<link rel="modulepreload" href="{{ path | relative_url }}">
+  {% endfor %}
   <link rel="stylesheet" href="{{ '/css/tokens.css' | relative_url }}">
   <link rel="stylesheet" href="{{ '/css/base.css' | relative_url }}">
   <link rel="stylesheet" href="{{ '/css/layout.css' | relative_url }}">

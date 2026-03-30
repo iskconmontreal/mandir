@@ -651,3 +651,59 @@ test.describe('overview donations', () => {
     await expect(addModal.locator('#exp-amount')).toHaveValue('')
   })
 })
+
+test.describe('profile form payload', () => {
+  const memberData = {
+    name: 'Bhakta Joe', spiritual_name: '', email: 'joe@temple.local', phone: '514-111-2222',
+    address: '123 Street', diksa_guru: '', guiding_devotee: '', rounds: 16, rounds_years: 3,
+    four_regs_years: 2, kc_years: 5, temple: 'ISKCON Montreal', lives_in_temple: false, namahatta: false,
+    dob: '1990-01-15', gender: 'Male', nationality: 'Canadian', occupation: 'Developer',
+    marriage_status: 'Single', spouse: '', children: '', notes: '',
+  }
+
+  test('edit profile sends form values in PUT payload', async ({ page }) => {
+    await loginAs(page, 'viewer')
+    let savedPayload
+    await page.route(`${API}/**`, async route => {
+      const url = new URL(route.request().url())
+      const method = route.request().method()
+      const path = url.pathname
+      if (path === '/api/me/member' && method === 'GET') {
+        return route.fulfill({ json: { public_id: 'abc', data: JSON.stringify(memberData) } })
+      }
+      if (path === '/api/me/member' && method === 'PUT') {
+        savedPayload = route.request().postDataJSON()
+        return route.fulfill({ json: { public_id: 'abc', data: JSON.stringify(savedPayload) } })
+      }
+      if (path === '/api/me/devices') return route.fulfill({ json: [] })
+      route.fulfill({ json: { items: [], total: 0 } })
+    })
+
+    await page.goto('/app/profile.html')
+    await expect(page.locator('h1')).toHaveText('Profile')
+    await page.locator('button:has-text("Edit")').click()
+
+    // Change some fields
+    const name = page.locator('#p-name')
+    await name.fill('')
+    await name.fill('Bhakta Krishna')
+    await name.dispatchEvent('change')
+    const phone = page.locator('#p-phone')
+    await phone.fill('')
+    await phone.fill('514-999-8888')
+    await phone.dispatchEvent('change')
+    const guru = page.locator('#p-guru')
+    await guru.fill('Srila Prabhupada')
+    await guru.dispatchEvent('change')
+
+    await page.locator('button[type="submit"]:has-text("Save")').click()
+    await expect.poll(() => savedPayload).toBeTruthy()
+
+    expect(savedPayload.name).toBe('Bhakta Krishna')
+    expect(savedPayload.phone).toBe('514-999-8888')
+    expect(savedPayload.diksa_guru).toBe('Srila Prabhupada')
+    // Unchanged fields preserved
+    expect(savedPayload.email).toBe('joe@temple.local')
+    expect(savedPayload.temple).toBe('ISKCON Montreal')
+  })
+})

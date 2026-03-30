@@ -200,6 +200,10 @@
 .page-header {
   margin-bottom: var(--s-xl);
 }
+
+.section-heading {
+  margin-bottom: var(--s-xl);
+}
 .page-header h1 {
   margin-bottom: var(--s-xs);
 }
@@ -2571,9 +2575,15 @@ form {
 /* Responsive */
 @media (max-width: 48rem) {
   .topbar { padding: var(--s-sm) var(--s-md); }
+  .topbar-brand img { width: 40px; height: 40px; }
+  h1 { font-size: var(--f-xl); }
   .nav-item { padding: var(--s-xs) var(--s-sm); font-size: 0; }
   .nav-item svg { width: 1.25rem; height: 1.25rem; }
   .main { padding: var(--s-lg); }
+  .page-header { margin-bottom: var(--s-md); }
+  .section-heading { margin-bottom: var(--s-sm); }
+  .card { padding: var(--s-md); }
+  .card-header { margin-bottom: var(--s-sm); }
   .finance-month-label-desktop,
   .finance-year-sticky {
     display: none;

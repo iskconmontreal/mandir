@@ -1,4 +1,4 @@
-# Mandala
+# Mandir
 
 Frontend for ISKCON Montreal temple management — donations, expenses, members, tax receipts. Talks to [Goloka](https://github.com/iskconmontreal/goloka) backend.
 

@@ -1,4 +1,10 @@
 ---
+preloads:
+  - /lib/processor.js
+  - /lib/greeting.js
+  - /lib/finance.js
+  - /lib/form.js
+  - /lib/icons.js
 ---
 <div class="page-header">
   <h1 :text="'Hare Krishna, ' + (user?.meta?.spiritual_name || user?.meta?.name || user?.email?.split('@')[0] || 'Prabhu') + '!'"></h1>
@@ -6,7 +12,7 @@
 </div>
 
 <!-- Finance -->
-<div :if="can('income:view') || can('expenses:view')" style="margin-bottom:var(--s-xl)">
+<div :if="can('income:view') || can('expenses:view')" class="section-heading">
   <div class="card-header" style="margin-bottom:var(--s-sm)">
     <a href="finance/" class="section-head-link">
       <h3 class="section-title-row">Finance</h3>
@@ -130,7 +136,7 @@
   .recent-grid .recent-inc-list .recent-inc-item:last-child { border-bottom: none; }
 </style>
 
-<script src="../lib/define-element.js"></script>
+<script src="../lib/define-element.js" defer></script>
 {% include components/recent-expenses.html %}
 {% include components/recent-donations.html %}
 {% include components/my-expense-table.html %}

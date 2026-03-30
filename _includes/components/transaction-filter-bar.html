@@ -26,15 +26,15 @@
               <label>Amount range</label>
               <div class="range-track">
                 <div class="range-hist" :if="amthist.length">
-                  <span :each="(h, i) in amthist" class="range-hist-bar" :style="'height:' + (h * 100) + '%'" :class="{'range-hist-bar-dim': i < (amtlo / amtceil * amthist.length) || i >= (amthi / amtceil * amthist.length)}"></span>
+                  <span :each="(h, i) in amthist" class="range-hist-bar" :style="'height:' + (h * 100) + '%'" :class="{'range-hist-bar-dim': i < (_amtToPos(amtlo) / 1000 * amthist.length) || i >= (_amtToPos(amthi) / 1000 * amthist.length)}"></span>
                 </div>
-                <div class="range-slider" :ref="el => { el.style.setProperty('--lh', (amtlo / amtceil * 100) + '%'); el.style.setProperty('--rh', (amthi / amtceil * 100) + '%') }">
-                  <input type="range" class="range-lo" min="0" :max="amtceil" step="1"
-                    :ref="el => { el.max = amtceil; el.value = amtlo }"
-                    :oninput="e => { var v = Math.min(+e.target.value, amthi); e.target.value = v; _rangeSync(e, v, true) }">
-                  <input type="range" class="range-hi" min="0" :max="amtceil" step="1"
-                    :ref="el => { el.max = amtceil; el.value = amthi }"
-                    :oninput="e => { var v = Math.max(+e.target.value, amtlo); e.target.value = v; _rangeSync(e, v, false) }">
+                <div class="range-slider" :ref="el => { el.style.setProperty('--lh', (_amtToPos(amtlo) / 10) + '%'); el.style.setProperty('--rh', (_amtToPos(amthi) / 10) + '%') }">
+                  <input type="range" class="range-lo" min="0" max="1000" step="1"
+                    :ref="el => { el.value = _amtToPos(amtlo) }"
+                    :oninput="e => { var p = Math.min(+e.target.value, _amtToPos(amthi)); e.target.value = p; _rangeSync(e, p, true) }">
+                  <input type="range" class="range-hi" min="0" max="1000" step="1"
+                    :ref="el => { el.value = _amtToPos(amthi) }"
+                    :oninput="e => { var p = Math.max(+e.target.value, _amtToPos(amtlo)); e.target.value = p; _rangeSync(e, p, false) }">
                 </div>
               </div>
               <div style="display:flex;gap:var(--s-sm);align-items:center">
@@ -76,16 +76,31 @@
         this._amtTimer = setTimeout(() => this._change(patch), 500)
       }
 
-      this._rangeSync = function(e, v, isLo) {
+      this._amtToPos = function(amt) {
+        var c = this.amtceil
+        if (!c || !amt || amt <= 0) return 0
+        if (amt >= c) return 1000
+        return Math.round(Math.log(amt + 1) / Math.log(c + 1) * 1000)
+      }
+
+      this._posToAmt = function(pos) {
+        var c = this.amtceil
+        if (!c || pos <= 0) return 0
+        if (pos >= 1000) return c
+        return Math.round(Math.exp(pos / 1000 * Math.log(c + 1)) - 1)
+      }
+
+      this._rangeSync = function(e, pos, isLo) {
+        var v = this._posToAmt(pos)
         var slider = e.target.closest('.range-slider')
         if (slider) {
-          if (isLo) slider.style.setProperty('--lh', (v / this.amtceil * 100) + '%')
-          else slider.style.setProperty('--rh', (v / this.amtceil * 100) + '%')
+          if (isLo) slider.style.setProperty('--lh', (pos / 10) + '%')
+          else slider.style.setProperty('--rh', (pos / 10) + '%')
         }
-        if (isLo) this.amtlo = v; else this.amthi = v >= this.amtceil ? this.amtceil : v
+        if (isLo) this.amtlo = v; else this.amthi = pos >= 1000 ? this.amtceil : v
         var numEl = this.host.querySelector('input[type="number"][placeholder="' + (isLo ? 'Min' : 'Max') + '"]')
-        if (numEl) numEl.value = isLo ? v : (v >= this.amtceil ? '' : v)
-        var patch = isLo ? { amtmin: v } : { amtmax: v >= this.amtceil ? '' : v }
+        if (numEl) numEl.value = isLo ? (v || '') : (pos >= 1000 ? '' : v)
+        var patch = isLo ? { amtmin: v || '' } : { amtmax: pos >= 1000 ? '' : v }
         this._changeDebounced(patch)
       }
     </script>

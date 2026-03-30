@@ -1,4 +1,9 @@
 ---
+preloads:
+  - /lib/processor.js
+  - /lib/finance.js
+  - /lib/form.js
+  - /lib/icons.js
 ---
 <div class="page-header" style="display:flex; align-items:baseline; justify-content:space-between">
   <h1>Finance</h1>
@@ -182,17 +187,19 @@
 
   <transaction-list
     :years="netYearGroups" :mopen="netMonthOpen" :mfresh="netMonthFresh" :search="netSearch" :loading="loading" :error="loadErr"
+    :quickloading="quickLoading" :myapprovals="myApprovals"
     :empty="!loading && !netFiltered.length" :canapprove="can('expenses:approve')"
     :onviewexp.delay-0="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"
     :onviewinc.delay-0="e => openDonDetail(e.detail)"
     :onapprove="e => expenseQuickApprove(e.detail)"
     :onpay="e => expenseQuickPay(e.detail)"
+    :onattach="e => attachExpense(e.detail)"
     :ontoggle.delay-0="e => toggleNetMonth(e.detail)">
   </transaction-list>
 
 </section>
 
-<script src="../../lib/define-element.js"></script>
+<script src="../../lib/define-element.js" defer></script>
 {% include components/expense-list.html %}
 {% include components/income-list.html %}
 {% include components/transaction-list.html %}
@@ -289,7 +296,8 @@
   function amtHist(items, ceil) {
     if (!items.length || !ceil) return []
     const bins = new Array(HIST_BINS).fill(0)
-    for (const r of items) { const a = r.amount || 0; if (a > 0) bins[Math.min(Math.floor(a / ceil * HIST_BINS), HIST_BINS - 1)]++ }
+    const ceilLog = Math.log(ceil + 1)
+    for (const r of items) { const a = (r.amount || 0) / 100; if (a > 0) bins[Math.min(Math.floor(Math.log(a + 1) / ceilLog * HIST_BINS), HIST_BINS - 1)]++ }
     const max = Math.max(1, ...bins)
     return bins.map(n => n / max)
   }
@@ -678,7 +686,7 @@
     get expAmtLo() { return this.expAmtMin || 0 },
     get expAmtHi() { return this.expAmtMax || this.expAmtCeil },
     get expAmtCeil() { return Math.ceil(Math.max(AMT_MAX, ...this.expenses.map(r => r.amount || 0)) / 100) },
-    get expAmtHist() { return amtHist(this.expenses, this.expAmtCeil * 100) },
+    get expAmtHist() { return amtHist(this.expenses, this.expAmtCeil) },
     expView: 'list',
     expSortBy: 'created_at', expSortDir: 'desc',
     expCols: [
@@ -751,7 +759,11 @@
       })
     },
     get expYearGroups() {
-      const years = groupMonthsByYear(this.expGrouped)
+      const metaLoaded = Object.keys(this.expMonthMeta).length > 0
+      const months = metaLoaded
+        ? this.expGrouped.filter(g => g.count > 0 || g.total > 0 || this.isExpMonthOpen(g.key))
+        : this.expGrouped
+      const years = groupMonthsByYear(months)
       for (const yr of years) for (const g of yr.items) {
         g.breakdown = this.expMonthBreakdown(g.key).map(seg => ({
           ...seg,
@@ -759,7 +771,7 @@
           style: `--seg-color:${seg.color};--seg-hover-color:${seg.isOther ? 'var(--c-cat-gray)' : catHex(seg.category || 'other')};width:${Math.max(seg.pct, 2)}%`,
         }))
       }
-      return years
+      return years.filter(yr => yr.items.length > 0)
     },
     fmtMonth(key) {
       if (!key?.includes('-')) return 'Undated'
@@ -895,7 +907,7 @@
     get donAmtLo() { return this.donAmtMin || 0 },
     get donAmtHi() { return this.donAmtMax || this.donAmtCeil },
     get donAmtCeil() { return Math.ceil(Math.max(AMT_MAX, ...this.donations.map(r => r.amount || 0)) / 100) },
-    get donAmtHist() { return amtHist(this.donations, this.donAmtCeil * 100) },
+    get donAmtHist() { return amtHist(this.donations, this.donAmtCeil) },
     get donFiltered() {
       const q = this.donSearch.toLowerCase()
       return this.donations.filter(r => {
@@ -928,7 +940,8 @@
       return this.donGrouped.filter(group => group.count || group.total).map(group => group.key)
     },
     get donYearGroups() {
-      const years = groupMonthsByYear(this.donGrouped)
+      const months = this.donGrouped.filter(g => g.count > 0 || g.total > 0 || this.isDonMonthOpen(g.key))
+      const years = groupMonthsByYear(months)
       for (const yr of years) for (const g of yr.items) {
         g.breakdown = this.donMonthBreakdown(g.key).map(seg => ({
           ...seg,
@@ -936,7 +949,7 @@
           style: `--seg-color:${seg.color};--seg-hover-color:${seg.isOther ? 'var(--c-cat-gray)' : catHex(seg.category || 'other')};width:${Math.max(seg.pct, 2)}%`,
         }))
       }
-      return years
+      return years.filter(yr => yr.items.length > 0)
     },
     get donRenderYearGroups() {
       return this.donFiltered.length ? this.donYearGroups : []
@@ -1019,7 +1032,7 @@
     get netAmtLo() { return this.netAmtMin || 0 },
     get netAmtHi() { return this.netAmtMax || this.netAmtCeil },
     get netAmtCeil() { return Math.ceil(Math.max(AMT_MAX, ...this.netTransactions.map(r => r.amount || 0)) / 100) },
-    get netAmtHist() { return amtHist(this.netTransactions, this.netAmtCeil * 100) },
+    get netAmtHist() { return amtHist(this.netTransactions, this.netAmtCeil) },
     netMonthOpen: monthOpenState(defaultMonthKeys),
     netMonthFresh: '',
     get netTransactions() {
@@ -1057,7 +1070,10 @@
         return { key, items, count: items.length, total: income + expense, net: income - expense }
       })
     },
-    get netYearGroups() { return groupMonthsByYear(this.netGrouped) },
+    get netYearGroups() {
+      const months = this.netGrouped.filter(g => g.count > 0)
+      return groupMonthsByYear(months).filter(yr => yr.items.length > 0)
+    },
     isNetMonthOpen(key) { return !!this.netMonthOpen[key] },
     isNetMonthDividerVisible(key) {
       const idx = this.netMonthKeys.indexOf(key)
@@ -1232,20 +1248,28 @@
     clearTimeout(_rangeT)
     _rangeT = setTimeout(() => s.patchState(patch), 450)
   }
+  function amtToPos(amt, ceil) {
+    if (!amt || amt <= 0 || !ceil) return 0
+    if (amt >= ceil) return 1000
+    return Math.round(Math.log(amt + 1) / Math.log(ceil + 1) * 1000)
+  }
   function syncRangeVars() {
     const sliders = document.querySelectorAll('.range-slider')
     const sets = [
       [s.expAmtLo, s.expAmtHi, s.expAmtCeil],
       [s.donAmtLo, s.donAmtHi, s.donAmtCeil],
+      [s.netAmtLo, s.netAmtHi, s.netAmtCeil],
     ]
     sliders.forEach((el, i) => {
       const [lo, hi, ceil] = sets[i] || sets[0]
-      el.style.setProperty('--lh', (lo / ceil * 100) + '%')
-      el.style.setProperty('--rh', (hi / ceil * 100) + '%')
+      const loPos = amtToPos(lo, ceil)
+      const hiPos = amtToPos(hi, ceil)
+      el.style.setProperty('--lh', (loPos / 10) + '%')
+      el.style.setProperty('--rh', (hiPos / 10) + '%')
       const loInput = el.querySelector('.range-lo')
       const hiInput = el.querySelector('.range-hi')
-      if (loInput) { loInput.max = ceil; loInput.value = lo }
-      if (hiInput) { hiInput.max = ceil; hiInput.value = hi }
+      if (loInput) { loInput.max = 1000; loInput.value = loPos }
+      if (hiInput) { hiInput.max = 1000; hiInput.value = hiPos }
     })
   }
 
@@ -1454,7 +1478,7 @@
     s.expRefreshing = hasVisibleExpenses
     s.loadErr = null
     s.expPage = 1; s.donPage = 1; s.donorPage = 1
-    const dateP = { dateFrom: `${curYear}-01-01`, dateTo: `${curYear}-12-31` }
+    const dateP = { dateFrom: `${curYear - 2}-01-01`, dateTo: `${curYear}-12-31` }
     const nextExpMonthOpen = monthOpenState(s.expMonthKeys, s.expMonthOpen)
     const openMonthKeys = Object.entries(nextExpMonthOpen).filter(([, open]) => open).map(([key]) => key)
     try {
@@ -1512,7 +1536,7 @@
 
   s.loadAll = loadAll
 
-  function refreshMonthOpen(prop, keys, ensureFirst) {
+  function refreshMonthOpen(prop, keys, ensureFirst, hasDataFn) {
     const prev = s[prop]
     const keySet = new Set(keys)
     let changed = false
@@ -1520,10 +1544,10 @@
     for (const k of Object.keys(prev)) {
       if (!keySet.has(k)) { delete prev[k]; changed = true }
     }
-    // add new keys with defaults
+    // add new keys with defaults — only auto-open current/prev if they have data
     for (const key of keys) {
       if (!(key in prev)) {
-        prev[key] = key === currentMonthKey || key === prevMonthKey
+        prev[key] = (key === currentMonthKey || key === prevMonthKey) && (hasDataFn ? hasDataFn(key) : true)
         changed = true
       }
     }
@@ -1536,15 +1560,17 @@
   }
 
   function refreshExpMonthOpen() {
-    refreshMonthOpen('expMonthOpen', s.expMonthKeys)
+    const meta = s.expMonthMeta
+    refreshMonthOpen('expMonthOpen', s.expMonthKeys, false,
+      key => { const m = meta[key]; return !m || m.count > 0 || m.total > 0 })
   }
 
   function refreshDonMonthOpen() {
     const keys = s.donMonthKeys
-    refreshMonthOpen('donMonthOpen', keys)
+    const visibleSet = new Set(s.donVisibleMonthKeys)
+    refreshMonthOpen('donMonthOpen', keys, false, key => visibleSet.has(key))
     // ensure first visible month is open
-    const visibleKeys = s.donVisibleMonthKeys
-    const first = visibleKeys[0] || keys[0]
+    const first = s.donVisibleMonthKeys[0] || keys[0]
     if (first && !s.donMonthOpen[first]) {
       s.donMonthOpen[first] = true
       s.donMonthOpen = { ...s.donMonthOpen }
@@ -1552,7 +1578,9 @@
   }
 
   function refreshNetMonthOpen() {
-    refreshMonthOpen('netMonthOpen', s.netMonthKeys)
+    const netGrouped = s.netGrouped
+    const withData = new Set(netGrouped.filter(g => g.count > 0).map(g => g.key))
+    refreshMonthOpen('netMonthOpen', s.netMonthKeys, false, key => withData.has(key))
   }
 
 
