@@ -46,8 +46,10 @@ preloads:
       <button :if="can('income:create')" class="btn btn-primary" :onclick="showDonForm = true; donFormDetail = null">+ Donation</button>
     </div>
     <div :if="recentIncome.length" class="recent-inc-list">
-      <recent-donations :items="recentIncome" :membernames="memberNames"
-        :onview.delay-0="e => { showDonForm = true; donFormDetail = e.detail }"></recent-donations>
+      <recent-donations :items="recentIncome" :membernames="memberNames" :memberemails="memberEmails" :emailsending="emailSending"
+        :onview.delay-0="e => { showDonForm = true; donFormDetail = e.detail }"
+        :onprint="e => printDonation(e.detail)"
+        :onemail="e => emailDonationReceipt(e.detail)"></recent-donations>
     </div>
     <div :if="!recentIncome.length" class="dim" style="font-size:var(--f-sm); padding:var(--s-sm) 0">No recent donations</div>
   </div>
@@ -128,8 +130,7 @@ preloads:
   .recent-grid .recent-inc-item {
     grid-template-columns: var(--recent-inc-icon-size) minmax(0, 1fr) auto auto;
   }
-  .recent-grid .recent-exp-actions,
-  .recent-grid .recent-inc-actions { display: none; }
+  .recent-grid .recent-exp-actions { display: none; }
   .recent-grid .recent-exp-meta-row,
   .recent-grid .recent-inc-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .recent-grid .recent-inc-list .recent-inc-item { border-bottom: 1px solid var(--c-border); }
@@ -164,7 +165,7 @@ preloads:
   import { api, BASE } from '../lib/api.js'
   import { greeting } from '../lib/greeting.js'
   import { catCls, changedAt, fmtDate, fmtStatus, parseMemberNames, EXP_CATS, EXP_METHODS, DON_CATS, DON_METHODS, INCOME_TYPES, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName } from '../lib/finance.js'
-  import { icon, methodIcon, statusIcon, activityIcon } from '../lib/icons.js'
+  import { icon, methodIcon, statusIcon, activityIcon, actionIcon } from '../lib/icons.js'
   import { formDefaults, createPrintDonation } from '../lib/form.js'
 
   const now = new Date()
@@ -182,6 +183,7 @@ preloads:
   setupProcessor(sprae, {
     fmtAmt, fmtCat, fmtStatus, fmtDate, catCls, rawAmt, toCents, toast,
     statusIcon, icon, methodIcon, activityIcon,
+    printIcon: actionIcon('print'), emailIcon: actionIcon('email'),
     apiBase: BASE, api,
     EXP_CATS, EXP_METHODS, DON_CATS, DON_METHODS, INCOME_TYPES,
     EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName,
@@ -207,6 +209,7 @@ preloads:
     expFormMode: 'create',
     showDonForm: false,
     donFormDetail: null,
+    emailSending: {},
     get finNetIntro() {
       const net = this.fin.net
       return net >= 0 ? `$${fmtAmt(net)} surplus this month` : `$${fmtAmt(Math.abs(net))} deficit this month`
@@ -230,6 +233,18 @@ preloads:
   })
 
   s.printDonation = createPrintDonation(s.memberNames)
+  s.emailDonationReceipt = donation => {
+    if (!donation?.id) return
+    s.emailSending = { ...s.emailSending, [donation.id]: true }
+    api.post(`/api/income/${donation.id}/notify`, {})
+      .then(() => toast('Receipt emailed', 'success'))
+      .catch(e => toast(e.message || 'Email failed'))
+      .finally(() => {
+        const next = { ...s.emailSending }
+        delete next[donation.id]
+        s.emailSending = next
+      })
+  }
 
   const hasFin = s.can('income:view') || s.can('expenses:view')
   const hasMem = s.can('members:view')
