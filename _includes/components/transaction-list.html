@@ -1,5 +1,5 @@
 <define-element>
-  <transaction-list years:array mopen:object mfresh:string="" loading:boolean="false" error:string="" search:string="" empty:boolean="false" canapprove:boolean="false" quickloading:object myapprovals:object>
+  <transaction-list years:array mopen:object mfresh:string="" loading:boolean="false" error:string="" search:string="" empty:boolean="false" canapprove:boolean="false" quickloading:object myapprovals:object memberemails:object emailsending:object>
     <style>:host { display: contents; }</style>
     <template>
       <div :if="error" class="login-error" :text="error" style="margin:var(--s-md)"></div>
@@ -78,8 +78,10 @@
                       </div>
                     </div>
                   </div>
-                  <span class="recent-inc-actions" :onclick.stop="" aria-hidden="true">
-                    <button type="button" class="btn btn-sm btn-outline recent-row-action-stub" tabindex="-1" :html="printIcon + ' Print'"></button>
+                  <span class="recent-inc-actions" :onclick.stop="">
+                    <button type="button" class="btn btn-sm btn-icon btn-outline" aria-label="Print receipt" :title="'Print receipt'" :onclick.stop="e => _emit('printinc', tx)" :html="printIcon"></button>
+                    <span :if="emailsending?.[tx.id]" class="load-spinner" style="width:1rem;height:1rem;flex-shrink:0" aria-label="Sending..."></span>
+                    <button type="button" class="btn btn-sm btn-icon btn-outline" :if="tx.member_id && memberemails?.[tx.member_id] && !emailsending?.[tx.id]" :title="'Email receipt to ' + memberemails[tx.member_id]" :onclick.stop="e => _emit('emailinc', tx)" :html="emailIcon"></button>
                   </span>
                   <div class="recent-inc-type">
                     <span class="badge" :class="catCls((tx.type || 'donation') === 'donation' ? (tx.category || 'general') : (tx.type || 'other'))" :text="fmtCat((tx.type || 'donation') === 'donation' ? (tx.category || 'general') : (tx.type || 'other'))"></span>

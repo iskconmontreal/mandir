@@ -45,9 +45,9 @@
                   </div>
                 </div>
                 <span class="recent-inc-actions" :onclick.stop="">
-                  <button type="button" class="btn btn-icon btn-outline" aria-label="Print receipt" :title="'Print receipt'" :onclick.stop="e => _emit('print', d)" :html="printIcon"></button>
+                  <button type="button" class="btn btn-sm btn-icon btn-outline" aria-label="Print receipt" :title="'Print receipt'" :onclick.stop="e => _emit('print', d)" :html="printIcon"></button>
                   <span :if="emailsending?.[d.id]" class="load-spinner" style="width:1rem;height:1rem;flex-shrink:0" aria-label="Sending…"></span>
-                  <button type="button" class="btn btn-icon btn-outline" :if="d.member_id && memberemails?.[d.member_id] && !emailsending?.[d.id]" :title="'Email receipt to ' + memberemails[d.member_id]" :onclick.stop="e => _emit('email', d)" :html="emailIcon"></button>
+                  <button type="button" class="btn btn-sm btn-icon btn-outline" :if="d.member_id && memberemails?.[d.member_id] && !emailsending?.[d.id]" :title="'Email receipt to ' + memberemails[d.member_id]" :onclick.stop="e => _emit('email', d)" :html="emailIcon"></button>
                 </span>
                 <div class="recent-inc-type">
                   <span class="badge" :class="catCls((d.type || 'donation') === 'donation' ? (d.category || 'general') : (d.type || 'other'))" :text="fmtCat((d.type || 'donation') === 'donation' ? (d.category || 'general') : (d.type || 'other'))"></span>

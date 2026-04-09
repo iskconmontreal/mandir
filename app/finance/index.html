@@ -189,17 +189,17 @@ preloads:
   <transaction-list
     :years="netYearGroups" :mopen="netMonthOpen" :mfresh="netMonthFresh" :search="netSearch" :loading="loading" :error="loadErr"
     :quickloading="quickLoading" :myapprovals="myApprovals"
-    :empty="!loading && !netFiltered.length" :canapprove="can('expenses:approve')"
+    :empty="!loading && !netFiltered.length" :canapprove="can('expenses:approve')" :memberemails="memberEmails" :emailsending="emailSending"
     :onviewexp.delay-0="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"
     :onviewinc.delay-0="e => openDonDetail(e.detail)"
+    :onprintinc="e => printDonation(e.detail)"
+    :onemailinc="e => emailDonationReceipt(e.detail)"
     :onapprove="e => expenseQuickApprove(e.detail)"
     :onpay="e => expenseQuickPay(e.detail)"
     :onattach="e => attachExpense(e.detail)"
     :ontoggle.delay-0="e => toggleNetMonth(e.detail)">
   </transaction-list>
-
 </section>
-
 <script src="../../lib/define-element.js" defer></script>
 {% include components/expense-list.html %}
 {% include components/income-list.html %}

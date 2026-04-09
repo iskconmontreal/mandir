@@ -246,9 +246,9 @@ th:last-child, td:last-child { padding-right: 0; }
 
 /* Icon-only button — square, no text label */
 .btn-icon {
-  padding: var(--s-xs);
+  padding: var(--s-xs) var(--s-md);
   line-height: 1;
-  min-width: 0;
+  min-width: 2.25rem;
 }
 
 /* Link button */
