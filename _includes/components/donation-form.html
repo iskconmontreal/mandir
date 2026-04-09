@@ -364,6 +364,8 @@
       this.emailReceipt = function() {
         var self = this
         if (!self.editId || self.emailSending) return
+        var alreadySent = Array.isArray(self.detailDon && self.detailDon.history) && self.detailDon.history.some(function(h) { return h && h.action === 'receipt_emailed' })
+        if (alreadySent && !confirm('This receipt was already emailed once. Send again?')) return
         self.emailSending = true
         self.api.post('/api/income/' + self.editId + '/notify', {}).then(function() {
           self.toast('Receipt emailed', 'success')

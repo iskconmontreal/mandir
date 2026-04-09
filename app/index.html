@@ -233,8 +233,10 @@ preloads:
   })
 
   s.printDonation = createPrintDonation(s.memberNames)
+  const wasReceiptEmailed = donation => Array.isArray(donation?.history) && donation.history.some(h => h?.action === 'receipt_emailed')
   s.emailDonationReceipt = donation => {
     if (!donation?.id) return
+    if (wasReceiptEmailed(donation) && !confirm('This receipt was already emailed once. Send again?')) return
     s.emailSending = { ...s.emailSending, [donation.id]: true }
     api.post(`/api/income/${donation.id}/notify`, {})
       .then(() => toast('Receipt emailed', 'success'))
