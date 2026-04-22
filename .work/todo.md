@@ -5,47 +5,23 @@
 
 * [x] Finances: Add expense > click anywhere > closes modal - should not (add test regression)
 * [x] Finances: Add expense > attach doc > cancel closes modal - should not.
-* [ ] Finances: doesn't show photos: I have created expense #E-2026-0616 with 4 photos, but frontend doesn't show them in preview: https://api.iskconmontreal.ca/uploads/finance/2026/2026-04-12-3.webp 404
-* [ ] Finances: when we add new photos, it autoscans and creates new rows, but when we delete created rows and then add more photos after - it recreates the deleted rows.
-* [ ] Finances: we should show "Paid" status selector when admin or treasurer is adding the expense - but it should check attached pictures first. initiated expenses can be set directly to target status.
-* [ ] Finances: protect images from external access by auth cookie
+* [x] Finances: doesn't show photos: I have created expense #E-2026-0616 with 4 photos, but frontend doesn't show them in preview: https://api.iskconmontreal.ca/uploads/finance/2026/2026-04-12-3.webp 404
+  * [ ] Finances: protect images from external access by auth cookie
+* [x] Finances: when we add new photos, it autoscans and creates new rows, but when we delete created rows and then add more photos after - it recreates the deleted rows.
+* [x] Finances: we should show "Paid" status selector when admin or treasurer is adding the expense - but it should check attached pictures first. initiated expenses can be set directly to target status.
 * [ ] Donors: show street address
 
-* [ ] Donation receipt:
-  * [ ] Our website
-  * [ ] Their website
-  * [ ] My street address
-  * All official receipts must include:
-
-  A clear statement that it is an "official receipt for income tax purposes".
-  The name and address of the charity (exactly as registered with the CRA).
-  The charity's registration number (e.g., 123456789 RR 0001) issued by the CRA. (Not required for some other qualified donees that don't have one.)
-  A unique serial number for the receipt (each receipt must have its own distinct number for tracking).
-  The location (city, town, or municipality) where the receipt was issued.
-  The date or year the gift was received by the charity.
-  The date the receipt was issued (if different from the donation date).
-  The donor's full name (including middle initial) and full address.
-  The name and website address of the Canada Revenue Agency: "Canada Revenue Agency" and canada.ca/charities-giving (this is a recent update; older references to cra.gc.ca/charities may still appear but use the current one).
-
-  Additional fields depending on the type of gift:
-
-  For cash gifts:
-  The amount of the gift (or the eligible amount if there is an "advantage" or benefit provided to the donor, such as in split-receipting scenarios).
-  If an advantage exists: the total amount received, the value and description of the advantage, and the eligible amount (total minus advantage).
-
-  For non-cash gifts (gifts in kind):
-  A brief description of the property donated.
-  The fair market value (or deemed fair market value) of the property (charities generally do not appraise; the donor is responsible, but the receipt may reference an appraisal if one was done).
-  Name and address of the appraiser (if the property was appraised).
-
-  Signature: A signature (or electronic equivalent) of an individual authorized by the charity to issue receipts.
-  For split-receipting (when the donor receives any advantage/benefit): Clearly show the advantage value and the resulting eligible amount of the gift for tax purposes.
+* [x] Donation receipt — CRA-compliant:
+  * [x] Our website (org_website setting + shown on receipt header)
+  * [x] Their website (canada.ca/charities-giving on receipt footer)
+  * [x] Donor street address (stored at issuance, shown on receipt)
+  * [x] official receipts: all 13 CRA mandatory fields implemented
 
 * [ ] Expenses: Send receipt to an email from registered email adds it to the
 * [ ] Expenses: try promoting a user to volunteer and see there's expense folder
 
 * [ ] Invitation email link: prefill the email of a person.
-* [ ] Members: updating the user name breaks loading profile page
+* [x] Members: updating the user name breaks loading profile page
 * [ ] Members: view org page
 
 * [ ] Members: Updating role displays it two roles in the list, until refresh

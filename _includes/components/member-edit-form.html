@@ -122,7 +122,7 @@
       this.onpropchange = function(k, v) {
         if (k === 'show' && v) {
           this.formErr = null; this.photoFile = null; this.photoErr = null; this.saving = false; this.deleting = false
-          if (this.member?._id) this.form = Object.assign({}, this.member)
+          if (this.member?._id) this.form = Object.assign({ name: '', spiritual_name: '', email: '', phone: '', role: '', joined: _today, address: '', notes: '', status: '', diksa_guru: '', guiding_devotee: '', services: [], rounds: '', rounds_years: '', four_regs_years: '', kc_years: '', temple: '', dob: '', gender: '', nationality: '', occupation: '', marriage_status: '', spouse: '', children: '', lives_in_temple: false, namahatta: false }, this.member)
           else this.form = { name: '', spiritual_name: '', email: '', phone: '', role: this.roles?.[0] || '', joined: _today, address: '', notes: '', status: '', diksa_guru: '', guiding_devotee: '', services: [], rounds: '', rounds_years: '', four_regs_years: '', kc_years: '', temple: '', dob: '', gender: '', nationality: '', occupation: '', marriage_status: '', spouse: '', children: '', lives_in_temple: false, namahatta: false }
         }
       }

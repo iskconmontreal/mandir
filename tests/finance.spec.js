@@ -2899,4 +2899,135 @@ test.describe('finance section', () => {
     await expect(list).toHaveClass(/finance-exp-list-open/)
   })
 
+  test('transactions amount filter: clearing restores all items', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 500, payee: 'Small', category: 'kitchen', expense_date: isoMonthDate(0, '03'), status: 'submitted' },
+      { id: 2, amount: 15000, payee: 'Medium', category: 'utilities', expense_date: isoMonthDate(0, '05'), status: 'submitted' },
+    ]
+    const donations = [
+      { id: 1, amount: 50000, method: 'cash', category: 'general', date_received: isoMonthDate(0, '02'), source_name: 'Big Donor' },
+    ]
+    await mockFinance(page, { expenses, donations })
+    await openFinance(page, 'transactions')
+
+    const section = page.locator('section').nth(2)
+
+    // All 3 items visible
+    await expect(section.getByTestId('tx-expense')).toHaveCount(2, { timeout: 10000 })
+    await expect(section.getByTestId('tx-income')).toHaveCount(1, { timeout: 10000 })
+
+    // Open filter panel and set min amount via number input ($100 = 10000 cents → hides $5 expense)
+    await section.locator('button:has-text("Filter")').click()
+    const panel = section.getByTestId('filter-panel')
+    const minInput = panel.locator('input[type="number"][placeholder="Min"]')
+    await minInput.fill('100')
+    await minInput.dispatchEvent('change')
+    await section.locator('button:has-text("Show")').click()
+
+    // $5 expense filtered out
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1, { timeout: 5000 })
+    await expect(section.getByTestId('tx-income')).toHaveCount(1)
+
+    // Clear amount filter via chip
+    await section.locator('.filter-inline-chip', { hasText: '×' }).first().click()
+
+    // All items restored
+    await expect(section.getByTestId('tx-expense')).toHaveCount(2, { timeout: 5000 })
+    await expect(section.getByTestId('tx-income')).toHaveCount(1, { timeout: 5000 })
+  })
+
+  test('transactions date filter: clearing restores all items', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, payee: 'Old', category: 'admin', expense_date: isoMonthDate(-1, '10'), status: 'submitted' },
+      { id: 2, amount: 3000, payee: 'New', category: 'kitchen', expense_date: isoMonthDate(0, '15'), status: 'submitted' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page, 'transactions')
+
+    const section = page.locator('section').nth(2)
+    await expect(section.getByTestId('tx-expense')).toHaveCount(2, { timeout: 10000 })
+
+    // Set date filter to only current month
+    await section.locator('button:has-text("Filter")').click()
+    const panel = section.getByTestId('filter-panel')
+    const fromInput = panel.locator('input[type="date"]').first()
+    await fromInput.fill(isoMonthDate(0, '01'))
+    await fromInput.dispatchEvent('change')
+    await section.locator('button:has-text("Show")').click()
+
+    // Only current-month expense visible
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1, { timeout: 5000 })
+
+    // Clear via chip
+    await section.locator('.filter-inline-chip', { hasText: 'From' }).click()
+
+    // Both expenses restored
+    await expect(section.getByTestId('tx-expense')).toHaveCount(2, { timeout: 5000 })
+  })
+
+  test('expense status filter: filters by status', async ({ page }) => {
+    const expenses = [
+      { id: 1, amount: 5000, payee: 'Submitted Vendor', category: 'admin', expense_date: isoMonthDate(0, '10'), status: 'submitted' },
+      { id: 2, amount: 3000, payee: 'Paid Vendor', category: 'kitchen', expense_date: isoMonthDate(0, '15'), status: 'paid' },
+      { id: 3, amount: 2000, payee: 'Approved Vendor', category: 'puja', expense_date: isoMonthDate(0, '12'), status: 'approved' },
+    ]
+    await mockFinance(page, { expenses })
+    await openFinance(page, 'transactions')
+
+    const section = page.locator('section').nth(2)
+    await expect(section.getByTestId('tx-expense')).toHaveCount(3, { timeout: 10000 })
+
+    // Open filter and select Expenses type
+    await section.locator('button:has-text("Filter")').click()
+    const panel = section.getByTestId('filter-panel')
+    await panel.locator('.seg', { hasText: 'Expenses' }).click()
+
+    // Select "Paid" status
+    await panel.locator('select').selectOption('paid')
+    await section.locator('button:has-text("Show")').click()
+
+    // Only the paid expense should be visible
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1, { timeout: 5000 })
+    await expect(section.getByTestId('tx-expense')).toContainText('Paid Vendor')
+
+    // Status chip should be visible
+    await expect(section.locator('.filter-inline-chip', { hasText: 'Paid' })).toBeVisible()
+
+    // Clear via chip
+    await section.locator('.filter-inline-chip', { hasText: 'Paid' }).click()
+    await expect(section.getByTestId('tx-expense')).toHaveCount(3, { timeout: 5000 })
+  })
+
+  test('income payment method filter: shows method options', async ({ page }) => {
+    const donations = [
+      { id: 1, amount: 1000, method: 'cash', type: 'donation', date_received: isoMonthDate(0, '05'), note: 'Cash donor' },
+      { id: 2, amount: 2000, method: 'e-transfer', type: 'donation', date_received: isoMonthDate(0, '08'), note: 'E-transfer donor' },
+      { id: 3, amount: 3000, method: 'cheque', type: 'donation', date_received: isoMonthDate(0, '12'), note: 'Cheque donor' },
+    ]
+    await mockFinance(page, { donations })
+    await openFinance(page, 'transactions')
+
+    const section = page.locator('section').nth(2)
+    await expect(section.getByTestId('tx-income')).toHaveCount(3, { timeout: 10000 })
+
+    // Open filter and select Income type
+    await section.locator('button:has-text("Filter")').click()
+    const panel = section.getByTestId('filter-panel')
+    await panel.locator('.seg', { hasText: 'Income' }).click()
+
+    // Payment method tags should be visible
+    const tagCloud = panel.locator('.field:has(label:text("Payment Method")) .tag-cloud')
+    await expect(tagCloud.locator('.tag')).toHaveCount(3, { timeout: 5000 })
+    await expect(tagCloud.locator('.tag', { hasText: 'cash' })).toBeVisible()
+    await expect(tagCloud.locator('.tag', { hasText: 'e-transfer' })).toBeVisible()
+    await expect(tagCloud.locator('.tag', { hasText: 'cheque' })).toBeVisible()
+
+    // Apply method filter
+    await tagCloud.locator('.tag', { hasText: 'cash' }).click()
+    await section.locator('button:has-text("Show")').click()
+
+    await expect(section.getByTestId('tx-income')).toHaveCount(1, { timeout: 5000 })
+    await expect(section.getByTestId('tx-income')).toContainText('cash')
+  })
+
 })

@@ -1,0 +1,21 @@
+<define-element>
+  <profile-permissions permissions:array permgroups:object>
+    <style>:host { display: contents; }</style>
+    <template>
+      <div :if="permissions && permissions.length" class="card" style="margin-bottom:var(--s-lg)">
+        <h3 style="margin-bottom:var(--s-md)">Permissions</h3>
+        <div class="perm-grid">
+          <div :each="scope in Object.keys(permgroups || {})" class="perm-row">
+            <span class="perm-scope" :text="permLabels[scope] || (fmtCat && fmtCat(scope)) || scope"></span>
+            <span class="perm-actions">
+              <span class="badge" :each="action in permgroups[scope]" :text="action"></span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </template>
+    <script>
+      this.permLabels = { clients: 'Members', users: 'Users', expenses: 'Expenses', income: 'Income', donations: 'Donations', roles: 'Roles', settings: 'Settings', content: 'Content', commerce: 'Commerce' }
+    </script>
+  </profile-permissions>
+</define-element>

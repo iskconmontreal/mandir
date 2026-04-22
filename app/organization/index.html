@@ -77,6 +77,10 @@ preloads:
             <label for="org-logo-url">Logo URL</label>
             <input id="org-logo-url" type="url" :value="form.org_logo_url" :change="v => { form.org_logo_url = v; logoBroken = false }" placeholder="https://…">
           </div>
+          <div class="field">
+            <label for="org-website">Website</label>
+            <input id="org-website" type="url" :value="form.org_website" :change="v => form.org_website = v" placeholder="https://iskconmontreal.com">
+          </div>
         </div>
       </div>
     </div>
@@ -157,6 +161,10 @@ preloads:
           <div class="stat-label">Address</div>
           <div :class="{'org-empty': !displayAddress}" :text="displayAddress || 'Not set'"></div>
         </div>
+        <div class="org-view-block" :if="form.org_website">
+          <div class="stat-label">Website</div>
+          <div :text="form.org_website"></div>
+        </div>
       </div>
     </div>
 
@@ -213,6 +221,7 @@ preloads:
     receipt_signatory_title: '',
     receipt_signatory_id: '',
     receipt_location: '',
+    org_website: '',
   }
 
   function cleanText(v) { return String(v ?? '').trim() }
@@ -252,6 +261,7 @@ preloads:
       receipt_signatory_title: cleanText(form.receipt_signatory_title),
       receipt_signatory_id: cleanText(form.receipt_signatory_id),
       receipt_location: cleanText(form.receipt_location),
+      org_website: cleanText(form.org_website),
     }
   }
 

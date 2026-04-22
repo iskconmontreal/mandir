@@ -1,0 +1,201 @@
+<define-element>
+  <profile-edit member:object user:object photosrc:string>
+    <style>:host { display: contents; } .hover-overlay { opacity: 0; transition: opacity .15s; } .hover-overlay:hover { opacity: 1; }</style>
+    <template>
+      <form id="profile-form" :onsubmit.prevent="saveProfile">
+
+        <!-- Photo + Name -->
+        <div class="card" style="margin-bottom:var(--s-lg)">
+          <div style="display:flex; align-items:center; gap:var(--s-lg); flex-wrap:wrap; margin-bottom:var(--s-md)">
+            <div style="position:relative">
+              <img :if="photoPreview || photosrc" :src="photoPreview || photosrc" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--c-border)">
+              <div :if="!photoPreview && !photosrc" style="width:72px;height:72px;border-radius:50%;background:var(--c-accent);display:flex;align-items:center;justify-content:center;color:white;font-size:1.6rem;font-weight:600" :text="(f.name || f.spiritual_name || '?')[0]?.toUpperCase()"></div>
+              <label style="position:absolute;inset:0;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35)" class="hover-overlay">
+                <span style="color:white;font-size:var(--f-sm)">Change</span>
+                <input type="file" accept="image/jpeg,image/png,image/webp" style="display:none" :onchange="pickPhoto">
+              </label>
+            </div>
+            <div style="flex:1; min-width:0">
+              <div class="form-row">
+                <div class="field">
+                  <label for="p-name">Name</label>
+                  <input id="p-name" type="text" :value="f.name" :change="v => f.name = v" required placeholder="Full name">
+                </div>
+                <div class="field">
+                  <label for="p-spiritual">Spiritual Name</label>
+                  <input id="p-spiritual" type="text" :value="f.spiritual_name" :change="v => f.spiritual_name = v" placeholder="Initiated name">
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="field">
+              <label for="p-email">Email</label>
+              <input id="p-email" type="email" :value="f.email" :change="v => f.email = v" placeholder="email@example.com">
+            </div>
+            <div class="field">
+              <label for="p-phone">Phone</label>
+              <input id="p-phone" type="tel" :value="f.phone" :change="v => f.phone = v" placeholder="514-000-0000">
+            </div>
+          </div>
+          <div class="field">
+            <label for="p-address">Address</label>
+            <textarea id="p-address" :value="f.address" :change="v => f.address = v" placeholder="For tax receipts" rows="2"></textarea>
+          </div>
+        </div>
+
+        <!-- Spiritual -->
+        <div class="card" style="margin-bottom:var(--s-lg)">
+          <h3 style="margin-bottom:var(--s-md)">Spiritual</h3>
+          <div class="form-row">
+            <div class="field">
+              <label for="p-guru">Diksa Guru</label>
+              <input id="p-guru" type="text" :value="f.diksa_guru" :change="v => f.diksa_guru = v" placeholder="Initiating spiritual master">
+            </div>
+            <div class="field">
+              <label for="p-guide">Guiding Devotee</label>
+              <input id="p-guide" type="text" :value="f.guiding_devotee" :change="v => f.guiding_devotee = v" placeholder="Siksa guru / mentor">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="p-rounds">Japa Rounds</label>
+              <input id="p-rounds" type="number" :value="f.rounds" :change="v => f.rounds = v" placeholder="16" min="0">
+            </div>
+            <div class="field">
+              <label for="p-rounds-yr">Chanting for (years)</label>
+              <input id="p-rounds-yr" type="number" :value="f.rounds_years" :change="v => f.rounds_years = v" min="0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="p-regs-yr">4 Regs for (years)</label>
+              <input id="p-regs-yr" type="number" :value="f.four_regs_years" :change="v => f.four_regs_years = v" min="0">
+            </div>
+            <div class="field">
+              <label for="p-kc-yr">Years in KC</label>
+              <input id="p-kc-yr" type="number" :value="f.kc_years" :change="v => f.kc_years = v" min="0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="p-temple">Temple</label>
+              <input id="p-temple" type="text" :value="f.temple" :change="v => f.temple = v" placeholder="ISKCON Montreal">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field" style="display:flex; align-items:center; gap:var(--s-sm); min-height:2.5rem">
+              <input id="p-lives" type="checkbox" :value="f.lives_in_temple" :change="v => f.lives_in_temple = v" style="width:auto">
+              <label for="p-lives" style="margin:0">Lives in temple</label>
+            </div>
+            <div class="field" style="display:flex; align-items:center; gap:var(--s-sm); min-height:2.5rem">
+              <input id="p-nama" type="checkbox" :value="f.namahatta" :change="v => f.namahatta = v" style="width:auto">
+              <label for="p-nama" style="margin:0">Namahatta member</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Personal -->
+        <div class="card" style="margin-bottom:var(--s-lg)">
+          <h3 style="margin-bottom:var(--s-md)">Personal</h3>
+          <div class="form-row">
+            <div class="field">
+              <label for="p-dob">Date of Birth</label>
+              <input id="p-dob" type="date" :value="f.dob" :change="v => f.dob = v">
+            </div>
+            <div class="field">
+              <label for="p-gender">Gender</label>
+              <select id="p-gender" :value="f.gender" :change="v => f.gender = v">
+                <option value="">—</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="p-nat">Nationality</label>
+              <input id="p-nat" type="text" :value="f.nationality" :change="v => f.nationality = v">
+            </div>
+            <div class="field">
+              <label for="p-occ">Occupation</label>
+              <input id="p-occ" type="text" :value="f.occupation" :change="v => f.occupation = v">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="p-marriage">Marriage Status</label>
+              <select id="p-marriage" :value="f.marriage_status" :change="v => f.marriage_status = v">
+                <option value="">—</option>
+                <option value="Single">Single</option>
+                <option value="Married">Married</option>
+                <option value="Widowed">Widowed</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="p-spouse">Spouse</label>
+              <input id="p-spouse" type="text" :value="f.spouse" :change="v => f.spouse = v" placeholder="Name; KC status">
+            </div>
+          </div>
+          <div class="field">
+            <label for="p-children">Children</label>
+            <input id="p-children" type="text" :value="f.children" :change="v => f.children = v" placeholder="Names and ages">
+          </div>
+          <div class="field">
+            <label for="p-notes">Notes</label>
+            <textarea id="p-notes" :value="f.notes" :change="v => f.notes = v" rows="2" placeholder="Anything else…"></textarea>
+          </div>
+        </div>
+
+      </form>
+    </template>
+    <script>
+      this.f = {}
+      this.photoFile = null
+      this.photoPreview = null
+
+      this.onpropchange = function(k, v) {
+        if (k === 'member' && v) this.f = Object.assign({}, v)
+      }
+
+      this.pickPhoto = function(e) {
+        var self = this
+        var file = e.target.files[0]
+        if (!file) return
+        self.photoFile = file
+        if (self.photoPreview) URL.revokeObjectURL(self.photoPreview)
+        self.photoPreview = URL.createObjectURL(file)
+      }
+
+      this.saveProfile = function() {
+        var self = this
+        self.emit('saving', true)
+        var done = function() { self.emit('saving', false) }
+
+        var upload = self.photoFile ? self.api.updateMyMemberPhoto(self.photoFile) : Promise.resolve()
+        upload.then(function() {
+          var data = Object.assign({}, self.f)
+          var num = function(v) { return v === '' || v == null ? null : +v }
+          data.rounds = num(data.rounds)
+          data.rounds_years = num(data.rounds_years)
+          data.four_regs_years = num(data.four_regs_years)
+          data.kc_years = num(data.kc_years)
+          return self.api.updateMyMember(data)
+        }).then(function(res) {
+          var updated = typeof res.data === 'string' ? JSON.parse(res.data) : (res.data || {})
+          var newPhotoSrc = self.photosrc
+          if (self.photoFile && window.memberRaw && window.memberRaw.public_id) {
+            newPhotoSrc = self.BASE + '/uploads/community/members/' + window.memberRaw.public_id + '.webp?t=' + Date.now()
+          }
+          self.toast && self.toast('Profile updated', 'success')
+          self.emit('save', { member: updated, photosrc: newPhotoSrc })
+        }).catch(function(e) {
+          var msg = e.message || 'Failed to save'
+          self.emit('error', msg)
+          self.toast && self.toast(msg, 'err')
+        }).then(done, done)
+      }
+    </script>
+  </profile-edit>
+</define-element>

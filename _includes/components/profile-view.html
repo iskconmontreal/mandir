@@ -1,0 +1,120 @@
+<define-element>
+  <profile-view member:object user:object rolenames:array photosrc:string>
+    <style>:host { display: contents; }</style>
+    <template>
+      <div style="display:flex; flex-direction:column; gap:var(--s-lg)">
+
+        <!-- Contact -->
+        <div class="card">
+          <h3 style="margin-bottom:var(--s-md)">Contact</h3>
+          <div style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
+            <div>
+              <div class="stat-label">Email</div>
+              <div :text="member?.email || user?.email || '—'"></div>
+            </div>
+            <div :if="member?.phone">
+              <div class="stat-label">Phone</div>
+              <div :text="member?.phone"></div>
+            </div>
+            <div :if="member?.address">
+              <div class="stat-label">Address</div>
+              <div style="white-space:pre-line" :text="member?.address"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Spiritual -->
+        <div :if="member?.diksa_guru || member?.guiding_devotee || member?.rounds || member?.rounds_years || member?.four_regs_years || member?.kc_years" class="card">
+          <h3 style="margin-bottom:var(--s-md)">Spiritual</h3>
+          <div style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
+            <div :if="member?.diksa_guru">
+              <div class="stat-label">Diksa Guru</div>
+              <div :text="member?.diksa_guru"></div>
+            </div>
+            <div :if="member?.guiding_devotee">
+              <div class="stat-label">Guiding Devotee</div>
+              <div :text="member?.guiding_devotee"></div>
+            </div>
+            <div :if="member?.rounds">
+              <div class="stat-label">Japa Rounds</div>
+              <div :text="member?.rounds"></div>
+            </div>
+            <div :if="member?.rounds_years">
+              <div class="stat-label">Chanting (years)</div>
+              <div :text="member?.rounds_years"></div>
+            </div>
+            <div :if="member?.four_regs_years">
+              <div class="stat-label">4 Regs (years)</div>
+              <div :text="member?.four_regs_years"></div>
+            </div>
+            <div :if="member?.kc_years">
+              <div class="stat-label">Years in KC</div>
+              <div :text="member?.kc_years"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Community -->
+        <div :if="member?.joined || member?.temple || member?.lives_in_temple || member?.namahatta" class="card">
+          <h3 style="margin-bottom:var(--s-md)">Community</h3>
+          <div style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
+            <div :if="member?.joined">
+              <div class="stat-label">Joined</div>
+              <div :text="member?.joined"></div>
+            </div>
+            <div :if="member?.temple">
+              <div class="stat-label">Temple</div>
+              <div :text="member?.temple"></div>
+            </div>
+            <div :if="member?.lives_in_temple">
+              <div class="stat-label">Lives in Temple</div>
+              <div>Yes</div>
+            </div>
+            <div :if="member?.namahatta">
+              <div class="stat-label">Namahatta</div>
+              <div>Yes</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Personal -->
+        <div :if="member?.dob || member?.gender || member?.nationality || member?.occupation || member?.marriage_status || member?.spouse || member?.children" class="card">
+          <h3 style="margin-bottom:var(--s-md)">Personal</h3>
+          <div style="display:flex; gap:var(--s-lg); flex-wrap:wrap">
+            <div :if="member?.dob">
+              <div class="stat-label">Date of Birth</div>
+              <div :text="member?.dob"></div>
+            </div>
+            <div :if="member?.gender">
+              <div class="stat-label">Gender</div>
+              <div :text="member?.gender"></div>
+            </div>
+            <div :if="member?.nationality">
+              <div class="stat-label">Nationality</div>
+              <div :text="member?.nationality"></div>
+            </div>
+            <div :if="member?.occupation">
+              <div class="stat-label">Occupation</div>
+              <div :text="member?.occupation"></div>
+            </div>
+            <div :if="member?.marriage_status">
+              <div class="stat-label">Marriage Status</div>
+              <div :text="member?.marriage_status"></div>
+            </div>
+            <div :if="member?.spouse">
+              <div class="stat-label">Spouse</div>
+              <div :text="member?.spouse"></div>
+            </div>
+            <div :if="member?.children">
+              <div class="stat-label">Children</div>
+              <div :text="member?.children"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </template>
+    <script>
+    </script>
+  </profile-view>
+</define-element>

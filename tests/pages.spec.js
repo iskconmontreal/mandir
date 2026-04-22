@@ -660,27 +660,58 @@ test.describe('profile form payload', () => {
     dob: '1990-01-15', gender: 'Male', nationality: 'Canadian', occupation: 'Developer',
     marriage_status: 'Single', spouse: '', children: '', notes: '',
   }
+  const devices = [
+    { id: 1, device_id: 'dev-aaaa-1111', label: 'Chrome on Mac' },
+    { id: 2, device_id: 'dev-bbbb-2222', label: 'Firefox on Linux' },
+  ]
+
+  function mockProfileAPI(page, { onPut } = {}) {
+    return page.route(`${API}/**`, async route => {
+      const url = new URL(route.request().url())
+      const method = route.request().method()
+      const path = url.pathname
+      if (path === '/api/me/member' && method === 'GET')
+        return route.fulfill({ json: { public_id: 'abc', data: JSON.stringify(memberData) } })
+      if (path === '/api/me/member' && method === 'PUT') {
+        if (onPut) onPut(route.request().postDataJSON())
+        return route.fulfill({ json: { public_id: 'abc', data: JSON.stringify(memberData) } })
+      }
+      if (path === '/api/me/devices') return route.fulfill({ json: devices })
+      route.fulfill({ json: { items: [], total: 0 } })
+    })
+  }
+
+  test('profile view renders member data and no console errors', async ({ page }) => {
+    const errors = []
+    page.on('pageerror', e => errors.push(e.message))
+    await loginAs(page, 'viewer')
+    await mockProfileAPI(page)
+    await page.goto('/app/profile.html')
+    await expect(page.locator('h1')).toHaveText('Bhakta Joe')
+    await expect(page.locator('.page-subtitle')).toHaveText('guest@test.local')
+    await expect(page.locator('profile-view')).toBeVisible()
+    await expect(page.locator('profile-view')).toContainText('joe@temple.local')
+    await expect(page.locator('profile-view')).toContainText('514-111-2222')
+    const jsErrors = errors.filter(e => !e.includes('net::'))
+    expect(jsErrors).toEqual([])
+  })
+
+  test('trusted devices load and display', async ({ page }) => {
+    await loginAs(page, 'viewer')
+    await mockProfileAPI(page)
+    await page.goto('/app/profile.html')
+    await expect(page.locator('profile-devices')).toContainText('Chrome on Mac')
+    await expect(page.locator('profile-devices')).toContainText('Firefox on Linux')
+    await expect(page.locator('profile-devices')).toContainText('dev-aaaa')
+  })
 
   test('edit profile sends form values in PUT payload', async ({ page }) => {
     await loginAs(page, 'viewer')
     let savedPayload
-    await page.route(`${API}/**`, async route => {
-      const url = new URL(route.request().url())
-      const method = route.request().method()
-      const path = url.pathname
-      if (path === '/api/me/member' && method === 'GET') {
-        return route.fulfill({ json: { public_id: 'abc', data: JSON.stringify(memberData) } })
-      }
-      if (path === '/api/me/member' && method === 'PUT') {
-        savedPayload = route.request().postDataJSON()
-        return route.fulfill({ json: { public_id: 'abc', data: JSON.stringify(savedPayload) } })
-      }
-      if (path === '/api/me/devices') return route.fulfill({ json: [] })
-      route.fulfill({ json: { items: [], total: 0 } })
-    })
+    await mockProfileAPI(page, { onPut: data => savedPayload = data })
 
     await page.goto('/app/profile.html')
-    await expect(page.locator('h1')).toHaveText('Profile')
+    await expect(page.locator('h1')).toHaveText('Bhakta Joe')
     await page.locator('button:has-text("Edit")').click()
 
     // Change some fields

@@ -1,0 +1,44 @@
+<define-element>
+  <profile-devices items:array currentid:string>
+    <style>:host { display: contents; }</style>
+    <template>
+      <div class="card">
+        <h3 style="margin-bottom:var(--s-md)">Trusted Devices</h3>
+        <div :if="!items.length" class="dim" style="font-size:var(--f-sm)">No trusted devices</div>
+        <div :each="d in items"
+          style="display:flex; align-items:center; justify-content:space-between; gap:var(--s-md); padding:var(--s-sm) 0; border-bottom:1px solid var(--c-border)">
+          <div>
+            <div style="font-size:var(--f-sm)">
+              <span :text="d.label || 'Unknown'"></span>
+              <span :if="d.device_id === currentid" class="badge" style="margin-left:var(--s-xs)">This device</span>
+            </div>
+            <div class="dim" style="font-size:var(--f-sm)" :text="'ID: ' + d.device_id.slice(0, 8) + '…'"></div>
+          </div>
+          <div :if="!d._confirm">
+            <button class="btn-link" style="color:var(--c-err); font-size:var(--f-sm); white-space:nowrap"
+              :onclick.stop="d._confirm = true">Revoke</button>
+          </div>
+          <div :if="d._confirm" style="display:flex; align-items:center; gap:var(--s-sm)">
+            <span class="dim" style="font-size:var(--f-sm)">Revoke?</span>
+            <button class="btn btn-danger btn-sm" :class="{'btn-loading': d._actioning}"
+              :onclick.stop="doRevoke(d)">Yes</button>
+            <button class="btn-link" style="font-size:var(--f-sm)" :onclick.stop="d._confirm = false">No</button>
+          </div>
+        </div>
+      </div>
+    </template>
+    <script>
+      this.doRevoke = function(d) {
+        var self = this
+        d._actioning = true
+        self.api.revokeMyDevice(d.id).then(function() {
+          d._actioning = false
+          self.items = self.items.filter(function(item) { return item.id !== d.id })
+        }).catch(function(e) {
+          d._actioning = false
+          self.toast && self.toast(e.message || 'Failed to revoke')
+        })
+      }
+    </script>
+  </profile-devices>
+</define-element>

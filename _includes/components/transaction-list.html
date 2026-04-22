@@ -5,11 +5,11 @@
       <div :if="error" class="login-error" :text="error" style="margin:var(--s-md)"></div>
       <div :if="loading" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</div>
       <div :if="empty" class="dim" style="text-align:center;padding:var(--s-xl)">No transactions yet</div>
-      <div :each="yr in years" class="finance-year-section" :if="!filtertype || yr.items.some(g => filtertype === 'expense' ? g.expCount : g.incCount)">
+      <div :each="yr in years" class="finance-year-section" :class="{'hidden': filtertype && !yr.items.some(g => filtertype === 'expense' ? g.expCount : g.incCount)}">
         <div class="finance-year-sticky" data-testid="year-label" :if="yr.key !== 'unknown'" :text="yr.key"></div>
         <div class="finance-year-months">
           <template :each="(g, gi) in yr.items">
-          <div :if="!filtertype || (filtertype === 'expense' ? g.expCount : g.incCount)" :class="{'finance-month-wrap-open': mopen[g.key], 'finance-month-wrap-divider': gi > 0}">
+          <div :class="{'hidden': filtertype && !(filtertype === 'expense' ? g.expCount : g.incCount), 'finance-month-wrap-open': mopen[g.key], 'finance-month-wrap-divider': gi > 0}">
             <button type="button" class="exp-group-header" data-testid="tx-month-header" :class="{'exp-group-header-open': mopen[g.key], 'exp-group-header-empty': !(filtertype ? (filtertype === 'expense' ? g.expCount : g.incCount) : g.count)}" :aria-expanded="mopen[g.key] ? 'true' : 'false'" :disabled="!(filtertype ? (filtertype === 'expense' ? g.expCount : g.incCount) : g.count)" :onclick="e => (filtertype ? (filtertype === 'expense' ? g.expCount : g.incCount) : g.count) && _toggle(g.key)">
               <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
               <span class="exp-group-heading">

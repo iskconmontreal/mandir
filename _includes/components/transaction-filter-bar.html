@@ -28,7 +28,7 @@
             </div>
 
             <!-- Expense specific filters -->
-            <div :if="filtertype === 'expense'" class="field">
+            <div :class="{'hidden': filtertype !== 'expense'}" class="field">
               <label>Category</label>
               <div class="tag-cloud">
                 <span :each="cat in expcats" class="tag" :class="catCls(cat) + (expfiltercats.includes(cat) ? ' tag-active' : '')"
@@ -36,7 +36,7 @@
                   :text="fmtCat(cat)"></span>
               </div>
             </div>
-            <div :if="filtertype === 'expense'" class="field">
+            <div :class="{'hidden': filtertype !== 'expense'}" class="field">
               <label>Status</label>
               <select :value="expfilterstatus" :onchange="e => _change({ expfilterstatus: e.target.value })">
                 <option value="" :selected="!expfilterstatus">All statuses</option>
@@ -48,7 +48,7 @@
             </div>
 
             <!-- Income specific filters -->
-            <div :if="filtertype === 'income'" class="field">
+            <div :class="{'hidden': filtertype !== 'income'}" class="field">
               <label>Income Type</label>
               <div class="seg-group" style="width:100%">
                 <span class="seg" style="flex:1;text-align:center" :class="{'seg-active': !incfiltertype}" :onclick="_change({ incfiltertype: '' })">All</span>
@@ -56,12 +56,43 @@
                 <span class="seg" style="flex:1;text-align:center" :class="{'seg-active': incfiltertype === 'other'}" :onclick="_change({ incfiltertype: 'other' })">Other</span>
               </div>
             </div>
-            <div :if="filtertype === 'income'" class="field">
+            <div :class="{'hidden': filtertype !== 'income'}" class="field" :scope="{ methods: incmethods }">
               <label>Payment Method</label>
               <div class="tag-cloud">
-                <span :each="met in incmethods" class="tag" :class="incfiltermethods.includes(met) ? 'tag-active' : ''"
+                <span :each="met in methods" class="tag" :class="incfiltermethods.includes(met) ? 'tag-active' : ''"
                   :onclick="_change({ incfiltermethods: incfiltermethods.includes(met) ? incfiltermethods.filter(x => x !== met) : [].concat(incfiltermethods, [met]) })"
                   :text="met"></span>
+              </div>
+            </div>
+            <div class="field">
+              <label>Amount range</label>
+              <div class="range-track">
+                <div class="range-hist" :if="amthist.length">
+                  <span :each="(h, i) in amthist" class="range-hist-bar" :style="'height:' + (h * 100) + '%'" :class="{'range-hist-bar-dim': i < (_amtToPos(amtlo) / 1000 * amthist.length) || i >= (_amtToPos(amthi) / 1000 * amthist.length)}"></span>
+                </div>
+                <div class="range-slider" :ref="el => { el.style.setProperty('--lh', (_amtToPos(amtlo) / 10) + '%'); el.style.setProperty('--rh', (_amtToPos(amthi) / 10) + '%') }">
+                  <input type="range" class="range-lo" min="0" max="1000" step="1"
+                    :ref="el => { el.value = _amtToPos(amtlo) }"
+                    :oninput="e => _rangeSync(e, +e.target.value, true)">
+                  <input type="range" class="range-hi" min="0" max="1000" step="1"
+                    :ref="el => { el.value = _amtToPos(amthi) }"
+                    :oninput="e => _rangeSync(e, +e.target.value, false)">
+                </div>
+              </div>
+              <div style="display:flex;gap:var(--s-sm);align-items:center">
+                <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Min" :value="amtmin"
+                  :onchange="e => { var v = Math.max(0, Math.min(+e.target.value || 0, amthi)); _changeDebounced({ amtmin: e.target.value === '' ? '' : v }) }"></span>
+                <span class="dim">—</span>
+                <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Max" :value="amtmax"
+                  :onchange="e => { var v = Math.min(amtceil, Math.max(+e.target.value || 0, amtlo)); _changeDebounced({ amtmax: v >= amtceil ? '' : v }) }"></span>
+              </div>
+            </div>
+            <div class="field">
+              <label>Date range</label>
+              <div style="display:flex;gap:var(--s-sm);align-items:center">
+                <input type="date" :value="datefrom" :onchange="e => _change({ datefrom: e.target.value })" style="flex:1">
+                <span class="dim">—</span>
+                <input type="date" :value="dateto" :onchange="e => _change({ dateto: e.target.value })" style="flex:1">
               </div>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">

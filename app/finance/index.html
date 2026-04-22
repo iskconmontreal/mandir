@@ -116,9 +116,8 @@ preloads:
 <!-- ===== DONORS TAB ===== -->
 <section :class="{'hidden': activeTab !== 'donors'}" :scope="{showExport: false}">
   <div class="filter-bar">
-    <div class="search-wrap" style="max-width:300px">
-      <span class="search-icon" :html="icon('search')"></span>
-      <input type="search" :value="donorSearch" :oninput="e => patchState({ donorSearch: e.target.value })" placeholder="Search donors…">
+    <div class="filter-search-wrap">
+      <input class="filter-search" type="search" :value="donorSearch" :oninput="e => patchState({ donorSearch: e.target.value })" placeholder="Search donors…">
     </div>
     <div class="filter-bar-actions">
       <button class="btn btn-primary filter-bar-create" :onclick="openDonCreate()">+ Income</button>
@@ -769,8 +768,9 @@ preloads:
     },
 
     donFilterType: initUrl.donFilterType, donFilterMethods: initUrl.donFilterMethods,
+    donSearch: '', donAmtMin: '', donAmtMax: '', donDateFrom: '', donDateTo: '',
     get donFiltered() {
-      const q = this.donSearch.toLowerCase()
+      const q = (this.donSearch || '').toLowerCase()
       return this.donations.filter(r => {
         const dt = r.date_received?.slice(0, 10) || ''
         if (!incomeTypeMatch(r, this.donFilterType)) return false
@@ -901,6 +901,7 @@ preloads:
     },
 
     // Net tab (unified transactions)
+    donorSearch: initUrl.donorSearch,
     netSearch: initUrl.netSearch,
     netFilterType: initUrl.netFilterType,
     netAmtMin: initUrl.netAmtMin,
@@ -1155,13 +1156,8 @@ preloads:
   }
   function syncRangeVars() {
     const sliders = document.querySelectorAll('.range-slider')
-    const sets = [
-      [s.expAmtLo, s.expAmtHi, s.expAmtCeil],
-      [s.donAmtLo, s.donAmtHi, s.donAmtCeil],
-      [s.netAmtLo, s.netAmtHi, s.netAmtCeil],
-    ]
-    sliders.forEach((el, i) => {
-      const [lo, hi, ceil] = sets[i] || sets[0]
+    sliders.forEach((el) => {
+      const [lo, hi, ceil] = [s.netAmtLo, s.netAmtHi, s.netAmtCeil]
       const loPos = amtToPos(lo, ceil)
       const hiPos = amtToPos(hi, ceil)
       el.style.setProperty('--lh', (loPos / 10) + '%')
@@ -1179,7 +1175,8 @@ preloads:
     if (Object.keys(patch).some(k => k === 'expSearch' || k === 'expFilterCats' || k === 'expFilterStatus' || k === 'expAmtMin' || k === 'expAmtMax' || k === 'expDateFrom' || k === 'expDateTo')) refreshExpMonthOpen()
     if (Object.keys(patch).some(k => k === 'donSearch' || k === 'donFilterType' || k === 'donFilterMethods' || k === 'donAmtMin' || k === 'donAmtMax' || k === 'donDateFrom' || k === 'donDateTo')) refreshDonMonthOpen()
     if ('expSearch' in patch) scheduleExpSearch(patch.expSearch)
-    if ('expAmtMin' in patch || 'expAmtMax' in patch || 'donAmtMin' in patch || 'donAmtMax' in patch) syncRangeVars()
+    if (Object.keys(patch).some(k => k === 'netSearch' || k === 'netFilterType' || k === 'netAmtMin' || k === 'netAmtMax' || k === 'netDateFrom' || k === 'netDateTo')) refreshNetMonthOpen()
+    if ('expAmtMin' in patch || 'expAmtMax' in patch || 'donAmtMin' in patch || 'donAmtMax' in patch || 'netAmtMin' in patch || 'netAmtMax' in patch) syncRangeVars()
     writeUrl(s)
   }
   s.setYear = year => {
