@@ -1,0 +1,33 @@
+<define-element>
+  <finance-stat-tabs active:string="transactions" net:number="0" nettrend:object expmonth:number="0" expprevmonth:number="0" donorsmonth:number="0" donorsprevmonth:number="0">
+    <style>:host { display: contents; }</style>
+    <template>
+      <div class="card-tab-group" data-testid="tab-group">
+        <div class="card-tab" :class="{['card-tab-active']: active === 'transactions'}"
+          :onclick="e => _switch(e, 'transactions')">
+          <div class="stat-label">Transactions</div>
+          <div class="stat-value"><span :class="net > 0 ? 'stat-ok' : net < 0 ? 'stat-err' : ''" :text="(net >= 0 ? '+' : '\u2212') + '$' + fmtAmt(Math.abs(net))"></span></div>
+          <div class="stat-sub dim"><span :if="nettrend.dir" class="trend-arrow" :class="nettrend.cls" :html="trendIcon(nettrend.dir)"></span><span :text="nettrend.num"></span><span :text="nettrend.label"></span></div>
+        </div>
+        <div class="card-tab" :class="{['card-tab-active']: active === 'reports'}"
+          :onclick="e => _switch(e, 'reports')">
+          <div class="stat-label">Reports</div>
+          <div class="stat-value"><span :text="'$' + fmtAmt(expmonth)"></span></div>
+          <div class="stat-sub dim"><span :if="trend(expmonth, expprevmonth, true).dir" class="trend-arrow" :class="trend(expmonth, expprevmonth, true).cls" :html="trendIcon(trend(expmonth, expprevmonth, true).dir)"></span><span :text="trend(expmonth, expprevmonth, true).num"></span><span :text="trend(expmonth, expprevmonth, true).label"></span></div>
+        </div>
+        <div class="card-tab" :class="{['card-tab-active']: active === 'donors'}"
+          :onclick="e => _switch(e, 'donors')">
+          <div class="stat-label">Donors</div>
+          <div class="stat-value"><span :text="donorsmonth + (donorsmonth === 1 ? ' donor' : ' donors')"></span></div>
+          <div class="stat-sub dim"><span :if="trendDiff(donorsmonth, donorsprevmonth).dir" class="trend-arrow" :class="trendDiff(donorsmonth, donorsprevmonth).cls" :html="trendIcon(trendDiff(donorsmonth, donorsprevmonth).dir)"></span><span :text="trendDiff(donorsmonth, donorsprevmonth).num"></span><span :text="trendDiff(donorsmonth, donorsprevmonth).label"></span></div>
+        </div>
+      </div>
+    </template>
+    <script>
+      this._switch = function(e, tab) {
+        this.emit('tabchange', tab)
+        e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+      }
+    </script>
+  </finance-stat-tabs>
+</define-element>

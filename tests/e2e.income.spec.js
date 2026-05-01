@@ -10,17 +10,15 @@ test.describe('e2e: income', () => {
   })
 
   test('income tab loads real data', async ({ page }) => {
-    await page.goto('/app/finance/#income')
+    await page.goto('/app/finance/?tab=transactions&net_type=income#transactions')
     await page.locator('.card-tab-group').waitFor()
-    await page.locator('.card-tab', { hasText: 'Income' }).click()
-    await expect(page.locator('income-list .recent-inc-item').first()).toBeVisible({ timeout: 15_000 })
-    expect(await page.locator('income-list .recent-inc-item').count()).toBeGreaterThan(0)
+    await expect(page.getByTestId('transactions-tab').getByTestId('tx-income').first()).toBeVisible({ timeout: 15_000 })
+    expect(await page.getByTestId('transactions-tab').getByTestId('tx-income').count()).toBeGreaterThan(0)
   })
 
   test('create income via UI → verify in API', async ({ page }) => {
-    await page.goto('/app/finance/#income')
+    await page.goto('/app/finance/?tab=transactions&net_type=income#transactions')
     await page.locator('.card-tab-group').waitFor()
-    await page.locator('.card-tab', { hasText: 'Income' }).click()
 
     await page.click('button:has-text("+ Income")')
     await page.locator('.modal').waitFor()
@@ -37,9 +35,10 @@ test.describe('e2e: income', () => {
   })
 
   test('create income via UI → appears in income list without reload', async ({ page }) => {
-    await page.goto('/app/finance/?tab=income#income')
+    await page.goto('/app/finance/?tab=transactions&net_type=income#transactions')
     await page.locator('.card-tab-group').waitFor()
-    await expect(page.locator('income-list').first()).toBeVisible({ timeout: 10_000 })
+    const section = page.getByTestId('transactions-tab')
+    await expect(section).toBeVisible({ timeout: 10_000 })
 
     await page.click('button:has-text("+ Income")')
     await page.locator('.modal').waitFor()
@@ -51,7 +50,7 @@ test.describe('e2e: income', () => {
 
     // After save, loadAll() refreshes the list in-place — new item must be visible without page reload
     await expect(
-      page.locator('income-list .recent-inc-value').filter({ hasText: '83.00' })
+      section.locator('.recent-inc-value').filter({ hasText: '83.00' })
     ).toBeVisible({ timeout: 15_000 })
 
     // Cleanup
@@ -68,39 +67,39 @@ test.describe('e2e: income', () => {
     })
     expect(create.ok()).toBeTruthy()
 
-    await page.goto('/app/finance/?tab=income#income')
+    await page.goto('/app/finance/?tab=transactions&net_type=income#transactions')
     await page.locator('.card-tab-group').waitFor()
-    const section = page.locator('section').nth(1)
-    await expect(section.locator('income-list .recent-inc-item, .recent-inc-item').first()).toBeVisible({ timeout: 15_000 })
+    const section = page.getByTestId('transactions-tab')
+    await expect(section.getByTestId('tx-income').first()).toBeVisible({ timeout: 15_000 })
 
-    const before = await section.locator('income-list .recent-inc-item, .recent-inc-item').count()
+    const before = await section.getByTestId('tx-income').count()
     expect(before).toBeGreaterThan(0)
 
     await section.locator('.btn-filter').click()
     await section.locator('.filter-dropdown select').first().selectOption('sale')
     await page.waitForTimeout(150)
 
-    if (await section.locator('income-list .recent-inc-item, .recent-inc-item').count()) {
+    if (await section.getByTestId('tx-income').count()) {
       const nextYear = String(new Date().getFullYear() + 1)
       await section.locator('.filter-dropdown input[type="date"]').first().fill(`${nextYear}-01-01`)
     }
 
-    await expect(section.locator('income-list .recent-inc-item, .recent-inc-item')).toHaveCount(0)
+    await expect(section.getByTestId('tx-income')).toHaveCount(0)
     await expect(section).toContainText('No income matches filters')
 
     await expect(section.locator('.filter-dropdown')).toBeVisible()
     await section.locator('.filter-dropdown .btn-link', { hasText: 'Clear all' }).click()
 
-    await expect(page).toHaveURL(/\?tab=income#income$/)
-    await expect(section.locator('income-list .recent-inc-item, .recent-inc-item').first()).toBeVisible({ timeout: 15_000 })
-    expect(await section.locator('income-list .recent-inc-item, .recent-inc-item').count()).toBeGreaterThan(0)
+    await expect(page).toHaveURL(/\?tab=transactions&net_type=income#transactions$/)
+    await expect(section.getByTestId('tx-income').first()).toBeVisible({ timeout: 15_000 })
+    expect(await section.getByTestId('tx-income').count()).toBeGreaterThan(0)
   })
 
   test('income tab loads via direct URL', async ({ page }) => {
-    await page.goto('/app/finance/?tab=income#income')
+    await page.goto('/app/finance/?tab=transactions&net_type=income#transactions')
     await page.locator('.card-tab-group').waitFor()
-    await expect(page.locator('income-list .recent-inc-item').first()).toBeVisible({ timeout: 15_000 })
-    expect(await page.locator('income-list .recent-inc-item').count()).toBeGreaterThan(0)
+    await expect(page.getByTestId('transactions-tab').getByTestId('tx-income').first()).toBeVisible({ timeout: 15_000 })
+    expect(await page.getByTestId('transactions-tab').getByTestId('tx-income').count()).toBeGreaterThan(0)
   })
 
   test('create income with receipt via API → attachments stored', async ({ page }) => {
@@ -140,9 +139,8 @@ test.describe('e2e: income', () => {
 
   test('income receipt upload via UI → verify attachment linked', async ({ page }) => {
     test.skip(true, 'requires ENVIRONMENT=test for OCR')
-    await page.goto('/app/finance/#income')
+    await page.goto('/app/finance/?tab=transactions&net_type=income#transactions')
     await page.locator('.card-tab-group').waitFor()
-    await page.locator('.card-tab', { hasText: 'Income' }).click()
 
     await page.click('button:has-text("+ Income")')
     await page.locator('.modal').waitFor()

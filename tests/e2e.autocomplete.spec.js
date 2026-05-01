@@ -10,7 +10,7 @@ test.describe('e2e: payee autocomplete', () => {
     const errors = []
     page.on('pageerror', err => errors.push(err.message))
 
-    await page.goto('/app/finance/?tab=expenses#expenses')
+    await page.goto('/app/finance/?tab=transactions&net_type=expense#transactions')
     await page.locator('.card-tab-group').waitFor()
 
     await page.click('button:has-text("+ Expense")')

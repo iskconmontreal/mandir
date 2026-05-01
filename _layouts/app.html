@@ -59,7 +59,7 @@
             <span :html="icon('camera')"></span>
             Camera
           </a>
-          <a :if="can('settings:manage')" href="{{ '/app/admin/mixer.html' | relative_url }}" class="user-menu-item">
+          <a :if="can('settings:manage') && mixerUrl" :href="mixerUrl" target="_blank" rel="noopener" class="user-menu-item">
             <span :html="icon('mixer')"></span>
             Mixer
           </a>

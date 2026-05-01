@@ -1,0 +1,93 @@
+<define-element>
+  <finance-reports-tab active:boolean="false" year:number="0" months:array loading:boolean="false" taxreceipts:array taxreceiptsloading:boolean="false">
+    <style>:host { display: contents; }</style>
+    <template>
+      <section :if="active" data-testid="reports-tab">
+        <div class="filter-bar">
+          <div style="flex:1"></div>
+          <div class="filter-bar-actions">
+            <div style="position:relative">
+              <button class="btn btn-outline btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export P&amp;L</button>
+              <div :if="showExport" class="quick-add" style="right:0;left:auto">
+                <a class="quick-add-item" :onclick="emit('export'); showExport = false">CSV</a>
+                <a class="quick-add-item" :onclick="emit('print'); showExport = false">Print / PDF</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:var(--s-lg)">
+          <h3 style="margin-bottom:var(--s-md)">Monthly Summary (<span :text="year"></span>)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th style="text-align:right">Income</th>
+                  <th style="text-align:right">Expenses</th>
+                  <th style="text-align:right">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :each="g in months" class="row-link" :onclick="_drill(g)">
+                  <td :text="fmtMonthShort(g.key)"></td>
+                  <td style="text-align:right; color:var(--c-ok)" :text="'+$' + fmtAmt(g.incTotal)"></td>
+                  <td style="text-align:right; color:var(--c-err)" :text="'−$' + fmtAmt(g.expTotal)"></td>
+                  <td style="text-align:right">
+                    <strong :text="(g.net >= 0 ? '+$' : '−$') + fmtAmt(Math.abs(g.net))"></strong>
+                  </td>
+                </tr>
+                <tr :if="!months.length && !loading">
+                  <td colspan="4" class="dim" style="text-align:center;padding:var(--s-xl)">No data for this year.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:var(--s-lg);padding:var(--s-lg)">
+          <div class="card-header" style="margin-bottom:var(--s-md)">
+            <h3 style="margin:0">Tax Receipts (<span :text="year"></span>)</h3>
+          </div>
+          <div :if="taxreceiptsloading" class="dim" style="padding:var(--s-lg);text-align:center">Loading…</div>
+          <div class="table-wrap" :if="!taxreceiptsloading">
+            <table>
+              <thead>
+                <tr>
+                  <th>Receipt No.</th>
+                  <th>Donor</th>
+                  <th style="text-align:right">Eligible Amount</th>
+                  <th>Date Issued</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :each="r in taxreceipts">
+                  <td><span class="badge badge-ok" style="font-size:var(--f-xs)" :text="r.receipt_no"></span></td>
+                  <td :text="r.donor_name"></td>
+                  <td style="text-align:right" :text="'$' + fmtAmt(r.eligible_amount || 0)"></td>
+                  <td :text="fmtDate(r.date_issued)"></td>
+                  <td>
+                    <span style="display:flex;gap:var(--s-xs);justify-content:flex-end">
+                      <button type="button" class="btn btn-sm btn-icon btn-outline" title="Print receipt" :onclick="emit('printreceipt', r)" :html="printIcon"></button>
+                      <button type="button" class="btn btn-sm btn-icon btn-outline" title="Resend email" :onclick="emit('emailreceipt', r)" :html="emailIcon"></button>
+                    </span>
+                  </td>
+                </tr>
+                <tr :if="!taxreceipts.length && !taxreceiptsloading">
+                  <td colspan="5" class="dim" style="text-align:center;padding:var(--s-xl)">No tax receipts issued for this year.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </template>
+    <script>
+      this.showExport = false
+      this._drill = function(group) {
+        this.emit('drill', group?.key || '')
+      }
+    </script>
+  </finance-reports-tab>
+</define-element>

@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   normTab, normIncomeType, normIncomeMethod, normIncomeMethods, normExpenseCats, normAmt,
   bucketOf, labelOf, sourceOf,
-  incomeTypeMatch, incomeMethodMatch,
+  incomeTypeMatch, incomeMethodMatch, filterDonorRows,
   dateOnly, expenseMonthKey, incomeMonthKey, monthRange,
   monthOpenState, monthKeysWithData, monthItemMap,
-  buildMonthGroups, groupMonthsByYear,
+  buildMonthGroups, buildNetMonthGroups, filterNetTransactions, filterNetTransactionsByType, groupMonthsByYear, toNetTransactions,
   sortExpenses, sortIncome,
   HIST_BINS, amtHist,
   trend, trendDiff,
@@ -14,7 +14,11 @@ import {
 
 // ── normTab ──
 describe('normTab', () => {
-  it('maps donations → donors', () => expect(normTab('donations')).toBe('donors'))
+  it('maps legacy income tabs → transactions', () => {
+    expect(normTab('donations')).toBe('transactions')
+    expect(normTab('income')).toBe('transactions')
+    expect(normTab('expenses')).toBe('transactions')
+  })
   it('maps net → transactions', () => expect(normTab('net')).toBe('transactions'))
   it('passes valid tabs through', () => {
     expect(normTab('transactions')).toBe('transactions')
@@ -87,6 +91,18 @@ describe('incomeMethodMatch', () => {
   it('passes when no filters', () => expect(incomeMethodMatch({}, [])).toBe(true))
   it('passes matching', () => expect(incomeMethodMatch({ method: 'cash' }, ['cash'])).toBe(true))
   it('rejects non-matching', () => expect(incomeMethodMatch({ method: 'card' }, ['cash'])).toBe(false))
+})
+
+describe('filterDonorRows', () => {
+  it('filters donors by name', () => {
+    const rows = [{ name: 'Madhava Das' }, { name: 'Gita Devi' }]
+    expect(filterDonorRows(rows, 'gita')).toEqual([{ name: 'Gita Devi' }])
+  })
+
+  it('returns all donors without search', () => {
+    const rows = [{ name: 'A' }, { name: 'B' }]
+    expect(filterDonorRows(rows, '')).toEqual(rows)
+  })
 })
 
 // ── dateOnly ──
@@ -200,6 +216,36 @@ describe('buildMonthGroups', () => {
     const result = buildMonthGroups({ keys: ['2025-01'], itemsByKey: items, metaByKey: meta, useMeta: true })
     expect(result[0].count).toBe(10)
     expect(result[0].total).toBe(50000)
+  })
+})
+
+describe('net transaction selectors', () => {
+  const expenses = [
+    { id: 1, amount: 1200, payee: 'Hydro', category: 'utilities', expense_date: '2025-01-10', status: 'submitted' },
+    { id: 2, amount: 800, payee: 'Flowers', category: 'flowers', expense_date: '2025-02-03', status: 'paid' },
+  ]
+  const income = [
+    { id: 3, amount: 5000, member_id: 7, method: 'cash', type: 'donation', category: 'general', date_received: '2025-01-12' },
+  ]
+
+  it('normalizes expenses and income into transaction rows', () => {
+    const rows = toNetTransactions({ expenses, income })
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toMatchObject({ id: 1, _isExp: true, _date: '2025-01-10' })
+    expect(rows[2]).toMatchObject({ id: 3, _isExp: false, _date: '2025-01-12' })
+  })
+
+  it('filters by type-specific fields only when that type is selected', () => {
+    const rows = toNetTransactions({ expenses, income })
+    expect(filterNetTransactions(rows, { filterType: 'expense', expCats: ['utilities'] }, { 7: 'Govinda' }).map(x => x.id)).toEqual([1, 3])
+    expect(filterNetTransactionsByType(filterNetTransactions(rows, { filterType: 'expense', expCats: ['utilities'] }, { 7: 'Govinda' }), 'expense').map(x => x.id)).toEqual([1])
+  })
+
+  it('groups net transactions by month with signed totals', () => {
+    const rows = toNetTransactions({ expenses, income })
+    const groups = buildNetMonthGroups(['2025-02', '2025-01'], rows)
+    expect(groups[0]).toMatchObject({ key: '2025-02', expTotal: 800, incTotal: 0, net: -800 })
+    expect(groups[1]).toMatchObject({ key: '2025-01', expTotal: 1200, incTotal: 5000, net: 3800 })
   })
 })
 

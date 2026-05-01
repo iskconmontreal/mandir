@@ -24,7 +24,7 @@ preloads:
 <div :if="(can('income:view') || can('expenses:view')) && !finLoading" class="recent-grid">
   <div :if="can('expenses:view')" class="card">
     <div class="card-header recent-list-header">
-      <a href="finance/?tab=expenses#expenses" class="section-head-link">
+      <a href="finance/?tab=transactions&net_type=expense#transactions" class="section-head-link">
         <h3 class="section-title-row">Recent Expenses</h3>
         <div class="recent-list-subtitle"><span class="trend-arrow" :class="financeArrow === 'up' ? 'stat-ok' : 'stat-err'" :html="trendIcon(financeArrow)"></span><span :text="financeIntro"></span></div>
       </a>
@@ -39,7 +39,7 @@ preloads:
 
   <div :if="can('income:view')" class="card">
     <div class="card-header recent-list-header">
-      <a href="finance/?tab=income&inc_type=donation#income" class="section-head-link">
+      <a href="finance/?tab=transactions&net_type=income&inc_type=donation#transactions" class="section-head-link">
         <h3 class="section-title-row">Recent Donations</h3>
         <div class="recent-list-subtitle"><span class="trend-arrow stat-ok" :html="trendIcon('up')"></span><span :text="donationIntro"></span></div>
       </a>

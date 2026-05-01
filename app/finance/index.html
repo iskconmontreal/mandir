@@ -9,201 +9,53 @@ preloads:
   <h1>Finance</h1>
 </div>
 
-<!-- Stat cards as tabs -->
-<div class="card-tab-group" data-testid="tab-group">
-  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'transactions'}"
-    :onclick="e => { switchTab('transactions'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
-    <div class="stat-label">Transactions</div>
-    <div class="stat-value"><span :class="net > 0 ? 'stat-ok' : net < 0 ? 'stat-err' : ''" :text="(net >= 0 ? '+' : '\u2212') + '$' + fmtAmt(Math.abs(net))"></span></div>
-    <div class="stat-sub dim"><span :if="netTrend.dir" class="trend-arrow" :class="netTrend.cls" :html="trendIcon(netTrend.dir)"></span><span :text="netTrend.num"></span><span :text="netTrend.label"></span></div>
-  </div>
-  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'reports'}"
-    :onclick="e => { switchTab('reports'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
-    <div class="stat-label">Reports</div>
-    <div class="stat-value"><span :text="'$' + fmtAmt(expMonth)"></span></div>
-    <div class="stat-sub dim"><span :if="trend(expMonth, expPrevMonth, true).dir" class="trend-arrow" :class="trend(expMonth, expPrevMonth, true).cls" :html="trendIcon(trend(expMonth, expPrevMonth, true).dir)"></span><span :text="trend(expMonth, expPrevMonth, true).num"></span><span :text="trend(expMonth, expPrevMonth, true).label"></span></div>
-  </div>
-  <div class="card-tab" :class="{['card-tab-active']: activeTab === 'donors'}"
-    :onclick="e => { switchTab('donors'); e.currentTarget.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}) }">
-    <div class="stat-label">Donors</div>
-    <div class="stat-value"><span :text="donorsMonth + (donorsMonth === 1 ? ' donor' : ' donors')"></span></div>
-    <div class="stat-sub dim"><span :if="trendDiff(donorsMonth, donorsPrevMonth).dir" class="trend-arrow" :class="trendDiff(donorsMonth, donorsPrevMonth).cls" :html="trendIcon(trendDiff(donorsMonth, donorsPrevMonth).dir)"></span><span :text="trendDiff(donorsMonth, donorsPrevMonth).num"></span><span :text="trendDiff(donorsMonth, donorsPrevMonth).label"></span></div>
-  </div>
-</div>
+<finance-stat-tabs :active="activeTab" :net="net" :nettrend="netTrend"
+  :expmonth="expMonth" :expprevmonth="expPrevMonth" :donorsmonth="donorsMonth" :donorsprevmonth="donorsPrevMonth"
+  :ontabchange="e => switchTab(e.detail)">
+</finance-stat-tabs>
 
-<!-- ===== REPORTS TAB ===== -->
-<section :class="{'hidden': activeTab !== 'reports'}" :scope="{showExport: false}">
-  <div class="filter-bar">
-    <div style="flex:1"></div>
-    <div class="filter-bar-actions">
-      <div style="position:relative">
-        <button class="btn btn-outline btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export P&L</button>
-        <div :if="showExport" class="quick-add" style="right:0;left:auto">
-          <a class="quick-add-item" :onclick="exportCSV(); showExport = false">CSV</a>
-          <a class="quick-add-item" :onclick="printTable(); showExport = false">Print / PDF</a>
-        </div>
-      </div>
-    </div>
-  </div>
+<finance-reports-tab :active="activeTab === 'reports'" :year="year" :months="reportMonths" :loading="loading"
+  :taxreceipts="taxReceipts" :taxreceiptsloading="taxReceiptsLoading"
+  :onexport="() => exportCSV()" :onprint="() => printTable()"
+  :ondrill="e => patchState({ activeTab: 'transactions', netSearch: '', netDateFrom: e.detail + '-01', netDateTo: e.detail + '-31' })"
+  :onprintreceipt="e => printTaxReceipt(e.detail)" :onemailreceipt="e => resendTaxReceiptEmail(e.detail)">
+</finance-reports-tab>
 
-  <div class="card" style="padding:var(--s-lg)">
-    <h3 style="margin-bottom:var(--s-md)">Monthly Summary (<span :text="year"></span>)</h3>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Month</th>
-            <th style="text-align:right">Income</th>
-            <th style="text-align:right">Expenses</th>
-            <th style="text-align:right">Net</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr :each="g in netGrouped" class="row-link" :onclick="e => { patchState({ activeTab: 'transactions', netSearch: '', netDateFrom: g.key + '-01', netDateTo: g.key + '-31' }) }">
-            <td :text="fmtMonthShort(g.key)"></td>
-            <td style="text-align:right; color:var(--c-ok)" :text="'+$' + fmtAmt(g.incTotal)"></td>
-            <td style="text-align:right; color:var(--c-err)" :text="'−$' + fmtAmt(g.expTotal)"></td>
-            <td style="text-align:right">
-              <strong :text="(g.net >= 0 ? '+$' : '−$') + fmtAmt(Math.abs(g.net))"></strong>
-            </td>
-          </tr>
-          <tr :if="!netGrouped.length && !loading">
-            <td colspan="4" class="dim" style="text-align:center;padding:var(--s-xl)">No data for this year.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+<finance-donors-tab :active="activeTab === 'donors'" :search="donorSearch" :rows="donorRows"
+  :loading="loading" :error="loadErr" :memberemails="memberEmails"
+  :onsearchchange="e => patchState({ donorSearch: e.detail })"
+  :oncreate="() => openDonCreate()"
+  :onviewdetails="e => patchState({ activeTab: 'transactions', netFilterType: 'income', netSearch: e.detail.name })">
+</finance-donors-tab>
 
-  <div class="card" style="margin-top:var(--s-lg);padding:var(--s-lg)">
-    <div class="card-header" style="margin-bottom:var(--s-md)">
-      <h3 style="margin:0">Tax Receipts (<span :text="year"></span>)</h3>
-    </div>
-    <div :if="taxReceiptsLoading" class="dim" style="padding:var(--s-lg);text-align:center">Loading…</div>
-    <div class="table-wrap" :if="!taxReceiptsLoading">
-      <table>
-        <thead>
-          <tr>
-            <th>Receipt No.</th>
-            <th>Donor</th>
-            <th style="text-align:right">Eligible Amount</th>
-            <th>Date Issued</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr :each="r in taxReceipts">
-            <td><span class="badge badge-ok" style="font-size:var(--f-xs)" :text="r.receipt_no"></span></td>
-            <td :text="r.donor_name"></td>
-            <td style="text-align:right" :text="'$' + fmtAmt(r.eligible_amount || 0)"></td>
-            <td :text="fmtDate(r.date_issued)"></td>
-            <td>
-              <span style="display:flex;gap:var(--s-xs);justify-content:flex-end">
-                <button type="button" class="btn btn-sm btn-icon btn-outline" title="Print receipt" :onclick="printTaxReceipt(r)" :html="printIcon"></button>
-                <button type="button" class="btn btn-sm btn-icon btn-outline" title="Resend email" :onclick="resendTaxReceiptEmail(r)" :html="emailIcon"></button>
-              </span>
-            </td>
-          </tr>
-          <tr :if="!taxReceipts.length && !taxReceiptsLoading">
-            <td colspan="5" class="dim" style="text-align:center;padding:var(--s-xl)">No tax receipts issued for this year.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- ===== DONORS TAB ===== -->
-<section :class="{'hidden': activeTab !== 'donors'}" :scope="{showExport: false}">
-  <div class="filter-bar">
-    <div class="filter-search-wrap">
-      <input class="filter-search" type="search" :value="donorSearch" :oninput="e => patchState({ donorSearch: e.target.value })" placeholder="Search donors…">
-    </div>
-    <div class="filter-bar-actions">
-      <button class="btn btn-primary filter-bar-create" :onclick="openDonCreate()">+ Income</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div :if="loadErr" class="login-error" :text="loadErr" style="margin:var(--s-md)"></div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Donor</th>
-            <th style="text-align:center">Donations</th>
-            <th style="text-align:right">YTD Total</th>
-            <th style="text-align:right">Last Donation</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr :each="d in donorRowsFiltered" class="row-link" :onclick="e => { patchState({ activeTab: 'transactions', netFilterType: 'income', netSearch: d.name }) }">
-            <td>
-              <strong :text="d.name"></strong>
-              <div class="dim" style="font-size:var(--f-sm)" :text="memberEmails[d.member_id] || ''"></div>
-            </td>
-            <td style="text-align:center" :text="d.count"></td>
-            <td style="text-align:right" :text="'$' + fmtAmt(d.total)"></td>
-            <td style="text-align:right" :text="fmtDate(d.lastDate || d.last_date)"></td>
-          </tr>
-          <tr :if="!donorRowsFiltered.length && !loading">
-            <td colspan="4" class="dim" style="text-align:center;padding:var(--s-xl)">No donors found.</td>
-          </tr>
-          <tr :if="loading">
-            <td colspan="4" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- ===== NET TAB (all transactions) ===== -->
-<section :class="{'hidden': activeTab !== 'transactions'}" :scope="{showExport: false}">
-
-  <div class="filter-bar">
-    <transaction-filter-bar :search="netSearch" :filtertype="netFilterType"
-      :expcats="expCats" :expfiltercats="expFilterCats" :expfilterstatus="expFilterStatus"
-      :incfiltertype="donFilterType" :incfiltermethods="donFilterMethods" :incmethods="incomeMethodOptions"
-      :amtmin="netAmtMin" :amtmax="netAmtMax" :amtlo="netAmtLo" :amthi="netAmtHi" :amtceil="netAmtCeil" :amthist="netAmtHist"
-      :datefrom="netDateFrom" :dateto="netDateTo" :resultcount="netFilteredCount"
-      :onchange="e => { if (!e.detail) return; patchState({ netSearch: e.detail.search ?? netSearch, netFilterType: e.detail.filtertype ?? netFilterType, netAmtMin: e.detail.amtmin ?? netAmtMin, netAmtMax: e.detail.amtmax ?? netAmtMax, netDateFrom: e.detail.datefrom ?? netDateFrom, netDateTo: e.detail.dateto ?? netDateTo, expFilterCats: e.detail.expfiltercats ?? expFilterCats, expFilterStatus: e.detail.expfilterstatus ?? expFilterStatus, donFilterType: e.detail.incfiltertype ?? donFilterType, donFilterMethods: e.detail.incfiltermethods ?? donFilterMethods }) }">
-    </transaction-filter-bar>
-    <div class="filter-bar-actions">
-      <div style="position:relative">
-        <button class="btn btn-outline btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export</button>
-        <div :if="showExport" class="quick-add" style="right:0;left:auto">
-          <a class="quick-add-item" :onclick="exportCSV(); showExport = false">CSV</a>
-          <a class="quick-add-item" :onclick="printTable(); showExport = false">Print / PDF</a>
-        </div>
-      </div>
-      <button :if="can('expenses:create')" class="btn btn-primary filter-bar-create" :onclick="showExpForm = true; expFormDetail = null; expFormMode = 'create'">+ Expense</button>
-      <button :if="can('income:create')" class="btn btn-primary filter-bar-create" :onclick="openDonCreate()">+ Income</button>
-    </div>
-  </div>
-
-  <transaction-list
-    :years="netYearGroups" :mopen="netMonthOpen" :mfresh="netMonthFresh" :search="netSearch" :loading="loading" :error="loadErr"
-    :quickloading="quickLoading" :myapprovals="myApprovals" :filtertype="netFilterType"
-    :empty="!loading && !netFilteredCount" :canapprove="can('expenses:approve')" :memberemails="memberEmails" :emailsending="emailSending"
-    :canissuereceipt="can('income:create')" :receiptissuing="receiptIssuing"
-    :onviewexp.delay-0="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"
-    :onviewinc.delay-0="e => openDonDetail(e.detail)"
-    :onprintinc="e => printDonation(e.detail)"
-    :onemailinc="e => emailDonationReceipt(e.detail)"
-    :onissuereceipt="e => issueReceipt(e.detail)"
-    :onapprove="e => expenseQuickApprove(e.detail)"
-    :onpay="e => expenseQuickPay(e.detail)"
-    :onattach="e => attachExpense(e.detail)"
-    :ontoggle.delay-0="e => toggleNetMonth(e.detail)">
-  </transaction-list>
-</section>
+<finance-transactions-tab :active="activeTab === 'transactions'" :expenses="expenses" :income="donations"
+  :search="netSearch" :filtertype="netFilterType"
+  :expfiltercats="expFilterCats" :expfilterstatus="expFilterStatus"
+  :incfiltertype="donFilterType" :incfiltermethods="donFilterMethods"
+  :amtmin="netAmtMin" :amtmax="netAmtMax" :datefrom="netDateFrom" :dateto="netDateTo"
+  :expcats="expCats" :incmethods="donMethods" :basekeys="defaultMonthKeys"
+  :loading="loading" :error="loadErr" :membernames="memberNames" :memberemails="memberEmails"
+  :emailsending="emailSending" :receiptissuing="receiptIssuing" :quickloading="quickLoading" :myapprovals="myApprovals"
+  :canapprove="can('expenses:approve')" :cancreateexpense="can('expenses:create')"
+  :cancreateincome="can('income:create')" :canissuereceipt="can('income:create')"
+  :onfilterchange="e => patchState(e.detail)"
+  :oncreateexpense="() => { showExpForm = true; expFormDetail = null; expFormMode = 'create' }"
+  :oncreateincome="() => openDonCreate()"
+  :onviewexp.delay-0="e => { showExpForm = true; expFormDetail = e.detail; expFormMode = ((e.detail.status || 'submitted') === 'submitted' || can('expenses:approve')) ? 'edit' : 'view' }"
+  :onviewinc.delay-0="e => openDonDetail(e.detail)"
+  :onprintinc="e => printDonation(e.detail)"
+  :onemailinc="e => emailDonationReceipt(e.detail)"
+  :onissuereceipt="e => issueReceipt(e.detail)"
+  :onapprove="e => expenseQuickApprove(e.detail)"
+  :onpay="e => expenseQuickPay(e.detail)"
+  :onattach="e => attachExpense(e.detail)">
+</finance-transactions-tab>
 <script src="../../lib/define-element.js" defer></script>
-{% include components/expense-list.html %}
-{% include components/income-list.html %}
+{% include components/finance-stat-tabs.html %}
+{% include components/finance-reports-tab.html %}
+{% include components/finance-donors-tab.html %}
+{% include components/finance-transactions-tab.html %}
 {% include components/transaction-list.html %}
-{% include components/expense-filter-bar.html %}
-{% include components/income-filter-bar.html %}
 {% include components/transaction-filter-bar.html %}
 {% include components/expense-form.html %}
 {% include components/donation-form.html %}
@@ -232,19 +84,22 @@ preloads:
   import { init, fmtCat, fmtAmt, rawAmt, toCents, toast, auth, hl } from 'lib/app.js'
   import sprae, { batch } from 'sprae'
   import { setupProcessor } from 'lib/processor.js'
-  import { icon, actionIcon, statusIcon, methodIcon, activityIcon } from 'lib/icons.js'
+  import { icon, actionIcon, statusIcon, methodIcon, activityIcon, trendIcon } from 'lib/icons.js'
   import { api, BASE } from 'lib/api.js'
 
-  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, EXP_METHODS, AMT_MAX, catCls, catHex, catBgHex, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, localMonthKey, changedAt, parseMemberNames, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName, normTab, normIncomeType, normIncomeMethod, normIncomeMethods, normExpenseCats, normAmt, bucketOf, labelOf, sourceOf, incomeTypeMatch, incomeMethodMatch, dateOnly, expenseMonthKey, incomeMonthKey, monthRange, monthOpenState, monthKeysWithData, monthItemMap, buildMonthGroups, groupMonthsByYear, sortExpenses, sortIncome, HIST_BINS, amtHist, trend, trendDiff } from 'lib/finance.js'
+  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, EXP_METHODS, AMT_MAX, catCls, catHex, catBgHex, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, localMonthKey, changedAt, parseMemberNames, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName, normTab, normIncomeType, normIncomeMethod, normIncomeMethods, normExpenseCats, normAmt, bucketOf, labelOf, sourceOf, incomeTypeMatch, incomeMethodMatch, filterDonorRows, expenseMonthKey, incomeMonthKey, monthRange, monthOpenState, monthKeysWithData, monthItemMap, buildMonthGroups, buildNetMonthGroups, filterNetTransactions, filterNetTransactionsByType, groupMonthsByYear, sortExpenses, sortIncome, toNetTransactions, HIST_BINS, amtHist, trend, trendDiff } from 'lib/finance.js'
   import { formDefaults, createPrintDonation } from 'lib/form.js'
 
   // CE processor + registration (must be before init() so CEs are defined when sprae processes DOM)
   setupProcessor(sprae, {
     fmtAmt, fmtCat, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, catCls, rawAmt, toCents, toast, hl,
-    statusIcon, icon, methodIcon, activityIcon,
+    statusIcon, icon, methodIcon, activityIcon, trendIcon,
     apiBase: BASE, api,
     EXP_CATS, EXP_METHODS, DON_METHODS, INCOME_TYPES,
-    EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName,
+    EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName, filterDonorRows, trend, trendDiff,
+    AMT_MAX, catHex, catBgHex, normIncomeMethod, bucketOf, labelOf, sourceOf, incomeTypeMatch, incomeMethodMatch,
+    localMonthKey, monthKeysWithData, buildNetMonthGroups, filterNetTransactions, filterNetTransactionsByType,
+    groupMonthsByYear, toNetTransactions, amtHistFor: amtHist,
     approveIcon: actionIcon('approve'), payIcon: actionIcon('pay'), printIcon: actionIcon('print'), emailIcon: actionIcon('email'), receiptIcon: actionIcon('receipt'),
   }, {
     extras: {
@@ -353,17 +208,8 @@ preloads:
   const s = init({
     ...formDefaults(BASE, MY_USER_ID),
     activeTab: initUrl.activeTab,
-    fmtAmt, fmtDate,
-    hl, observe, statusIcon, catCls, catHex, catBgHex, changedAt,
-    editIcon: actionIcon('edit'),
-    printIcon: actionIcon('print'),
-    emailIcon: actionIcon('email'),
-    approveIcon: actionIcon('approve'),
-    rejectIcon: actionIcon('reject'),
-    payIcon: actionIcon('pay'),
-    closeIcon: statusIcon('closed'),
 
-    year: initUrl.year, years, curYear, monthLabel,
+    year: initUrl.year, years, curYear, monthLabel, defaultMonthKeys,
     loading: false, loadErr: null,
     showExpForm: false, expFormDetail: null, expFormMode: 'create',
     showDonCreateForm: false, showDonDetailForm: false, donFormDetail: null,
@@ -453,11 +299,6 @@ preloads:
     closeDonDetail() {
       this.showDonDetailForm = false
       this.donFormDetail = null
-    },
-    get donorRowsFiltered() {
-      const q = (this.donorSearch || '').toLowerCase()
-      if (!q) return this.donorRows
-      return (this.donorRows || []).filter(d => (d.name || '').toLowerCase().includes(q))
     },
     get incomeMethodCounts() {
       const counts = {}
@@ -908,85 +749,15 @@ preloads:
     netAmtMax: initUrl.netAmtMax,
     netDateFrom: initUrl.netDateFrom,
     netDateTo: initUrl.netDateTo,
-    get netAmtLo() { return this.netAmtMin || 0 },
-    get netAmtHi() { return this.netAmtMax || this.netAmtCeil },
-    get netAmtCeil() { return Math.ceil(Math.max(AMT_MAX, ...this.netTransactions.map(r => r.amount || 0)) / 100) },
-    get netAmtHist() { return amtHist(this.netTransactions, this.netAmtCeil) },
-    netMonthOpen: monthOpenState(defaultMonthKeys, {}, currentMonthKey, prevMonthKey),
-    netMonthFresh: '',
     get netTransactions() {
-      const exp = this.expenses.map(x => ({ ...x, _isExp: true, _date: dateOnly(x.expense_date) || x.created_at || '', _changedAt: changedAt(x) || x.expense_date || '' }))
-      const inc = this.donations.map(d => ({ ...d, _isExp: false, _date: dateOnly(d.date_received) || d.created_at || '', _changedAt: changedAt(d) || d.date_received || '' }))
-      return [...exp, ...inc]
+      return toNetTransactions({ expenses: this.expenses, income: this.donations })
     },
-    get netFiltered() {
-      const q = this.netSearch?.toLowerCase() || ''
-      const isExpFilter = this.netFilterType === 'expense'
-      const isIncFilter = this.netFilterType === 'income'
-      return this.netTransactions.filter(tx => {
-        if (this.netAmtMin && (tx.amount || 0) < this.netAmtMin * 100) return false
-        if (this.netAmtMax && (tx.amount || 0) > this.netAmtMax * 100) return false
-        const dt = (tx._date || '').slice(0, 10)
-        if (this.netDateFrom && dt < this.netDateFrom) return false
-        if (this.netDateTo && dt > this.netDateTo) return false
-        if (tx._isExp) {
-          if (isExpFilter && this.expFilterStatus && tx.status !== this.expFilterStatus) return false
-          if (isExpFilter && this.expFilterCats.length && !this.expFilterCats.includes(tx.category || 'other')) return false
-          if (!q) return true
-          return [tx.payee, tx.note, tx.category, tx.expense_no, fmtCat(tx.category)].filter(Boolean).join(' ').toLowerCase().includes(q)
-        } else {
-          if (isIncFilter && this.donFilterType && !incomeTypeMatch(tx, this.donFilterType)) return false
-          if (isIncFilter && this.donFilterMethods.length && !incomeMethodMatch(tx, this.donFilterMethods)) return false
-          if (!q) return true
-          return [tx.note, tx.method, tx.type, bucketOf(tx), sourceOf(tx, this.memberNames)].filter(Boolean).join(' ').toLowerCase().includes(q)
-        }
-      })
-    },
-    get netFilteredByType() {
-      const t = this.netFilterType
-      if (!t) return this.netFiltered
-      const isExp = t === 'expense'
-      return this.netFiltered.filter(tx => tx._isExp === isExp)
-    },
-    get netFilteredCount() {
-      return this.netFilteredByType.length
-    },
-    get netMonthKeys() {
+    get reportMonthKeys() {
       const keyOf = tx => localMonthKey(tx._date)
-      return monthKeysWithData(defaultMonthKeys, this.netFiltered, keyOf, currentMonthKey)
+      return monthKeysWithData(defaultMonthKeys, this.netTransactions, keyOf, currentMonthKey)
     },
-    get netGrouped() {
-      const keyOf = tx => localMonthKey(tx._date)
-      const keys = this.netMonthKeys
-      const byKey = monthItemMap(keys, this.netFiltered, keyOf)
-      return keys.map(key => {
-        const items = (byKey[key] || []).sort((a, b) => (b._date || '').localeCompare(a._date || '') || (b._changedAt || '').localeCompare(a._changedAt || '') || (b.id || 0) - (a.id || 0))
-        let incTotal = 0, expTotal = 0, incCount = 0, expCount = 0
-        for (const tx of items) {
-          if (tx._isExp) { expTotal += tx.amount || 0; expCount++ }
-          else { incTotal += tx.amount || 0; incCount++ }
-        }
-        return { key, items, count: items.length, total: incTotal + expTotal, net: incTotal - expTotal, incCount, expCount, incTotal, expTotal }
-      })
-    },
-    get netYearGroups() {
-      const months = this.netGrouped.filter(g => g.count > 0)
-      return groupMonthsByYear(months).filter(yr => yr.items.length > 0)
-    },
-    isNetMonthOpen(key) { return !!this.netMonthOpen[key] },
-    isNetMonthDividerVisible(key) {
-      const idx = this.netMonthKeys.indexOf(key)
-      if (idx <= 0) return false
-      return !this.isNetMonthOpen(this.netMonthKeys[idx - 1])
-    },
-    toggleNetMonth(key) {
-      const next = !this.isNetMonthOpen(key)
-      this.netMonthOpen = { ...this.netMonthOpen, [key]: next }
-      if (next) {
-        this.netMonthFresh = key
-        clearTimeout(netFreshTimer)
-        netFreshTimer = setTimeout(() => { if (this.netMonthFresh === key) this.netMonthFresh = '' }, 400)
-      }
+    get reportMonths() {
+      return buildNetMonthGroups(this.reportMonthKeys, this.netTransactions)
     },
 
     patchState(patch) {
@@ -1072,54 +843,23 @@ preloads:
     },
 
     exportCSV() {
-      if (this.activeTab === 'transactions') {
-        const rows = [['Date', 'Type', 'Description', 'Category', 'Amount', 'Note']]
-        for (const tx of this.netFilteredByType) {
-          if (tx._isExp) rows.push([tx.expense_date?.slice(0, 10), 'Expense', tx.payee, tx.category, '-' + rawAmt(tx.amount), tx.note || ''])
-          else rows.push([tx.date_received?.slice(0, 10), 'Income', sourceOf(tx, this.memberNames), labelOf(tx), '+' + rawAmt(tx.amount), tx.note || ''])
-        }
-        dlCSV(rows, 'transactions.csv')
-      } else if (this.activeTab === 'income') {
-        const rows = [['Date', 'Source', 'Method', 'Type', 'Amount', 'Note']]
-        for (const d of this.donFiltered) rows.push([d.date_received?.slice(0, 10), sourceOf(d, this.memberNames), d.method, labelOf(d), rawAmt(d.amount), d.note || ''])
-        dlCSV(rows, 'income.csv')
-      } else {
-        const rows = [['Date', 'Status', 'Payee', 'Category', 'Amount', 'Note']]
-        for (const x of this.expFiltered) rows.push([x.expense_date?.slice(0, 10), x.status || 'submitted', x.payee, x.category, rawAmt(x.amount), x.note || x.description || ''])
-        dlCSV(rows, 'expenses.csv')
-      }
+      if (this.activeTab !== 'reports') return
+      const rows = [['Month', 'Income', 'Expenses', 'Net']]
+      for (const g of this.reportMonths) rows.push([g.key, rawAmt(g.incTotal), rawAmt(g.expTotal), rawAmt(g.net)])
+      dlCSV(rows, 'reports.csv')
     },
 
     printTable() {
       const section = document.querySelector('section:not(.hidden)')
       const table = section?.querySelector('table')
       const w = window.open('', '_blank')
-      const title = this.activeTab === 'transactions' ? 'Transactions' : fmtCat(this.activeTab)
+      const title = fmtCat(this.activeTab)
       w.document.write('<html><head><title>' + title + '</title>')
       w.document.write('<style>body{font-family:system-ui,sans-serif;padding:2rem}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px 12px;text-align:left;border-bottom:1px solid #ddd}th{font-weight:600;border-bottom:2px solid #999}h1{font-size:1.5rem;margin-bottom:1rem}@media print{body{padding:0}}</style>')
       w.document.write('</head><body>')
       w.document.write('<h1>' + title + ' — ' + this.year + '</h1>')
       if (table) {
         w.document.write(table.outerHTML)
-      } else if (this.activeTab === 'net') {
-        const rows = this.netFilteredByType.map(tx => '<tr>'
-          + '<td>' + ((tx._isExp ? tx.expense_date : tx.date_received)?.slice(0, 10) || '') + '</td>'
-          + '<td>' + (tx._isExp ? 'Expense' : 'Income') + '</td>'
-          + '<td>' + (tx._isExp ? (tx.payee || '') : sourceOf(tx, this.memberNames)) + '</td>'
-          + '<td>' + fmtCat(tx._isExp ? tx.category : labelOf(tx)) + '</td>'
-          + '<td style="text-align:right">' + (tx._isExp ? '\u2212' : '+') + '$' + fmtAmt(tx.amount || 0) + '</td>'
-          + '</tr>').join('')
-        w.document.write('<table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>')
-      } else if (this.activeTab === 'income') {
-        const rows = this.donFiltered.map(d => '<tr>'
-          + '<td>' + (d.date_received?.slice(0, 10) || '') + '</td>'
-          + '<td>' + sourceOf(d, this.memberNames) + '</td>'
-          + '<td>' + (d.method || '') + '</td>'
-          + '<td>' + fmtCat(labelOf(d)) + '</td>'
-          + '<td style="text-align:right">+$' + fmtAmt(d.amount || 0) + '</td>'
-          + '<td>' + (d.note || '') + '</td>'
-          + '</tr>').join('')
-        w.document.write('<table><thead><tr><th>Date</th><th>Source</th><th>Method</th><th>Type</th><th style="text-align:right">Amount</th><th>Note</th></tr></thead><tbody>' + rows + '</tbody></table>')
       } else {
         w.close()
         return
@@ -1132,51 +872,11 @@ preloads:
     loadAll,
   })
 
-  let _rangeT = 0
-  s.rangeSync = (e, v, ceil, isLo, patch) => {
-    const track = e.target.closest('.range-track')
-    const slider = track.querySelector('.range-slider')
-    slider.style.setProperty(isLo ? '--lh' : '--rh', (v / ceil * 100) + '%')
-    const inputs = track.nextElementSibling.querySelectorAll('input')
-    inputs[isLo ? 0 : 1].value = isLo ? v : (v >= ceil ? '' : v)
-    const bars = track.querySelectorAll('.range-hist-bar')
-    const n = bars.length
-    if (n) {
-      const lo = isLo ? v : +slider.querySelector('.range-lo').value
-      const hi = isLo ? +slider.querySelector('.range-hi').value : v
-      bars.forEach((bar, i) => bar.classList.toggle('range-hist-bar-dim', i < (lo / ceil * n) || i >= (hi / ceil * n)))
-    }
-    clearTimeout(_rangeT)
-    _rangeT = setTimeout(() => s.patchState(patch), 450)
-  }
-  function amtToPos(amt, ceil) {
-    if (!amt || amt <= 0 || !ceil) return 0
-    if (amt >= ceil) return 1000
-    return Math.round(Math.log(amt + 1) / Math.log(ceil + 1) * 1000)
-  }
-  function syncRangeVars() {
-    const sliders = document.querySelectorAll('.range-slider')
-    sliders.forEach((el) => {
-      const [lo, hi, ceil] = [s.netAmtLo, s.netAmtHi, s.netAmtCeil]
-      const loPos = amtToPos(lo, ceil)
-      const hiPos = amtToPos(hi, ceil)
-      el.style.setProperty('--lh', (loPos / 10) + '%')
-      el.style.setProperty('--rh', (hiPos / 10) + '%')
-      const loInput = el.querySelector('.range-lo')
-      const hiInput = el.querySelector('.range-hi')
-      if (loInput) { loInput.max = 1000; loInput.value = loPos }
-      if (hiInput) { hiInput.max = 1000; hiInput.value = hiPos }
-    })
-  }
-
   s.patchState = patch => {
-    clearTimeout(_rangeT)
     Object.assign(s, patch)
     if (Object.keys(patch).some(k => k === 'expSearch' || k === 'expFilterCats' || k === 'expFilterStatus' || k === 'expAmtMin' || k === 'expAmtMax' || k === 'expDateFrom' || k === 'expDateTo')) refreshExpMonthOpen()
     if (Object.keys(patch).some(k => k === 'donSearch' || k === 'donFilterType' || k === 'donFilterMethods' || k === 'donAmtMin' || k === 'donAmtMax' || k === 'donDateFrom' || k === 'donDateTo')) refreshDonMonthOpen()
     if ('expSearch' in patch) scheduleExpSearch(patch.expSearch)
-    if (Object.keys(patch).some(k => k === 'netSearch' || k === 'netFilterType' || k === 'netAmtMin' || k === 'netAmtMax' || k === 'netDateFrom' || k === 'netDateTo')) refreshNetMonthOpen()
-    if ('expAmtMin' in patch || 'expAmtMax' in patch || 'donAmtMin' in patch || 'donAmtMax' in patch || 'netAmtMin' in patch || 'netAmtMax' in patch) syncRangeVars()
     writeUrl(s)
   }
   s.setYear = year => {
@@ -1510,7 +1210,6 @@ preloads:
       syncLoadedIncome()
       refreshIncomeStats()
       refreshDonMonthOpen()
-      refreshNetMonthOpen()
     })
   }
 
@@ -1593,9 +1292,7 @@ preloads:
         syncLoadedIncome()
         refreshExpMonthOpen()
         refreshDonMonthOpen()
-        refreshNetMonthOpen()
         refreshIncomeStats()
-        syncRangeVars()
       })
     } catch (e) {
       s.loadErr = e.message || 'Failed to load finance data'
@@ -1648,14 +1345,6 @@ preloads:
     }
   }
 
-  function refreshNetMonthOpen() {
-    const netGrouped = s.netGrouped
-    const withData = new Set(netGrouped.filter(g => g.count > 0).map(g => g.key))
-    refreshMonthOpen('netMonthOpen', s.netMonthKeys, false, key => withData.has(key))
-  }
-
-
-
   function applyUrlStateFromLocation() {
     const next = urlState()
     s.activeTab = next.activeTab
@@ -1663,22 +1352,17 @@ preloads:
     s.expPage = 1
     s.donPage = 1
     s.donorPage = 1
-    s.expSearch = next.expSearch
     s.expFilterCats = next.expFilterCats
     s.expFilterStatus = next.expFilterStatus
-    s.expAmtMin = next.expAmtMin
-    s.expAmtMax = next.expAmtMax
-    s.expDateFrom = next.expDateFrom
-    s.expDateTo = next.expDateTo
-    s.donSearch = next.donSearch
     s.donFilterType = next.donFilterType
     s.donFilterMethods = next.donFilterMethods
-    s.donAmtMin = next.donAmtMin
-    s.donAmtMax = next.donAmtMax
-    s.donDateFrom = next.donDateFrom
-    s.donDateTo = next.donDateTo
     s.donorSearch = next.donorSearch
     s.netSearch = next.netSearch
+    s.netFilterType = next.netFilterType
+    s.netAmtMin = next.netAmtMin
+    s.netAmtMax = next.netAmtMax
+    s.netDateFrom = next.netDateFrom
+    s.netDateTo = next.netDateTo
     refreshExpMonthOpen()
     refreshDonMonthOpen()
   }
@@ -1686,7 +1370,6 @@ preloads:
   window.addEventListener('hashchange', applyUrlStateFromLocation)
   window.addEventListener('popstate', applyUrlStateFromLocation)
 
-  if (s.expSearch) scheduleExpSearch(s.expSearch)
   loadAll().then(() => {
     if (s.activeTab === 'transactions' && !s.expRangeLoaded) loadExpenseRange()
     if (s.activeTab === 'transactions' && !s.donRangeLoaded) loadIncomeRange()

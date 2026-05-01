@@ -9,7 +9,7 @@
           <span :if="filtertype" class="chip filter-inline-chip" :onclick="_change({ filtertype: '' })" :text="(filtertype === 'expense' ? 'Expenses' : 'Income') + ' ×'"></span>
           <span :if="filtertype === 'expense'" :each="cat in expfiltercats" class="chip filter-inline-chip" :onclick="_change({ expfiltercats: expfiltercats.filter(x => x !== cat) })" :text="fmtCat(cat) + ' ×'"></span>
           <span :if="filtertype === 'expense' && expfilterstatus" class="chip filter-inline-chip" :onclick="_change({ expfilterstatus: '' })" :text="fmtStatus(expfilterstatus) + ' ×'"></span>
-          <span :if="filtertype === 'income' && incfiltertype" class="chip filter-inline-chip" :onclick="_change({ incfiltertype: '' })" :text="incfiltertype + ' ×'"></span>
+          <span :if="filtertype === 'income' && incfiltertype" class="chip filter-inline-chip" :onclick="_change({ incfiltertype: '' })" :text="fmtCat(incfiltertype) + ' ×'"></span>
           <span :if="filtertype === 'income'" :each="met in incfiltermethods" class="chip filter-inline-chip" :onclick="_change({ incfiltermethods: incfiltermethods.filter(x => x !== met) })" :text="met + ' ×'"></span>
           <span :if="amtmin || amtmax" class="chip filter-inline-chip" :onclick="_change({ amtmin: '', amtmax: '' })" :text="'$' + amtlo + '–$' + amthi + ' ×'"></span>
           <span :if="datefrom" class="chip filter-inline-chip" :onclick="_change({ datefrom: '' })" :text="'From ' + datefrom + ' ×'"></span>
@@ -28,7 +28,7 @@
             </div>
 
             <!-- Expense specific filters -->
-            <div :class="{'hidden': filtertype !== 'expense'}" class="field">
+            <div :class="{'hidden': filtertype === 'income'}" class="field">
               <label>Category</label>
               <div class="tag-cloud">
                 <span :each="cat in expcats" class="tag" :class="catCls(cat) + (expfiltercats.includes(cat) ? ' tag-active' : '')"
@@ -36,7 +36,7 @@
                   :text="fmtCat(cat)"></span>
               </div>
             </div>
-            <div :class="{'hidden': filtertype !== 'expense'}" class="field">
+            <div :class="{'hidden': filtertype === 'income'}" class="field">
               <label>Status</label>
               <select :value="expfilterstatus" :onchange="e => _change({ expfilterstatus: e.target.value })">
                 <option value="" :selected="!expfilterstatus">All statuses</option>
@@ -48,7 +48,7 @@
             </div>
 
             <!-- Income specific filters -->
-            <div :class="{'hidden': filtertype !== 'income'}" class="field">
+            <div :class="{'hidden': filtertype === 'expense'}" class="field">
               <label>Income Type</label>
               <div class="seg-group" style="width:100%">
                 <span class="seg" style="flex:1;text-align:center" :class="{'seg-active': !incfiltertype}" :onclick="_change({ incfiltertype: '' })">All</span>
@@ -56,7 +56,7 @@
                 <span class="seg" style="flex:1;text-align:center" :class="{'seg-active': incfiltertype === 'other'}" :onclick="_change({ incfiltertype: 'other' })">Other</span>
               </div>
             </div>
-            <div :class="{'hidden': filtertype !== 'income'}" class="field" :scope="{ methods: incmethods }">
+            <div :class="{'hidden': filtertype === 'expense'}" class="field" :scope="{ methods: incmethods }">
               <label>Payment Method</label>
               <div class="tag-cloud">
                 <span :each="met in methods" class="tag" :class="incfiltermethods.includes(met) ? 'tag-active' : ''"
@@ -81,10 +81,10 @@
               </div>
               <div style="display:flex;gap:var(--s-sm);align-items:center">
                 <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Min" :value="amtmin"
-                  :onchange="e => { var v = Math.max(0, Math.min(+e.target.value || 0, amthi)); _changeDebounced({ amtmin: e.target.value === '' ? '' : v }) }"></span>
+                  :onchange="e => { var v = Math.max(0, Math.min(+e.target.value || 0, amthi)); _change({ amtmin: e.target.value === '' ? '' : v }) }"></span>
                 <span class="dim">—</span>
                 <span class="input-prefix"><span class="input-prefix-label">$</span><input type="number" min="0" placeholder="Max" :value="amtmax"
-                  :onchange="e => { var v = Math.min(amtceil, Math.max(+e.target.value || 0, amtlo)); _changeDebounced({ amtmax: v >= amtceil ? '' : v }) }"></span>
+                  :onchange="e => { var v = Math.min(amtceil, Math.max(+e.target.value || 0, amtlo)); _change({ amtmax: v >= amtceil ? '' : v }) }"></span>
               </div>
             </div>
             <div class="field">
@@ -132,6 +132,20 @@
         return Math.round(Math.exp(pos / 1000 * Math.log(c + 1)) - 1)
       }
 
+      this._syncRangeVars = function() {
+        var root = this.host || this
+        var slider = root.querySelector?.('.range-slider')
+        if (!slider) return
+        var loPos = this._amtToPos(this.amtlo)
+        var hiPos = this._amtToPos(this.amthi)
+        slider.style.setProperty('--lh', (loPos / 10) + '%')
+        slider.style.setProperty('--rh', (hiPos / 10) + '%')
+        var loInput = slider.querySelector('.range-lo')
+        var hiInput = slider.querySelector('.range-hi')
+        if (loInput) loInput.value = loPos
+        if (hiInput) hiInput.value = hiPos
+      }
+
       this._rangeSync = function(e, pos, isLo) {
         var v = this._posToAmt(pos)
         var slider = e.target.closest('.range-slider')
@@ -144,6 +158,13 @@
         if (numEl) numEl.value = isLo ? (v || '') : (pos >= 1000 ? '' : v)
         var patch = isLo ? { amtmin: v || '' } : { amtmax: pos >= 1000 ? '' : v }
         this._changeDebounced(patch)
+      }
+
+      this.onconnected = function() {
+        queueMicrotask(() => this._syncRangeVars?.())
+      }
+      this.onpropchange = function(k) {
+        if (['amtlo', 'amthi', 'amtceil'].includes(k)) queueMicrotask(() => this._syncRangeVars?.())
       }
     </script>
   </transaction-filter-bar>

@@ -5,11 +5,10 @@
       <div :if="error" class="login-error" :text="error" style="margin:var(--s-md)"></div>
       <div :if="loading" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</div>
       <div :if="empty" class="dim" style="text-align:center;padding:var(--s-xl)">No transactions yet</div>
-      <div :each="yr in years" class="finance-year-section" :class="{'hidden': filtertype && !yr.items.some(g => filtertype === 'expense' ? g.expCount : g.incCount)}">
-        <div class="finance-year-sticky" data-testid="year-label" :if="yr.key !== 'unknown'" :text="yr.key"></div>
+      <div :each="yr in years" class="finance-year-section" :class="{'hidden': filtertype && !(yr?.items || []).some(g => filtertype === 'expense' ? g.expCount : g.incCount)}">
+        <div class="finance-year-sticky" data-testid="year-label" :if="yr && yr.key !== 'unknown'" :text="yr?.key || ''"></div>
         <div class="finance-year-months">
-          <template :each="(g, gi) in yr.items">
-          <div :class="{'hidden': filtertype && !(filtertype === 'expense' ? g.expCount : g.incCount), 'finance-month-wrap-open': mopen[g.key], 'finance-month-wrap-divider': gi > 0}">
+          <div :each="(g, gi) in (yr?.items || [])" :class="{'hidden': filtertype && !(filtertype === 'expense' ? g.expCount : g.incCount), 'finance-month-wrap-open': mopen[g.key], 'finance-month-wrap-divider': gi > 0}">
             <button type="button" class="exp-group-header" data-testid="tx-month-header" :class="{'exp-group-header-open': mopen[g.key], 'exp-group-header-empty': !(filtertype ? (filtertype === 'expense' ? g.expCount : g.incCount) : g.count)}" :aria-expanded="mopen[g.key] ? 'true' : 'false'" :disabled="!(filtertype ? (filtertype === 'expense' ? g.expCount : g.incCount) : g.count)" :onclick="e => (filtertype ? (filtertype === 'expense' ? g.expCount : g.incCount) : g.count) && _toggle(g.key)">
               <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
               <span class="exp-group-heading">
@@ -19,12 +18,15 @@
                 </span>
                 <span :if="filtertype ? (filtertype === 'expense' ? g.expCount : g.incCount) : g.count" class="exp-group-count" :text="filtertype ? (filtertype === 'expense' ? g.expCount : g.incCount) : g.count"></span>
               </span>
+              <span :if="g.breakdown?.length" class="exp-group-breakdown" :title="g.breakdown.map(seg => seg.title).join('\n')">
+                <span :each="seg in g.breakdown" class="exp-group-breakdown-seg" :style="seg.style" :title="seg.title"></span>
+              </span>
               <span class="exp-group-total" :class="(filtertype ? (filtertype === 'expense' ? g.expCount : g.incCount) : g.count) ? (filtertype === 'expense' ? 'stat-err' : filtertype === 'income' ? 'stat-ok' : (g.net >= 0 ? 'stat-ok' : 'stat-err')) : ''" :text="(filtertype ? (filtertype === 'expense' ? g.expCount : g.incCount) : g.count) ? ((filtertype === 'expense' ? '\u2212' : filtertype === 'income' ? '+' : (g.net >= 0 ? '+' : '\u2212')) + '$' + fmtAmt(filtertype === 'expense' ? g.expTotal : filtertype === 'income' ? g.incTotal : Math.abs(g.net))) : '$0'"></span>
             </button>
             <div class="recent-exp-list recent-inc-list finance-exp-list finance-inc-list-group finance-net-list" data-testid="tx-month-items" :class="{'finance-exp-list-open': mopen[g.key], 'finance-exp-list-fresh': mfresh === g.key}" :aria-hidden="mopen[g.key] ? 'false' : 'true'">
               <template :each="tx in g.items">
                 <!-- Expense row -->
-                <div :if="tx._isExp && filtertype !== 'income'" class="recent-exp-item row-link finance-net-item" data-testid="tx-expense" :onclick="e => _emit('viewexp', tx)">
+                <div :if="tx._isExp && filtertype !== 'income'" class="recent-exp-item row-link finance-exp-item finance-net-item" data-testid="tx-expense" :onclick="e => _emit('viewexp', tx)">
                   <span class="recent-exp-icon-col">
                     <span class="status-icon" :class="'status-' + (tx.status || 'submitted')" :html="statusIcon(tx.status || 'submitted')"></span>
                   </span>
@@ -37,7 +39,7 @@
                         </div>
                       </div>
                       <div class="recent-exp-meta-row">
-                        <span class="recent-exp-status-text" :class="'status-' + (tx.status || 'submitted')" :text="fmtStatus(tx.status || 'submitted')"></span>
+                        <span class="recent-exp-status-text" :class="'status-' + (tx.status || 'submitted')" :text="(tx.status || 'submitted') === 'submitted' ? ('Approval ' + (tx.approval_count || 0) + '/' + (tx.approvals_required || '?')) : fmtStatus(tx.status || 'submitted')"></span>
                         <time class="recent-exp-time" :datetime="tx.expense_date || tx.created_at || ''" :title="(tx.expense_date || tx.created_at) ? new Date(tx.expense_date || tx.created_at).toLocaleString() : ''" :text="fmtDate(tx.expense_date || tx.created_at)"></time>
                       </div>
                     </div>
@@ -61,7 +63,7 @@
                   </div>
                 </div>
                 <!-- Income row -->
-                <div :if="!tx._isExp && filtertype !== 'expense'" class="recent-inc-item row-link finance-net-item" data-testid="tx-income" :onclick="e => _emit('viewinc', tx)">
+                <div :if="!tx._isExp && filtertype !== 'expense'" class="recent-inc-item row-link finance-inc-item finance-net-item" data-testid="tx-income" :onclick="e => _emit('viewinc', tx)">
                   <span class="recent-inc-icon-col" :class="'recent-inc-icon-' + (tx.method || 'cash')">
                     <span class="recent-inc-icon" :html="methodIcon(tx.method || 'cash')"></span>
                   </span>
@@ -97,7 +99,6 @@
               </template>
             </div>
           </div>
-          </template>
         </div>
       </div>
     </template>

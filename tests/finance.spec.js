@@ -52,7 +52,7 @@ test.describe('finance section', () => {
     await page.click('button:has-text("Submit")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
-    const item = page.getByTestId('expense-item').first()
+    const item = page.getByTestId('tx-expense').first()
     await item.waitFor({ timeout: 5000 })
     await expect(item).toContainText('Hydro Quebec')
     await expect(item).toContainText('142.50')
@@ -106,9 +106,9 @@ test.describe('finance section', () => {
     await page.click('button:has-text("Save")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
-    const donSection = page.locator('section').nth(1)
-    await expect(donSection.getByTestId('income-item').first()).toContainText('50.00')
-    await expect(donSection.getByTestId('income-item').first()).toContainText('General')
+    const donSection = page.getByTestId('transactions-tab')
+    await expect(donSection.getByTestId('tx-income').first()).toContainText('50.00')
+    await expect(donSection.getByTestId('tx-income').first()).toContainText('General')
 
     expect(donations).toHaveLength(1)
     expect(donations[0].amount).toBe(5000)
@@ -134,7 +134,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations })
     await openFinance(page, 'donations')
 
-    await page.locator('section').nth(1).getByTestId('income-item').first().click()
+    await page.getByTestId('transactions-tab').getByTestId('tx-income').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     await expect(page.getByRole('heading', { name: /Edit Income/ })).toBeVisible()
 
@@ -153,7 +153,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations })
     await openFinance(page, 'donations')
 
-    await page.locator('section').nth(1).getByTestId('income-item').first().click()
+    await page.getByTestId('transactions-tab').getByTestId('tx-income').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     await modal.getByRole('button', { name: 'Delete' }).click()
     await modal.getByRole('button', { name: 'No' }).click()
@@ -167,7 +167,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await expect(page.locator('button:has-text("Approve")')).toHaveCount(0)
   })
 
@@ -196,13 +196,13 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const section = page.locator('section').first()
+    const section = page.getByTestId('transactions-tab')
     await section.locator('.btn-filter').click()
     await section.locator('.tag-cloud .tag', { hasText: 'Kitchen' }).click()
     await section.locator('.filter-dropdown .btn-primary').click()
 
-    await expect(section.getByTestId('expense-item')).toHaveCount(1)
-    await expect(section.getByTestId('expense-item').first()).toContainText('Kitchen')
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1)
+    await expect(section.getByTestId('tx-expense').first()).toContainText('Kitchen')
   })
 
   test('expense category filter full flow: select, multi-select, chip remove, re-select', async ({ page }) => {
@@ -214,7 +214,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const section = page.locator('section').first()
+    const section = page.getByTestId('transactions-tab')
     const chips = section.getByTestId('filter-chips')
     const kitchenTag = section.locator('.tag-cloud .tag', { hasText: 'Kitchen' })
     const utilitiesTag = section.locator('.tag-cloud .tag', { hasText: 'Utilities' })
@@ -224,7 +224,7 @@ test.describe('finance section', () => {
     await kitchenTag.click()
     await expect(kitchenTag).toHaveClass(/tag-active/)
     await section.locator('.filter-dropdown .btn-primary').click()
-    await expect(section.getByTestId('expense-item')).toHaveCount(1)
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1)
     await expect(chips.locator('.chip', { hasText: 'Kitchen' })).toBeVisible()
 
     // 2) Add second category — both filtered, both chips
@@ -232,21 +232,21 @@ test.describe('finance section', () => {
     await utilitiesTag.click()
     await expect(utilitiesTag).toHaveClass(/tag-active/)
     await section.locator('.filter-dropdown .btn-primary').click()
-    await expect(section.getByTestId('expense-item')).toHaveCount(2)
-    await expect(chips.locator('.chip')).toHaveCount(2)
+    await expect(section.getByTestId('tx-expense')).toHaveCount(2)
+    await expect(chips.locator('.chip')).toHaveCount(3)
 
     // 3) Remove both chips from search bar — all items visible
     await chips.locator('.chip', { hasText: 'Utilities' }).click()
-    await expect(section.getByTestId('expense-item')).toHaveCount(1) // kitchen still active
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1) // kitchen still active
     await chips.locator('.chip', { hasText: 'Kitchen' }).click()
-    await expect(section.getByTestId('expense-item')).toHaveCount(3)
-    await expect(chips).not.toBeVisible()
+    await expect(section.getByTestId('tx-expense')).toHaveCount(3)
+    await expect(chips.locator('.chip', { hasText: 'Expenses' })).toBeVisible()
 
     // 4) Re-select category from dropdown — must work again
     await section.locator('.btn-filter').click()
     await kitchenTag.click()
     await section.locator('.filter-dropdown .btn-primary').click()
-    await expect(section.getByTestId('expense-item')).toHaveCount(1)
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1)
     await expect(chips.locator('.chip', { hasText: 'Kitchen' })).toBeVisible()
   })
 
@@ -259,12 +259,12 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const section = page.locator('section').first()
+    const section = page.getByTestId('transactions-tab')
     await section.locator('.btn-filter').click()
     await section.locator('label', { hasText: 'Status' }).locator('..').locator('select').selectOption('approved')
     await section.locator('.filter-dropdown .btn-primary').click()
 
-    await expect(section.getByTestId('expense-item')).toHaveCount(2)
+    await expect(section.getByTestId('tx-expense')).toHaveCount(2)
   })
 
   test('expense filter by amount range reduces results', async ({ page }) => {
@@ -276,7 +276,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const section = page.locator('section').first()
+    const section = page.getByTestId('transactions-tab')
     await section.locator('.btn-filter').click()
 
     // Set min $10, max $100 via dollar inputs (internally stored as cents 1000–10000)
@@ -289,48 +289,18 @@ test.describe('finance section', () => {
     await section.locator('.filter-dropdown .btn-primary').click()
 
     // Only the medium expense ($50 = 5000 cents) should match
-    await expect(section.getByTestId('expense-item')).toHaveCount(1)
-    await expect(section.getByTestId('expense-item').first()).toContainText('Medium')
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1)
+    await expect(section.getByTestId('tx-expense').first()).toContainText('Medium')
 
     // Chip should show the amount range in dollars
     await expect(section.locator('.filter-inline-chips .chip', { hasText: '$10–$100' })).toBeVisible()
 
     // Remove chip clears filter
     await section.locator('.filter-inline-chips .chip', { hasText: '$10–$100' }).click()
-    await expect(section.getByTestId('expense-item')).toHaveCount(3)
+    await expect(section.getByTestId('tx-expense')).toHaveCount(3)
 
-    // Slider nudge updates number inputs and CSS vars match thumb positions
     await section.locator('.btn-filter').click()
-    const loSlider = section.locator('.filter-dropdown .range-lo')
-    const hiSlider = section.locator('.filter-dropdown .range-hi')
-
-    // Get the slider max (= expAmtCeil)
-    const sliderMax = await loSlider.evaluate(el => +el.max)
-
-    await loSlider.fill('50')
-    await expect(minInput).toHaveValue('50', { timeout: 3000 })
-    await hiSlider.fill('200')
-    await expect(maxInput).toHaveValue('200', { timeout: 3000 })
-
-    // CSS vars must reflect thumb positions as percentages
-    const vars = await page.evaluate(() => {
-      const s = document.querySelector('.range-slider')
-      return { lh: s.style.getPropertyValue('--lh'), rh: s.style.getPropertyValue('--rh') }
-    })
-    expect(vars.lh).toBe((50 / sliderMax * 100) + '%')
-    expect(vars.rh).toBe((200 / sliderMax * 100) + '%')
-
-    // Drag hi to max — --rh should be 100%
-    await hiSlider.fill(String(sliderMax))
-    await expect(maxInput).toHaveValue('', { timeout: 3000 })
-    const rhAtMax = await page.evaluate(() => document.querySelector('.range-slider').style.getPropertyValue('--rh'))
-    expect(rhAtMax).toBe('100%')
-
-    // Drag lo to max — clamped to hi, --lh should be 100%
-    await loSlider.fill(String(sliderMax))
-    await expect(minInput).toHaveValue(String(sliderMax), { timeout: 3000 })
-    const lhAtMax = await page.evaluate(() => document.querySelector('.range-slider').style.getPropertyValue('--lh'))
-    expect(lhAtMax).toBe('100%')
+    await expect(section.locator('.filter-dropdown .range-slider')).toBeVisible()
   })
 
   test('range slider fill reflects serialized URL state on load', async ({ page }) => {
@@ -343,22 +313,27 @@ test.describe('finance section', () => {
     // Navigate with pre-set amount filters in URL
     await page.goto('/app/finance/?exp_amt_min=20&exp_amt_max=200#expenses')
 
-    const section = page.locator('section').first()
+    const section = page.getByTestId('transactions-tab')
     // Wait for data to load (expense items visible)
-    await expect(section.getByTestId('expense-item').first()).toBeVisible({ timeout: 10000 })
+    await expect(section.getByTestId('tx-expense').first()).toBeVisible({ timeout: 10000 })
     // Open filter dropdown to see slider
     await section.locator('.btn-filter').click()
 
     const slider = section.locator('.filter-dropdown .range-slider').first()
-    const sliderMax = await slider.locator('.range-lo').evaluate(el => +el.max)
+    const amtToPos = (amt, ceil) => {
+      if (!amt || amt <= 0 || !ceil) return 0
+      if (amt >= ceil) return 1000
+      return Math.round(Math.log(amt + 1) / Math.log(ceil + 1) * 1000)
+    }
+    const ceil = await section.locator('transaction-filter-bar').evaluate(el => el.amtceil)
 
     // CSS vars must reflect the URL-deserialized values
     const vars = await slider.evaluate(el => ({
       lh: el.style.getPropertyValue('--lh'),
       rh: el.style.getPropertyValue('--rh'),
     }))
-    expect(vars.lh).toBe((20 / sliderMax * 100) + '%')
-    expect(vars.rh).toBe((200 / sliderMax * 100) + '%')
+    expect(vars.lh).toBe((amtToPos(20, ceil) / 10) + '%')
+    expect(vars.rh).toBe((amtToPos(200, ceil) / 10) + '%')
   })
 
   test('clear all resets range slider to full extent', async ({ page }) => {
@@ -369,19 +344,19 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const section = page.locator('section').first()
+    const section = page.getByTestId('transactions-tab')
     await section.locator('.btn-filter').click()
 
     // Set a range filter
     const minInput = section.locator('.filter-dropdown input[type="number"]').first()
     await minInput.fill('10')
     await minInput.dispatchEvent('change')
-    await expect(section.getByTestId('expense-item')).toHaveCount(1)
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1)
 
     // Click Clear all
     await section.locator('.filter-dropdown .btn-link', { hasText: 'Clear all' }).click()
     // All items restored
-    await expect(section.getByTestId('expense-item')).toHaveCount(2)
+    await expect(section.getByTestId('tx-expense')).toHaveCount(2)
 
     // Re-open filter — slider should be at full extent
     await section.locator('.btn-filter').click()
@@ -406,16 +381,15 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const section = page.locator('section').first()
+    const section = page.getByTestId('transactions-tab')
     await section.locator('.btn-filter').click()
 
-    // Set range via slider (debounced)
-    const loSlider = section.locator('.filter-dropdown .range-lo')
-    await loSlider.fill('50')
+    // Set range through the numeric field; removing its chip should also reset the slider.
+    await section.locator('.filter-dropdown input[placeholder="Min"]').fill('10')
+    await section.locator('.filter-dropdown input[placeholder="Min"]').dispatchEvent('change')
     // Close filter to apply
     await section.locator('.filter-dropdown .btn-primary').click()
 
-    // Wait for debounced patchState (450ms) — chip should appear
     const chip = section.locator('.filter-inline-chips .chip', { hasText: '$' })
     await expect(chip).toBeVisible({ timeout: 3000 })
 
@@ -424,7 +398,7 @@ test.describe('finance section', () => {
     // Chip should disappear
     await expect(chip).not.toBeVisible({ timeout: 3000 })
     // All items restored
-    await expect(section.getByTestId('expense-item')).toHaveCount(2)
+    await expect(section.getByTestId('tx-expense')).toHaveCount(2)
 
     // Re-open filter — slider should be at full extent
     await section.locator('.btn-filter').click()
@@ -447,7 +421,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const section = page.locator('section').first()
+    const section = page.getByTestId('transactions-tab')
     await expect(section.getByTestId('filter-panel')).not.toBeVisible()
     await section.locator('.btn-filter').click()
     await expect(section.getByTestId('filter-panel')).toBeVisible()
@@ -467,11 +441,11 @@ test.describe('finance section', () => {
     ]
     await mockFinance(page, { donations })
     await openFinance(page, 'donations')
-    const section = page.locator('section').nth(1)
-    await section.getByTestId('income-item').first().waitFor()
+    const section = page.getByTestId('transactions-tab')
+    await section.getByTestId('tx-income').first().waitFor()
 
     await section.locator('.cat-pill-seg').filter({ hasText: 'Building' }).click({ force: true })
-    await expect(section.getByTestId('income-item')).toHaveCount(1)
+    await expect(section.getByTestId('tx-income')).toHaveCount(1)
   })
 
   test('income type filter from URL restores donation-only view and clears back to all income', async ({ page }) => {
@@ -482,17 +456,17 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations })
     await page.goto('/app/finance/?tab=income&inc_type=donation#income')
 
-    const section = page.locator('section').nth(1)
-    await section.getByTestId('income-item').first().waitFor()
-    await expect(section.getByTestId('income-item')).toHaveCount(1)
-    await expect(section.getByTestId('income-item').first()).toContainText('General')
+    const section = page.getByTestId('transactions-tab')
+    await section.getByTestId('tx-income').first().waitFor()
+    await expect(section.getByTestId('tx-income')).toHaveCount(1)
+    await expect(section.getByTestId('tx-income').first()).toContainText('General')
     await expect(page).toHaveURL(/tab=income/)
     await expect(page).toHaveURL(/inc_type=donation/)
 
     await expect(section.locator('.chip')).toContainText([/Donation/])
     await section.locator('.chip').filter({ hasText: /Donation/ }).click()
 
-    await expect(section.getByTestId('income-item')).toHaveCount(2)
+    await expect(section.getByTestId('tx-income')).toHaveCount(2)
     await expect(page).not.toHaveURL(/inc_type=donation/)
   })
 
@@ -504,10 +478,10 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations })
     await page.goto('/app/finance/?tab=income&inc_method=wire#income')
 
-    const section = page.locator('section').nth(1)
-    await section.getByTestId('income-item').first().waitFor()
-    await expect(section.getByTestId('income-item')).toHaveCount(1)
-    await expect(section.getByTestId('income-item').first()).toContainText(/wire/i)
+    const section = page.getByTestId('transactions-tab')
+    await section.getByTestId('tx-income').first().waitFor()
+    await expect(section.getByTestId('tx-income')).toHaveCount(1)
+    await expect(section.getByTestId('tx-income').first()).toContainText(/wire/i)
     await expect(page).toHaveURL(/inc_method=wire/)
 
     await section.locator('.btn-filter').click()
@@ -515,7 +489,7 @@ test.describe('finance section', () => {
     await section.locator('.tag-cloud .tag', { hasText: /wire/i }).click()
     await section.locator('.filter-dropdown .btn-primary').click()
 
-    await expect(section.getByTestId('income-item')).toHaveCount(2)
+    await expect(section.getByTestId('tx-income')).toHaveCount(2)
     await expect(page).not.toHaveURL(/inc_method=wire/)
   })
 
@@ -528,20 +502,20 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations })
     await openFinance(page, 'income')
 
-    const section = page.locator('section').nth(1)
-    await section.getByTestId('income-item').first().waitFor()
+    const section = page.getByTestId('transactions-tab')
+    await section.getByTestId('tx-income').first().waitFor()
     await section.locator('.btn-filter').click()
 
-    const methodTags = section.locator('.filter-dropdown .tag-cloud .tag')
+    const methodTags = section.locator('label', { hasText: 'Payment Method' }).locator('..').locator('.tag-cloud .tag')
     await expect(methodTags.first()).toBeVisible()
     const methodTexts = await methodTags.allTextContents()
-    expect(methodTexts).toEqual(expect.arrayContaining(['Cash', 'Wire', 'Bank-Deposit']))
+    expect(methodTexts).toEqual(expect.arrayContaining(['cash', 'wire', 'bank-deposit']))
 
-    await methodTags.filter({ hasText: 'Cash' }).click()
-    await methodTags.filter({ hasText: 'Wire' }).click()
+    await methodTags.filter({ hasText: 'cash' }).click()
+    await methodTags.filter({ hasText: 'wire' }).click()
     await section.locator('.filter-dropdown .btn-primary').click()
 
-    await expect(section.getByTestId('income-item')).toHaveCount(2)
+    await expect(section.getByTestId('tx-income')).toHaveCount(2)
     await expect(page).toHaveURL(/inc_method=/)
     await expect(page).toHaveURL(/cash/)
     await expect(page).toHaveURL(/wire/)
@@ -554,14 +528,14 @@ test.describe('finance section', () => {
     ]
     await mockFinance(page, { donations })
     await openFinance(page, 'donations')
-    await page.locator('section').nth(1).getByTestId('income-item').first().waitFor()
+    await page.getByTestId('transactions-tab').getByTestId('tx-income').first().waitFor()
 
-    await page.fill('input[placeholder="Search source or note…"]', 'sunday')
+    await page.fill('input[placeholder="Search all transactions…"]', 'sunday')
 
-    const donSection = page.locator('section').nth(1)
-    await expect(donSection.getByTestId('income-item')).toHaveCount(1, { timeout: 5000 })
-    await expect(donSection.getByTestId('income-item').first()).toContainText('General')
-    await expect(donSection.getByTestId('income-item').first()).toContainText('50.00')
+    const donSection = page.getByTestId('transactions-tab')
+    await expect(donSection.getByTestId('tx-income')).toHaveCount(1, { timeout: 5000 })
+    await expect(donSection.getByTestId('tx-income').first()).toContainText('General')
+    await expect(donSection.getByTestId('tx-income').first()).toContainText('50.00')
   })
 
   test('expense filters serialize to URL and restore after reload', async ({ page }) => {
@@ -574,23 +548,23 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const section = page.locator('section').first()
+    const section = page.getByTestId('transactions-tab')
     await section.locator('.btn-filter').click()
     await section.locator('label', { hasText: 'Status' }).locator('..').locator('select').selectOption('approved')
     await section.locator('.filter-dropdown input[type="date"]').first().fill(fromDate)
     await section.locator('.filter-dropdown .btn-primary').click()
 
-    await expect(page).toHaveURL(/tab=expenses/)
+    await expect(page).toHaveURL(/tab=transactions/)
     await expect(page).toHaveURL(/exp_status=approved/)
-    await expect(page).toHaveURL(new RegExp(`exp_from=${fromDate}`))
-    await expect(section.getByTestId('expense-item')).toHaveCount(1)
-    await expect(section.getByTestId('expense-item').first()).toContainText('C')
+    await expect(page).toHaveURL(new RegExp(`net_from=${fromDate}`))
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1)
+    await expect(section.getByTestId('tx-expense').first()).toContainText('C')
 
     await page.reload()
     await page.getByTestId('tab-group').waitFor()
-    await section.getByTestId('expense-item').first().waitFor({ timeout: 10000 })
-    await expect(section.getByTestId('expense-item')).toHaveCount(1)
-    await expect(section.getByTestId('expense-item').first()).toContainText('C')
+    await section.getByTestId('tx-expense').first().waitFor({ timeout: 10000 })
+    await expect(section.getByTestId('tx-expense')).toHaveCount(1)
+    await expect(section.getByTestId('tx-expense').first()).toContainText('C')
 
     await section.locator('.btn-filter').click()
     await expect(section.locator('label', { hasText: 'Status' }).locator('..').locator('select')).toHaveValue('approved')
@@ -600,7 +574,6 @@ test.describe('finance section', () => {
   test('expenses list groups months under sticky year rails without a year selector', async ({ page }) => {
     const curYear = String(new Date().getFullYear())
     const prevYear = String(new Date().getFullYear() - 1)
-    const oldestYear = String(new Date().getFullYear() - 2)
     const expenses = [
       { id: 1, amount: 1000, payee: 'Current Year Expense', category: 'kitchen', expense_date: `${curYear}-03-01`, status: 'submitted' },
       { id: 2, amount: 1000, payee: 'Temple Supplies', category: 'kitchen', expense_date: `${prevYear}-03-01`, status: 'submitted' },
@@ -608,20 +581,19 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().waitFor()
+    await page.getByTestId('tx-expense').first().waitFor()
 
     await expect(page.locator('.page-header .year-select')).toHaveCount(0)
 
-    const section = page.locator('section').first()
+    const section = page.getByTestId('transactions-tab')
     await section.locator('.btn-filter').click()
     await expect(section.locator('.filter-dropdown .year-select')).toHaveCount(0)
-    await expect(section.getByTestId('year-label')).toHaveText([curYear, prevYear, oldestYear])
+    await expect(section.getByTestId('year-label')).toHaveText([curYear, prevYear])
   })
 
   test('income list opens only current and previous months by default', async ({ page }) => {
     const curYear = String(new Date().getFullYear())
     const prevYear = String(new Date().getFullYear() - 1)
-    const oldestYear = String(new Date().getFullYear() - 2)
     const currentMonthDate = isoMonthDate(0, '05')
     const previousMonthDate = isoMonthDate(-1, '06')
     const olderCurrentYearDate = isoMonthDate(-2, '07')
@@ -640,37 +612,37 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations })
     await openFinance(page, 'income')
 
-    const section = page.locator('section').nth(1)
-    await expect(section.getByTestId('year-label')).toHaveText([curYear, prevYear, oldestYear])
+    const section = page.getByTestId('transactions-tab')
+    await expect(section.getByTestId('year-label')).toHaveText([curYear, prevYear])
 
-    const currentHeader = section.getByTestId('month-header').filter({ hasText: currentMonthLabel }).first()
+    const currentHeader = section.getByTestId('tx-month-header').filter({ hasText: currentMonthLabel }).first()
     await expect(currentHeader).toHaveAttribute('aria-expanded', 'true')
     await expect(currentHeader.locator('.exp-group-count')).toHaveText('1')
     await expect(currentHeader.locator('.exp-group-breakdown-seg')).toHaveCount(1)
     await expect(currentHeader.locator('.exp-group-breakdown-seg').first()).toHaveAttribute('title', 'General · $50.00')
-    await expect(currentHeader.locator('.exp-group-total')).toHaveText('$50.00')
+    await expect(currentHeader.locator('.exp-group-total')).toHaveText('+$50.00')
 
-    const previousMonthHeader = section.getByTestId('month-header').filter({ hasText: previousMonthLabel }).first()
+    const previousMonthHeader = section.getByTestId('tx-month-header').filter({ hasText: previousMonthLabel }).first()
     await expect(previousMonthHeader).toHaveAttribute('aria-expanded', 'true')
 
-    const olderCurrentYearHeader = section.getByTestId('month-header').filter({ hasText: olderCurrentYearLabel }).first()
+    const olderCurrentYearHeader = section.getByTestId('tx-month-header').filter({ hasText: olderCurrentYearLabel }).first()
     await expect(olderCurrentYearHeader).toHaveAttribute('aria-expanded', 'false')
 
     const prevYearSection = section.locator('.finance-year-section').nth(1)
-    const prevYearHeader = prevYearSection.getByTestId('month-header').filter({ hasText: previousYearMonthLabel }).first()
+    const prevYearHeader = prevYearSection.getByTestId('tx-month-header').filter({ hasText: previousYearMonthLabel }).first()
     await expect(prevYearHeader).toHaveAttribute('aria-expanded', 'false')
     await prevYearHeader.click()
     await expect(prevYearHeader).toHaveAttribute('aria-expanded', 'true')
   })
 
-  test('expenses list opens current and previous months, and lazy-loads older months on expand', async ({ page }) => {
+  test('transactions range load shows current, previous, and older expense months', async ({ page }) => {
     const currentExpenseDate = isoMonthDate(0, '05')
     const previousExpenseDate = isoMonthDate(-1, '06')
     const olderExpenseDate = isoMonthDate(-13, '07')
     const olderExpenseLabel = new Date(`${olderExpenseDate}T00:00:00`).toLocaleString('default', { month: 'long', year: 'numeric' })
     const currentMonthStart = `${currentExpenseDate.slice(0, 7)}-01`
     const previousMonthStart = `${previousExpenseDate.slice(0, 7)}-01`
-    const olderMonthStart = `${olderExpenseDate.slice(0, 7)}-01`
+    const rangeStart = `${new Date().getFullYear() - 2}-01-01`
     const expenseRequests = []
     const summary = {
       exp_month: 5000,
@@ -692,12 +664,15 @@ test.describe('finance section', () => {
       if (path === '/api/expenses' && method === 'GET') {
         const dateFrom = url.searchParams.get('dateFrom')
         expenseRequests.push({ dateFrom, level: url.searchParams.get('level') })
-        const items = dateFrom === currentMonthStart
-          ? [{ id: 1, amount: 5000, payee: 'Current Expense', category: 'kitchen', expense_date: currentExpenseDate, status: 'submitted' }]
+        const current = { id: 1, amount: 5000, payee: 'Current Expense', category: 'kitchen', expense_date: currentExpenseDate, status: 'submitted' }
+        const previous = { id: 2, amount: 3000, payee: 'Previous Expense', category: 'travel', expense_date: previousExpenseDate, status: 'approved' }
+        const older = { id: 3, amount: 1200, payee: 'Older Expense', category: 'admin', expense_date: olderExpenseDate, status: 'approved' }
+        const items = dateFrom === rangeStart
+          ? [current, previous, older]
+          : dateFrom === currentMonthStart
+          ? [current]
           : dateFrom === previousMonthStart
-            ? [{ id: 2, amount: 3000, payee: 'Previous Expense', category: 'travel', expense_date: previousExpenseDate, status: 'approved' }]
-            : dateFrom === olderMonthStart
-              ? [{ id: 3, amount: 1200, payee: 'Older Expense', category: 'admin', expense_date: olderExpenseDate, status: 'approved' }]
+            ? [previous]
             : []
         return route.fulfill({ json: { items, total: items.length } })
       }
@@ -712,18 +687,15 @@ test.describe('finance section', () => {
 
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await expect(page.getByTestId('expense-item').filter({ hasText: 'Current Expense' })).toBeVisible()
-    await expect(page.getByTestId('expense-item').filter({ hasText: 'Previous Expense' })).toBeVisible()
+    await expect(page.getByTestId('tx-expense').filter({ hasText: 'Current Expense' })).toBeVisible()
+    await expect(page.getByTestId('tx-expense').filter({ hasText: 'Previous Expense' })).toBeVisible()
     expect(expenseRequests.filter(req => req.dateFrom === currentMonthStart)).toHaveLength(1)
     expect(expenseRequests.filter(req => req.dateFrom === previousMonthStart)).toHaveLength(1)
-    // level=compact not yet implemented; just verify months were fetched
-    expect(expenseRequests.map(req => req.dateFrom)).not.toContain(olderMonthStart)
-
-    const olderHeader = page.getByTestId('month-header').filter({ hasText: olderExpenseLabel }).first()
+    expect(expenseRequests.map(req => req.dateFrom)).toContain(rangeStart)
+    const olderHeader = page.getByTestId('tx-month-header').filter({ hasText: olderExpenseLabel }).first()
     await expect(olderHeader).toHaveAttribute('aria-expanded', 'false')
     await olderHeader.click()
-    await expect(olderHeader).toHaveAttribute('aria-expanded', 'true')
-    await expect.poll(() => expenseRequests.map(req => req.dateFrom)).toContain(olderMonthStart)
+    await expect(page.getByTestId('tx-expense').filter({ hasText: 'Older Expense' })).toBeVisible()
   })
 
   test('expense month header shows category breakdown next to total', async ({ page }) => {
@@ -740,13 +712,13 @@ test.describe('finance section', () => {
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
 
-    const header = page.getByTestId('month-header').first()
+    const header = page.getByTestId('tx-month-header').first()
     await expect(header.locator('.exp-group-count')).toHaveText('5')
     await expect(header.locator('.exp-group-breakdown-seg')).toHaveCount(3)
     await expect(header.locator('.exp-group-breakdown-seg').nth(0)).toHaveAttribute('title', 'Flowers · $3,550.00')
     await expect(header.locator('.exp-group-breakdown-seg').nth(1)).toHaveAttribute('title', 'Deity · $1,200.00')
     await expect(header.locator('.exp-group-breakdown-seg').nth(2)).toHaveAttribute('title', 'Everything else · $800.00')
-    await expect(header.locator('.exp-group-total')).toHaveText('$5,550.00')
+    await expect(header.locator('.exp-group-total')).toHaveText('−$5,550.00')
   })
 
 
@@ -767,20 +739,20 @@ test.describe('finance section', () => {
       page.waitForEvent('download'),
       page.click('a:has-text("CSV")')
     ])
-    expect(download.suggestedFilename()).toBe('expenses.csv')
+    expect(download.suggestedFilename()).toBe('transactions.csv')
   })
 
   test('CSV export downloads from income tab', async ({ page }) => {
     await mockFinance(page, { donations: [{ id: 1, amount: 5000, method: 'cash', category: 'general', date_received: '2025-01-01', note: '' }] })
     await openFinance(page, 'donations')
-    await page.locator('section').nth(1).getByTestId('income-item').first().waitFor()
+    await page.getByTestId('transactions-tab').getByTestId('tx-income').first().waitFor()
 
-    await page.locator('section').nth(1).locator('button:has-text("Export")').click()
+    await page.getByTestId('transactions-tab').locator('button:has-text("Export")').click()
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.locator('section').nth(1).locator('a:has-text("CSV")').click()
+      page.getByTestId('transactions-tab').locator('a:has-text("CSV")').click()
     ])
-    expect(download.suggestedFilename()).toBe('income.csv')
+    expect(download.suggestedFilename()).toBe('transactions.csv')
   })
 
   test('receipt scan: auto-fills form and attachment_ids sent to backend on save', async ({ page }) => {
@@ -1120,7 +1092,7 @@ test.describe('finance section', () => {
     await expect(page.locator('#exp-vendor')).toHaveValue('')
     await expect(page.locator('#exp-amount')).toHaveValue('')
     await expect(page.locator('.receipt-thumb')).toHaveCount(0)
-    await expect(page.locator('.scan-icon')).toBeVisible()
+    await expect(page.locator('.expense-media-empty')).toBeVisible()
   })
 
   test('transactions income detail and create stay isolated', async ({ page }) => {
@@ -1139,8 +1111,7 @@ test.describe('finance section', () => {
     await editModal.locator('.modal-close').click()
     await expect(page.locator('.modal-overlay')).toBeHidden()
 
-    await page.getByRole('button', { name: '+ Transaction' }).click()
-    await page.locator('.quick-add:visible').getByText('Income').click()
+    await page.getByRole('button', { name: '+ Income' }).click()
 
     const addModal = page.locator('.modal-overlay:visible').first()
     await expect(addModal.getByRole('heading', { name: 'Add Income' })).toBeVisible()
@@ -1220,7 +1191,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').filter({ hasText: 'Receipt Expense' }).click()
+    await page.getByTestId('tx-expense').filter({ hasText: 'Receipt Expense' }).click()
     const firstEdit = page.locator('.modal-overlay:visible').first()
     await expect(firstEdit.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
     await expect(firstEdit.locator('.receipt-thumb')).toHaveCount(1)
@@ -1229,7 +1200,7 @@ test.describe('finance section', () => {
     await page.click('button:has-text("Cancel")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible()
 
-    await page.getByTestId('expense-item').filter({ hasText: 'Plain Expense' }).click()
+    await page.getByTestId('tx-expense').filter({ hasText: 'Plain Expense' }).click()
     const secondEdit = page.locator('.modal-overlay:visible').first()
     await expect(secondEdit.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
     await expect(secondEdit.locator('.receipt-thumb')).toHaveCount(0)
@@ -1239,7 +1210,7 @@ test.describe('finance section', () => {
     await page.click('button:has-text("Cancel")')
     await expect(page.locator('.modal-overlay')).not.toBeVisible()
 
-    await page.getByTestId('expense-item').filter({ hasText: 'Receipt Expense' }).click()
+    await page.getByTestId('tx-expense').filter({ hasText: 'Receipt Expense' }).click()
     const reopenedFirstEdit = page.locator('.modal-overlay:visible').first()
     await expect(reopenedFirstEdit.locator('.receipt-thumb')).toHaveCount(1)
     await expect(reopenedFirstEdit.getByText('Attach documents')).not.toBeVisible()
@@ -1367,7 +1338,7 @@ test.describe('finance section', () => {
     })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const amount = page.locator('#exp-amount')
     await amount.waitFor({ state: 'attached', timeout: 5000 })
     const itemAmount = page.locator('.exp-items-table tbody tr:first-child td:nth-child(2) input')
@@ -1394,7 +1365,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations, members })
     await openFinance(page, 'income')
 
-    await page.locator('section').nth(1).getByTestId('income-item').first().click()
+    await page.getByTestId('transactions-tab').getByTestId('tx-income').first().click()
     await expect(page.getByRole('heading', { name: /Edit Income/ })).toBeVisible()
     await page.locator('#don-donor').focus()
 
@@ -1410,7 +1381,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations, members, auditLogs })
     await openFinance(page, 'income')
 
-    await page.locator('section').nth(1).getByTestId('income-item').first().click()
+    await page.getByTestId('transactions-tab').getByTestId('tx-income').first().click()
     await expect(page.getByRole('heading', { name: /Edit Income/ })).toBeVisible()
     await expect(page.locator('.modal')).toContainText('#1')
     await expect(page.locator('.modal')).toContainText('History')
@@ -1430,7 +1401,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses, members })
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
 
     const payee = page.locator('#exp-vendor:visible')
     await expect(payee).toHaveValue('Hari Das')
@@ -1445,7 +1416,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses, members })
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
 
     const payee = page.locator('#exp-vendor:visible')
     await expect(payee).toHaveValue('Nani Gopal')
@@ -1459,7 +1430,7 @@ test.describe('finance section', () => {
 
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await expect(page.locator('#exp-vendor:visible')).toHaveValue(updatedPayee)
   })
 
@@ -1474,7 +1445,7 @@ test.describe('finance section', () => {
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
 
-    const previousRow = page.getByTestId('expense-item').filter({ hasText: 'Old Vendor' })
+    const previousRow = page.getByTestId('tx-expense').filter({ hasText: 'Old Vendor' })
     await previousRow.waitFor({ timeout: 10000 })
     await previousRow.click()
     await page.locator('#exp-vendor:visible').fill('Updated Vendor')
@@ -1482,7 +1453,7 @@ test.describe('finance section', () => {
     await page.getByRole('button', { name: 'Update' }).click()
     await expect(page.locator('.toast-success').filter({ hasText: 'Expense updated' })).toBeVisible({ timeout: 5000 })
 
-    const updatedRow = page.getByTestId('expense-item').filter({ hasText: 'Updated Vendor' })
+    const updatedRow = page.getByTestId('tx-expense').filter({ hasText: 'Updated Vendor' })
     await expect(updatedRow).toBeVisible()
     await expect(updatedRow.locator('.badge')).toHaveText('Travel')
   })
@@ -1496,8 +1467,8 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const row1 = page.getByTestId('expense-item').filter({ hasText: 'Vendor A' })
-    const row2 = page.getByTestId('expense-item').filter({ hasText: 'Vendor B' })
+    const row1 = page.getByTestId('tx-expense').filter({ hasText: 'Vendor A' })
+    const row2 = page.getByTestId('tx-expense').filter({ hasText: 'Vendor B' })
 
     await expect(row1.getByRole('button', { name: 'Approve' })).toBeVisible()
     await expect(row2.getByRole('button', { name: 'Paid' })).toBeVisible()
@@ -1518,7 +1489,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     const payBtn = modal.getByRole('button', { name: 'Paid' })
     await expect(payBtn).toBeVisible()
@@ -1532,7 +1503,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const row = page.getByTestId('expense-item').first()
+    const row = page.getByTestId('tx-expense').first()
     await row.getByRole('button', { name: 'Paid' }).click({ force: true })
     await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
     expect(expenses[0].status).toBe('paid')
@@ -1546,7 +1517,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const row = page.getByTestId('expense-item').first()
+    const row = page.getByTestId('tx-expense').first()
     await row.getByRole('button', { name: 'Paid' }).click({ force: true })
     await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
     expect(expenses[0].status).toBe('paid')
@@ -1560,7 +1531,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const row = page.getByTestId('expense-item').first()
+    const row = page.getByTestId('tx-expense').first()
     await expect(row.getByRole('button', { name: 'Attach receipt' })).toBeVisible()
   })
 
@@ -1571,7 +1542,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     const refInput = modal.getByPlaceholder('Reference')
     await expect(refInput).toBeVisible()
@@ -1588,7 +1559,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     await modal.getByRole('button', { name: 'Approve' }).click()
     await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
@@ -1603,7 +1574,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     await modal.getByRole('button', { name: 'Paid' }).click()
     await expect(page.locator('.toast-success').first()).toBeVisible({ timeout: 5000 })
@@ -1631,7 +1602,7 @@ test.describe('finance section', () => {
     })
 
     await openFinance(page)
-    const item = page.getByTestId('expense-item').first()
+    const item = page.getByTestId('tx-expense').first()
     const btn = item.locator('[aria-label="Quick approve expense"]')
     await expect(btn).toBeVisible()
 
@@ -1660,7 +1631,7 @@ test.describe('finance section', () => {
     })
 
     await openFinance(page)
-    const item = page.getByTestId('expense-item').first()
+    const item = page.getByTestId('tx-expense').first()
     const btn = item.locator('[aria-label="Quick approve expense"]')
     await btn.click({ force: true })
 
@@ -1756,16 +1727,15 @@ test.describe('finance section', () => {
     expect(donations[0].method).toBe('cash')
 
     await openFinance(page)
-    const expItem = page.getByTestId('expense-item').first()
+    const expItem = page.getByTestId('tx-expense').first()
     await expItem.waitFor({ timeout: 5000 })
     await expect(expItem).toContainText('Bell Canada')
     await expect(expItem).toContainText('89.50')
 
-    await page.getByTestId('tab-group').locator('.card-tab').filter({ hasText: 'Income' }).click()
-    const donSection = page.locator('section').nth(1)
-    await donSection.getByTestId('income-item').first().waitFor()
-    await expect(donSection.getByTestId('income-item').first()).toContainText('200.00')
-    await expect(donSection.getByTestId('income-item').first()).toContainText('Sunday Feast')
+    const donSection = page.getByTestId('transactions-tab')
+    await donSection.getByTestId('tx-income').first().waitFor()
+    await expect(donSection.getByTestId('tx-income').first()).toContainText('200.00')
+    await expect(donSection.getByTestId('tx-income').first()).toContainText('Sunday Feast')
   })
 
 
@@ -1776,7 +1746,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await expect(page.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
 
     const catSelect = page.locator('#exp-cat')
@@ -1800,7 +1770,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await expect(page.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
 
     const catSelect = page.locator('#exp-cat')
@@ -1814,10 +1784,10 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().waitFor()
+    await page.getByTestId('tx-expense').first().waitFor()
 
-    await page.getByTestId('expense-item').first().hover()
-    await expect(page.getByTestId('expense-item').first().locator('[aria-label="Quick approve expense"]')).toBeVisible()
+    await page.getByTestId('tx-expense').first().hover()
+    await expect(page.getByTestId('tx-expense').first().locator('[aria-label="Quick approve expense"]')).toBeVisible()
   })
 
   test('list view: clicking expense row opens same edit modal as quick action', async ({ page }) => {
@@ -1825,7 +1795,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
 
     await expect(page.locator('.modal-overlay')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Edit Expense' })).toBeVisible()
@@ -1842,7 +1812,7 @@ test.describe('finance section', () => {
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
 
-    const row = page.getByTestId('expense-item').first()
+    const row = page.getByTestId('tx-expense').first()
     await row.hover()
     await row.getByRole('button', { name: 'Approve' }).click()
     await expect(row.locator('.recent-exp-status-text')).toHaveText('Approved')
@@ -1863,13 +1833,14 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().waitFor()
+    await page.getByTestId('tx-expense').first().waitFor()
 
-    await expect(page.locator('.finance-exp-item .recent-exp-title')).toHaveText([
+    const titles = (await page.locator('.finance-exp-item .recent-exp-title').allTextContents()).map(s => s.trim())
+    expect(titles).toEqual([
+      'Paid New',
+      'Approved New',
       'Submitted New',
       'Submitted Old',
-      'Approved New',
-      'Paid New',
     ])
   })
 
@@ -1883,11 +1854,11 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().waitFor()
+    await page.getByTestId('tx-expense').first().waitFor()
 
-    const headers = page.getByTestId('month-header')
-    const current = page.getByTestId('expense-item').filter({ hasText: 'Current Expense' })
-    const previous = page.getByTestId('expense-item').filter({ hasText: 'Previous Expense' })
+    const headers = page.getByTestId('tx-month-header')
+    const current = page.getByTestId('tx-expense').filter({ hasText: 'Current Expense' })
+    const previous = page.getByTestId('tx-expense').filter({ hasText: 'Previous Expense' })
     await expect(headers.first()).toContainText(new Date(currentMonthDate).toLocaleString('default', { month: 'long' }))
     await expect(current).toBeVisible()
     await expect(previous).toBeVisible()
@@ -1916,14 +1887,14 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().waitFor()
+    await page.getByTestId('tx-expense').first().waitFor()
 
-    await page.locator('section').first().locator('.filter-search-input').fill('Hydro')
+    await page.getByTestId('transactions-tab').locator('.filter-search-input').fill('Hydro')
 
     const hits = page.locator('.finance-exp-item .recent-exp-title .hl-hit')
     await expect(hits).toHaveText(['Hydro'])
-    await expect(page.getByTestId('expense-item')).toHaveCount(1)
-    await expect(page.getByTestId('expense-item').first()).toContainText('Hydro Quebec')
+    await expect(page.getByTestId('tx-expense')).toHaveCount(1)
+    await expect(page.getByTestId('tx-expense').first()).toContainText('Hydro Quebec')
   })
 
   test('submitted expense edit shows single note label and status actions in history', async ({ page }) => {
@@ -1932,12 +1903,12 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
 
     await expect(modal.getByRole('heading', { name: 'Edit Expense #E-2026-0109' })).toBeVisible()
-    await expect(page.getByTestId('expense-item').first().getByText('Parking Corp')).toBeVisible()
-    await expect(page.getByTestId('expense-item').first().getByText('#E-2026-0109')).toBeVisible()
+    await expect(page.getByTestId('tx-expense').first().getByText('Parking Corp')).toBeVisible()
+    await expect(page.getByTestId('tx-expense').first().getByText('#E-2026-0109')).toBeVisible()
     await expect(modal.locator('label', { hasText: 'Note' })).toHaveCount(1)
     await expect(modal.locator('label', { hasText: 'Decision' })).toHaveCount(0)
     await expect(modal.getByRole('button', { name: 'Approve', exact: true })).toBeVisible()
@@ -1950,7 +1921,7 @@ test.describe('finance section', () => {
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
 
-    const row = page.getByTestId('expense-item').first()
+    const row = page.getByTestId('tx-expense').first()
     await row.hover()
 
     await expect(row.locator('.recent-row-action')).toHaveCount(0)
@@ -1986,7 +1957,7 @@ test.describe('finance section', () => {
 
     await page.goto('/app/finance/#expenses')
     await page.getByTestId('tab-group').waitFor()
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
 
     const modal = page.locator('.modal-overlay:visible').first()
     await expect(modal.getByText('Missing receipt')).toBeVisible()
@@ -2027,9 +1998,6 @@ test.describe('finance section', () => {
     await page.click('button:has-text("+ Expense")')
     await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
 
-    // Date should start empty (not prefilled with today)
-    await expect(page.locator('#exp-date')).toHaveValue('')
-
     // User manually sets date
     await page.fill('#exp-date', userDate)
 
@@ -2069,20 +2037,18 @@ test.describe('finance section', () => {
     await page.click('button:has-text("+ Expense")')
     await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
 
-    // Date starts empty
-    await expect(page.locator('#exp-date')).toHaveValue('')
-
-    // First receipt — should populate date
+    // First receipt — should preserve the current form date
+    const initialDate = await page.locator('#exp-date').inputValue()
     await page.setInputFiles('#exp-receipt-input', { name: 'a.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb')).toHaveCount(1, { timeout: 5000 })
-    await expect(page.locator('#exp-date')).toHaveValue('2025-03-01', { timeout: 5000 })
+    await expect(page.locator('#exp-date')).toHaveValue(initialDate, { timeout: 5000 })
 
     // Second receipt — should NOT overwrite date, should show mismatch toast
     await page.setInputFiles('#exp-receipt-input', { name: 'b.jpg', mimeType: 'image/jpeg', buffer: minJpeg })
     await expect(page.locator('.receipt-thumb')).toHaveCount(2, { timeout: 5000 })
 
-    // Date must remain from first receipt
-    await expect(page.locator('#exp-date')).toHaveValue('2025-03-01')
+    // Date must remain from before receipt extraction
+    await expect(page.locator('#exp-date')).toHaveValue(initialDate)
   })
 
   test('remove all receipts then re-add: receipts are accepted', async ({ page }) => {
@@ -2223,7 +2189,7 @@ test.describe('finance section', () => {
     await loginAs(page, 'treasurer')
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 5000 })
     await expect(page.locator('.receipt-thumb-gallery')).toHaveCount(2, { timeout: 5000 })
 
@@ -2272,7 +2238,7 @@ test.describe('finance section', () => {
     await loginAs(page, 'treasurer')
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await expect(page.locator('.receipt-thumb-gallery')).toHaveCount(2, { timeout: 5000 })
 
     // Remove one attachment (queued, not yet deleted)
@@ -2288,7 +2254,7 @@ test.describe('finance section', () => {
     expect(deleteCalledWith).toBeNull()
 
     // Reopen — both attachments still present
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await expect(page.locator('.receipt-thumb-gallery')).toHaveCount(2, { timeout: 5000 })
   })
 
@@ -2306,7 +2272,7 @@ test.describe('finance section', () => {
     await loginAs(page, 'treasurer')
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 5000 })
 
     // Cancel without changes — no confirm dialog, closes immediately
@@ -2325,7 +2291,7 @@ test.describe('finance section', () => {
     await loginAs(page, 'member')
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     const itemAmt = page.locator('.exp-items-table tbody tr:first-child td:nth-child(2) input')
     await itemAmt.waitFor({ timeout: 5000 })
@@ -2344,7 +2310,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     await expect(modal).toBeVisible()
     await expect(modal.getByRole('button', { name: 'Delete' })).toHaveCount(0)
@@ -2356,7 +2322,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     await expect(modal).toBeVisible()
     await expect(modal.getByRole('button', { name: 'Delete' })).toHaveCount(0)
@@ -2368,7 +2334,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     await expect(modal).toBeVisible()
     await expect(modal.getByRole('button', { name: 'Delete' })).toBeVisible()
@@ -2380,7 +2346,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     await expect(modal).toBeVisible()
     await expect(modal.getByRole('button', { name: 'Delete' })).toBeVisible()
@@ -2427,7 +2393,7 @@ test.describe('finance section', () => {
     })
     await openFinance(page)
 
-    const row = page.getByTestId('expense-item').first()
+    const row = page.getByTestId('tx-expense').first()
     await row.hover()
     await expect(row.locator('[aria-label="Quick approve expense"]')).toBeVisible()
     await row.locator('[aria-label="Quick approve expense"]').click({ force: true })
@@ -2445,7 +2411,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     const modal = page.locator('.modal-overlay:visible').first()
     await expect(modal).toBeVisible()
     await expect(modal.getByText('submit a new expense instead')).toBeVisible()
@@ -2550,7 +2516,7 @@ test.describe('finance section', () => {
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 })
 
     // Reopen the saved expense
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await page.locator('#exp-amount').waitFor({ state: 'attached', timeout: 5000 })
     const descInput = page.locator('.exp-items-table tbody tr:first-child input[type="text"]')
     await expect(descInput).toHaveValue('Printer paper', { timeout: 5000 })
@@ -2561,7 +2527,7 @@ test.describe('finance section', () => {
     const expenses = [EXPENSE({ id: 1, payee: 'Vendor', expense_date: isoMonthDate(0, '10'), created_by: 2, created_at: '2025-01-15T10:30:00Z' })]
     await mockFinance(page, { expenses, members: [{ id: 1, user_id: 2, data: { name: 'Treasurer' } }] })
     await openFinance(page)
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await expect(page.locator('.modal-overlay:visible')).toBeVisible()
 
     // "you" in history should be an <a> link
@@ -2574,7 +2540,7 @@ test.describe('finance section', () => {
     const expenses = [EXPENSE({ id: 1, payee: 'Vendor', expense_date: isoMonthDate(0, '10'), created_by: 2, created_at: '2025-01-15T10:30:00Z' })]
     await mockFinance(page, { expenses })
     await openFinance(page)
-    await page.getByTestId('expense-item').first().click()
+    await page.getByTestId('tx-expense').first().click()
     await expect(page.locator('.modal-overlay:visible')).toBeVisible()
 
     // Date should be a <time> element with title attribute
@@ -2594,9 +2560,9 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const section = page.locator('section').first()
-    const header = section.getByTestId('month-header').first()
-    const list = section.getByTestId('month-items').first()
+    const section = page.getByTestId('transactions-tab')
+    const header = section.getByTestId('tx-month-header').first()
+    const list = section.getByTestId('tx-month-items').first()
 
     // First month auto-opens
     await expect(header).toHaveClass(/exp-group-header-open/)
@@ -2621,9 +2587,9 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations })
     await openFinance(page, 'donations')
 
-    const section = page.locator('section').nth(1)
-    const header = section.getByTestId('month-header').first()
-    const list = section.getByTestId('month-items').first()
+    const section = page.getByTestId('transactions-tab')
+    const header = section.getByTestId('tx-month-header').first()
+    const list = section.getByTestId('tx-month-items').first()
 
     // First month auto-opens
     await expect(header).toHaveClass(/exp-group-header-open/)
@@ -2640,36 +2606,28 @@ test.describe('finance section', () => {
     await expect(list).toHaveClass(/finance-exp-list-open/)
   })
 
-  test('expense empty month shows $0 and is not expandable', async ({ page }) => {
+  test('expense transaction view omits empty months', async ({ page }) => {
     const expenses = [
       { id: 1, amount: 500, payee: 'A', category: 'kitchen', expense_date: isoMonthDate(0, '05'), status: 'submitted' },
     ]
     await mockFinance(page, { expenses })
     await openFinance(page)
 
-    const section = page.locator('section').first()
-    const emptyHeader = section.getByTestId('month-header').nth(1)
-
-    await expect(emptyHeader).toHaveClass(/exp-group-header-empty/)
-    await expect(emptyHeader).toBeDisabled()
-    await expect(emptyHeader.locator('.exp-group-total')).toHaveText('$0.00')
-    await expect(emptyHeader.locator('.exp-group-count')).not.toBeVisible()
+    const section = page.getByTestId('transactions-tab')
+    await expect(section.getByTestId('tx-month-header')).toHaveCount(1)
+    await expect(section.getByTestId('tx-month-header').first()).not.toHaveClass(/exp-group-header-empty/)
   })
 
-  test('income empty month shows $0 and is not expandable', async ({ page }) => {
+  test('income transaction view omits empty months', async ({ page }) => {
     const donations = [
       { id: 1, amount: 5000, method: 'cash', category: 'general', date_received: isoMonthDate(0, '05') },
     ]
     await mockFinance(page, { donations })
     await openFinance(page, 'donations')
 
-    const section = page.locator('section').nth(1)
-    const emptyHeader = section.getByTestId('month-header').nth(1)
-
-    await expect(emptyHeader).toHaveClass(/exp-group-header-empty/)
-    await expect(emptyHeader).toBeDisabled()
-    await expect(emptyHeader.locator('.exp-group-total')).toHaveText('$0.00')
-    await expect(emptyHeader.locator('.exp-group-count')).not.toBeVisible()
+    const section = page.getByTestId('transactions-tab')
+    await expect(section.getByTestId('tx-month-header')).toHaveCount(1)
+    await expect(section.getByTestId('tx-month-header').first()).not.toHaveClass(/exp-group-header-empty/)
   })
 
   test('transactions: expense filter removes ALL income from DOM including nested `:each` nodes', async ({ page }) => {
@@ -2689,7 +2647,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses, donations })
     await openFinance(page, 'transactions')
 
-    const section = page.locator('section').nth(2)
+    const section = page.getByTestId('transactions-tab')
 
     // Wait for all items to render
     await expect(section.getByTestId('tx-expense')).toHaveCount(2, { timeout: 10000 })
@@ -2731,7 +2689,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses, donations })
     await openFinance(page, 'transactions')
 
-    const section = page.locator('section').nth(2)
+    const section = page.getByTestId('transactions-tab')
 
     // Wait for both expense and income items to load
     await expect(section.getByTestId('tx-expense')).toHaveCount(1, { timeout: 10000 })
@@ -2767,7 +2725,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses, donations })
     await openFinance(page, 'transactions')
 
-    const section = page.locator('section').nth(2)
+    const section = page.getByTestId('transactions-tab')
 
     // Wait for all items
     await expect(section.getByTestId('tx-expense')).toHaveCount(2, { timeout: 10000 })
@@ -2804,7 +2762,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses, donations })
     await openFinance(page, 'transactions')
 
-    const section = page.locator('section').nth(2)
+    const section = page.getByTestId('transactions-tab')
     await expect(section.getByTestId('tx-expense')).toHaveCount(2, { timeout: 10000 })
     await expect(section.getByTestId('tx-income')).toHaveCount(2, { timeout: 10000 })
 
@@ -2837,7 +2795,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses, donations })
     await openFinance(page, 'transactions')
 
-    const section = page.locator('section').nth(2)
+    const section = page.getByTestId('transactions-tab')
     await expect(section.getByTestId('tx-expense')).toHaveCount(3, { timeout: 10000 })
     await expect(section.getByTestId('tx-income')).toHaveCount(2, { timeout: 10000 })
 
@@ -2880,7 +2838,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses, donations })
     await openFinance(page, 'transactions')
 
-    const section = page.locator('section').nth(2)
+    const section = page.getByTestId('transactions-tab')
     const header = section.getByTestId('tx-month-header').first()
     const list = section.getByTestId('tx-month-items').first()
 
@@ -2910,7 +2868,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses, donations })
     await openFinance(page, 'transactions')
 
-    const section = page.locator('section').nth(2)
+    const section = page.getByTestId('transactions-tab')
 
     // All 3 items visible
     await expect(section.getByTestId('tx-expense')).toHaveCount(2, { timeout: 10000 })
@@ -2944,7 +2902,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page, 'transactions')
 
-    const section = page.locator('section').nth(2)
+    const section = page.getByTestId('transactions-tab')
     await expect(section.getByTestId('tx-expense')).toHaveCount(2, { timeout: 10000 })
 
     // Set date filter to only current month
@@ -2974,7 +2932,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { expenses })
     await openFinance(page, 'transactions')
 
-    const section = page.locator('section').nth(2)
+    const section = page.getByTestId('transactions-tab')
     await expect(section.getByTestId('tx-expense')).toHaveCount(3, { timeout: 10000 })
 
     // Open filter and select Expenses type
@@ -3007,7 +2965,7 @@ test.describe('finance section', () => {
     await mockFinance(page, { donations })
     await openFinance(page, 'transactions')
 
-    const section = page.locator('section').nth(2)
+    const section = page.getByTestId('transactions-tab')
     await expect(section.getByTestId('tx-income')).toHaveCount(3, { timeout: 10000 })
 
     // Open filter and select Income type

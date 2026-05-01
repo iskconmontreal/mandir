@@ -1,0 +1,285 @@
+<define-element>
+  <finance-transactions-tab active:boolean="false" expenses:array income:array
+    search:string="" filtertype:string="" expfiltercats:array expfilterstatus:string=""
+    incfiltertype:string="" incfiltermethods:array amtmin:string="" amtmax:string=""
+    datefrom:string="" dateto:string="" expcats:array incmethods:array basekeys:array
+    loading:boolean="false" error:string="" membernames:object memberemails:object
+    emailsending:object receiptissuing:object quickloading:object myapprovals:object
+    canapprove:boolean="false" cancreateexpense:boolean="false" cancreateincome:boolean="false" canissuereceipt:boolean="false">
+    <style>:host { display: contents; }</style>
+    <template>
+      <section data-testid="transactions-tab" :class="{'hidden': !active}" :scope="{showExport: false}">
+        <div class="filter-bar">
+          <transaction-filter-bar :search="search" :filtertype="filtertype"
+            :expcats="expcats" :expfiltercats="expfiltercats" :expfilterstatus="expfilterstatus"
+            :incfiltertype="incfiltertype" :incfiltermethods="incfiltermethods" :incmethods="incomeMethodOptions()"
+            :amtmin="amtmin" :amtmax="amtmax" :amtlo="amtLo()" :amthi="amtHi()" :amtceil="amtCeil()" :amthist="amtHist()"
+            :datefrom="datefrom" :dateto="dateto" :resultcount="filteredCount()"
+            :onchange="e => applyFilterChange(e.detail)">
+          </transaction-filter-bar>
+          <div class="filter-bar-actions">
+            <div style="position:relative">
+              <button class="btn btn-outline btn-export" :onclick="showExport = !showExport" :onclick.outside="showExport = false">Export</button>
+              <div :if="showExport" class="quick-add" style="right:0;left:auto">
+                <a class="quick-add-item" :onclick="downloadCSV(); showExport = false">CSV</a>
+                <a class="quick-add-item" :onclick="printView(); showExport = false">Print / PDF</a>
+              </div>
+            </div>
+            <button :if="cancreateexpense" class="btn btn-primary filter-bar-create" :onclick="emit('createexpense')">+ Expense</button>
+            <button :if="cancreateincome" class="btn btn-primary filter-bar-create" :onclick="emit('createincome')">+ Income</button>
+          </div>
+        </div>
+
+        <transaction-list
+          :years="yearGroups()" :mopen="monthopen" :mfresh="monthfresh" :search="search" :loading="loading" :error="error"
+          :quickloading="quickloading" :myapprovals="myapprovals" :filtertype="filtertype"
+          :empty="!loading && !filteredCount()" :canapprove="canapprove" :memberemails="memberemails" :emailsending="emailsending"
+          :canissuereceipt="canissuereceipt" :receiptissuing="receiptissuing"
+          :onviewexp.delay-0="e => emit('viewexp', e.detail)"
+          :onviewinc.delay-0="e => emit('viewinc', e.detail)"
+          :onprintinc="e => emit('printinc', e.detail)"
+          :onemailinc="e => emit('emailinc', e.detail)"
+          :onissuereceipt="e => emit('issuereceipt', e.detail)"
+          :onapprove="e => emit('approve', e.detail)"
+          :onpay="e => emit('pay', e.detail)"
+          :onattach="e => emit('attach', e.detail)"
+          :ontoggle.delay-0="e => toggleMonth(e.detail)">
+        </transaction-list>
+      </section>
+    </template>
+    <script>
+      this.monthopen = {}
+      this.monthtouched = {}
+      this.monthfresh = ''
+      this._freshTimer = 0
+
+      this.ready = function() {
+        return !!(this.toNetTransactions || this.host?.toNetTransactions)
+      }
+      this.fn = function(name) {
+        return this[name] || this.host?.[name]
+      }
+
+      this.getStatePatch = function(local) {
+        return {
+          netSearch: local.search,
+          netFilterType: local.filtertype,
+          netAmtMin: local.amtmin,
+          netAmtMax: local.amtmax,
+          netDateFrom: local.datefrom,
+          netDateTo: local.dateto,
+          expFilterCats: local.expfiltercats,
+          expFilterStatus: local.expfilterstatus,
+          donFilterType: local.incfiltertype,
+          donFilterMethods: local.incfiltermethods,
+        }
+      }
+
+      this.applyFilterChange = function(detail) {
+        if (!detail) return
+        var next = {
+          search: detail.search ?? this.search,
+          filtertype: detail.filtertype ?? this.filtertype,
+          amtmin: detail.amtmin ?? this.amtmin,
+          amtmax: detail.amtmax ?? this.amtmax,
+          datefrom: detail.datefrom ?? this.datefrom,
+          dateto: detail.dateto ?? this.dateto,
+          expfiltercats: detail.expfiltercats ?? this.expfiltercats,
+          expfilterstatus: detail.expfilterstatus ?? this.expfilterstatus,
+          incfiltertype: detail.incfiltertype ?? this.incfiltertype,
+          incfiltermethods: detail.incfiltermethods ?? this.incfiltermethods,
+        }
+        if (!('filtertype' in detail)) {
+          if ('expfiltercats' in detail || 'expfilterstatus' in detail) next.filtertype = 'expense'
+          if ('incfiltertype' in detail || 'incfiltermethods' in detail) next.filtertype = 'income'
+        }
+        Object.assign(this, next)
+        this.refreshOpen()
+        this.emit('filterchange', this.getStatePatch(next))
+      }
+
+      this.transactions = function() {
+        var toTx = this.fn('toNetTransactions')
+        return toTx ? toTx({ expenses: this.expenses || [], income: this.income || [] }) : []
+      }
+      this.amtLo = function() { return this.amtmin || 0 }
+      this.amtHi = function() { return this.amtmax || this.amtCeil() }
+      this.amtCeil = function() {
+        return Math.ceil(Math.max(this.AMT_MAX || this.host?.AMT_MAX || 0, ...this.transactions().map(r => r.amount || 0)) / 100)
+      }
+      this.amtHist = function() { return this.fn('amtHistFor')?.(this.transactions(), this.amtCeil()) || [] }
+
+      this.incomeMethodCounts = function() {
+        var counts = {}
+        for (var r of this.income || []) {
+          var dt = (r.date_received || '').slice(0, 10)
+          if (!this.fn('incomeTypeMatch')?.(r, this.incfiltertype)) continue
+          if (this.datefrom && dt < this.datefrom) continue
+          if (this.dateto && dt > this.dateto) continue
+          var q = (this.search || '').toLowerCase()
+          var hay = [r.note, r.method, r.type, this.fn('bucketOf')?.(r), this.fn('sourceOf')?.(r, this.membernames)].filter(Boolean).join(' ').toLowerCase()
+          if (q && !hay.includes(q)) continue
+          var method = this.fn('normIncomeMethod')?.(r?.method || 'cash') || 'cash'
+          counts[method] = (counts[method] || 0) + 1
+        }
+        return counts
+      }
+      this.incomeMethodOptions = function() {
+        var selected = this.incfiltermethods || []
+        var counts = this.incomeMethodCounts()
+        return (this.incmethods || []).filter(method => counts[method] || selected.includes(method))
+      }
+
+      this.filtered = function() {
+        return this.fn('filterNetTransactions')?.(this.transactions(), {
+          search: this.search,
+          filterType: this.filtertype,
+          amtMin: this.amtmin,
+          amtMax: this.amtmax,
+          dateFrom: this.datefrom,
+          dateTo: this.dateto,
+          expCats: this.expfiltercats,
+          expStatus: this.expfilterstatus,
+          incType: this.incfiltertype,
+          incMethods: this.incfiltermethods,
+        }, this.membernames) || []
+      }
+      this.filteredByType = function() {
+        return this.fn('filterNetTransactionsByType')?.(this.filtered(), this.filtertype) || []
+      }
+      this.filteredCount = function() {
+        return this.filteredByType().length
+      }
+      this.monthKeys = function() {
+        return this.fn('monthKeysWithData')?.(this.basekeys || [], this.filteredByType(), tx => this.fn('localMonthKey')?.(tx._date), new Date().toISOString().slice(0, 7)) || []
+      }
+      this.groups = function() {
+        return (this.fn('buildNetMonthGroups')?.(this.monthKeys(), this.filteredByType()) || []).map(g => ({
+          ...g,
+          breakdown: this.monthBreakdown(g),
+        }))
+      }
+      this.yearGroups = function() {
+        return (this.fn('groupMonthsByYear')?.(this.groups().filter(g => g.count > 0)) || []).filter(yr => yr.items.length > 0)
+      }
+
+      this.monthBreakdown = function(group) {
+        var items = group?.items || []
+        var total = items.reduce((sum, tx) => sum + (tx.amount || 0), 0)
+        if (!total) return []
+        var buckets = items.reduce((map, tx) => {
+          var category = tx._isExp ? (tx.category || 'other') : this.fn('labelOf')?.(tx)
+          map[category] = (map[category] || 0) + (tx.amount || 0)
+          return map
+        }, {})
+        var all = Object.entries(buckets)
+          .map(([category, amount]) => ({ category, total: amount }))
+          .filter(item => item.total > 0)
+          .sort((a, b) => b.total - a.total)
+        var top = all.slice(0, 2)
+        var used = top.reduce((sum, item) => sum + item.total, 0)
+        var segs = top.map(item => ({
+          category: item.category,
+          total: item.total,
+          pct: item.total / total * 100,
+          color: this.fn('catBgHex')?.(item.category || 'other'),
+        }))
+        var other = total - used
+        if (other > 0 && all.length > 2) {
+          segs.push({ category: 'other', total: other, pct: other / total * 100, color: 'var(--c-cat-gray-bg)', isOther: true })
+        }
+        return segs.map(seg => ({
+          ...seg,
+          title: (seg.isOther ? 'Everything else' : this.fn('fmtCat')?.(seg.category)) + ' · $' + this.fn('fmtAmt')?.(seg.total || 0),
+          style: `--seg-color:${seg.color};--seg-hover-color:${seg.isOther ? 'var(--c-cat-gray)' : this.fn('catHex')?.(seg.category || 'other')};width:${Math.max(seg.pct, 2)}%`,
+        }))
+      }
+
+      this.refreshOpen = function() {
+        if (!this.ready()) return
+        var keys = this.monthKeys()
+        var groups = this.groups()
+        var withData = new Set(groups.filter(g => g.count > 0).map(g => g.key))
+        var current = new Date().toISOString().slice(0, 7)
+        var prevDate = new Date()
+        prevDate.setDate(1)
+        prevDate.setMonth(prevDate.getMonth() - 1)
+        var prev = prevDate.toISOString().slice(0, 7)
+        var next = { ...(this.monthopen || {}) }
+        var changed = false
+        var keySet = new Set(keys)
+        for (var k of Object.keys(next)) {
+          if (!keySet.has(k)) { delete next[k]; changed = true }
+        }
+        for (var key of keys) {
+          if (!(key in next)) {
+            next[key] = (key === current || key === prev) && withData.has(key)
+            changed = true
+          } else if (!this.monthtouched?.[key] && (key === current || key === prev) && withData.has(key) && !next[key]) {
+            next[key] = true
+            changed = true
+          }
+        }
+        var first = groups.find(g => g.count > 0)?.key
+        if (first && !Object.values(next).some(Boolean)) {
+          next[first] = true
+          changed = true
+        }
+        if (changed) this.monthopen = next
+      }
+
+      this.toggleMonth = function(key) {
+        var next = !this.monthopen?.[key]
+        this.monthopen = { ...(this.monthopen || {}), [key]: next }
+        this.monthtouched = { ...(this.monthtouched || {}), [key]: true }
+        if (next) {
+          this.monthfresh = key
+          clearTimeout(this._freshTimer)
+          this._freshTimer = setTimeout(() => { if (this.monthfresh === key) this.monthfresh = '' }, 400)
+        }
+      }
+
+      this.downloadCSV = function() {
+        var rows = [['Date', 'Type', 'Description', 'Category', 'Amount', 'Note']]
+        for (var tx of this.filteredByType()) {
+          if (tx._isExp) rows.push([(tx.expense_date || '').slice(0, 10), 'Expense', tx.payee, tx.category, '-' + this.fn('rawAmt')?.(tx.amount), tx.note || ''])
+          else rows.push([(tx.date_received || '').slice(0, 10), 'Income', this.fn('sourceOf')?.(tx, this.membernames), this.fn('labelOf')?.(tx), '+' + this.fn('rawAmt')?.(tx.amount), tx.note || ''])
+        }
+        var csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
+        var blob = new Blob([csv], { type: 'text/csv' })
+        var a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = 'transactions.csv'
+        a.click()
+        URL.revokeObjectURL(a.href)
+      }
+
+      this.printView = function() {
+        var w = window.open('', '_blank')
+        w.document.write('<html><head><title>Transactions</title>')
+        w.document.write('<style>body{font-family:system-ui,sans-serif;padding:2rem}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px 12px;text-align:left;border-bottom:1px solid #ddd}th{font-weight:600;border-bottom:2px solid #999}h1{font-size:1.5rem;margin-bottom:1rem}@media print{body{padding:0}}</style>')
+        w.document.write('</head><body><h1>Transactions</h1>')
+        var rows = this.filteredByType().map(tx => '<tr>'
+          + '<td>' + (((tx._isExp ? tx.expense_date : tx.date_received) || '').slice(0, 10)) + '</td>'
+          + '<td>' + (tx._isExp ? 'Expense' : 'Income') + '</td>'
+          + '<td>' + (tx._isExp ? (tx.payee || '') : this.fn('sourceOf')?.(tx, this.membernames)) + '</td>'
+          + '<td>' + this.fn('fmtCat')?.(tx._isExp ? tx.category : this.fn('labelOf')?.(tx)) + '</td>'
+          + '<td style="text-align:right">' + (tx._isExp ? '\u2212' : '+') + '$' + this.fn('fmtAmt')?.(tx.amount || 0) + '</td>'
+          + '</tr>').join('')
+        w.document.write('<table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>')
+        w.document.write('</body></html>')
+        w.document.close()
+        w.print()
+      }
+
+      this.onconnected = function() {
+        queueMicrotask(() => { if (this.ready?.()) this.refreshOpen?.() })
+      }
+      this.onpropchange = function(k) {
+        if (['expenses', 'income', 'search', 'filtertype', 'expfiltercats', 'expfilterstatus', 'incfiltertype', 'incfiltermethods', 'amtmin', 'amtmax', 'datefrom', 'dateto', 'basekeys'].includes(k)) {
+          queueMicrotask(() => { if (this.ready?.()) this.refreshOpen?.() })
+        }
+      }
+    </script>
+  </finance-transactions-tab>
+</define-element>

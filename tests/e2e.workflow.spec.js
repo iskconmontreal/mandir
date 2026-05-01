@@ -60,13 +60,13 @@ test.describe('e2e: approve → pay flow', () => {
     await approverCtx.close()
 
     // Treasurer opens finance, searches, quick approves (second approval → approved)
-    await treasurerPage.goto('/app/finance/?tab=expenses#expenses')
+    await treasurerPage.goto('/app/finance/?tab=transactions&net_type=expense#transactions')
     await treasurerPage.locator('.card-tab-group').waitFor()
-    await expect(treasurerPage.locator('expense-list .recent-exp-item').first()).toBeVisible({ timeout: 15_000 })
+    await expect(treasurerPage.getByTestId('transactions-tab').getByTestId('tx-expense').first()).toBeVisible({ timeout: 15_000 })
 
     await treasurerPage.fill('.filter-search', `E2E-QAP-${ts}`)
     await treasurerPage.waitForTimeout(500)
-    const row = treasurerPage.locator('expense-list .recent-exp-item').first()
+    const row = treasurerPage.getByTestId('transactions-tab').getByTestId('tx-expense').first()
     await expect(row).toBeVisible()
 
     // Quick approve
@@ -119,13 +119,13 @@ test.describe('e2e: approve → pay flow', () => {
     await approverCtx.close()
 
     // Treasurer opens finance and clicks the expense row to open modal
-    await treasurerPage.goto('/app/finance/?tab=expenses#expenses')
+    await treasurerPage.goto('/app/finance/?tab=transactions&net_type=expense#transactions')
     await treasurerPage.locator('.card-tab-group').waitFor()
-    await expect(treasurerPage.locator('expense-list .recent-exp-item').first()).toBeVisible({ timeout: 15_000 })
+    await expect(treasurerPage.getByTestId('transactions-tab').getByTestId('tx-expense').first()).toBeVisible({ timeout: 15_000 })
 
     await treasurerPage.fill('.filter-search', `E2E-MAP-${ts}`)
     await treasurerPage.waitForTimeout(500)
-    const row = treasurerPage.locator('expense-list .recent-exp-item').first()
+    const row = treasurerPage.getByTestId('transactions-tab').getByTestId('tx-expense').first()
     await expect(row).toBeVisible()
     await row.click()
 

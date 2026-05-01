@@ -121,10 +121,12 @@ test.describe('otp flow', () => {
   })
 
   test('trusted device gets token directly', async ({ page }) => {
+    await page.route(`${API}/**`, route => route.fulfill({ json: { items: [], total: 0 } }))
+    await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok' } }))
     await page.goto('/login.html')
     await page.route('**/auth/login', route => route.fulfill({
       status: 200, contentType: 'application/json',
-      body: JSON.stringify({ token: 'test-jwt', user: { name: 'Test', email: 'admin@test.local' } })
+      body: JSON.stringify({ token: mkToken(['income:view', 'expenses:view'], 3600), user: { name: 'Test', email: 'admin@test.local' } })
     }))
     await page.locator('#email').fill('admin@test.local')
     await page.locator('button[type="submit"]').click()
@@ -166,6 +168,8 @@ test.describe('otp flow', () => {
   })
 
   test('password user full login: email → password → otp → verify', async ({ page }) => {
+    await page.route(`${API}/**`, route => route.fulfill({ json: { items: [], total: 0 } }))
+    await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok' } }))
     await page.goto('/login.html')
     await page.route('**/auth/login', route => {
       const body = JSON.parse(route.request().postData())
@@ -176,7 +180,7 @@ test.describe('otp flow', () => {
     })
     await page.route('**/auth/verify-otp', route => route.fulfill({
       status: 200, contentType: 'application/json',
-      body: JSON.stringify({ token: 'test-jwt', user: { name: 'Admin', email: 'admin@test.local' } })
+      body: JSON.stringify({ token: mkToken(['income:view', 'expenses:view'], 3600), user: { name: 'Admin', email: 'admin@test.local' } })
     }))
     await page.locator('#email').fill('admin@test.local')
     await page.locator('button[type="submit"]').click()
@@ -201,6 +205,7 @@ test.describe('otp flow', () => {
   })
 
   test('otp login creates trusted device: second login skips otp', async ({ page }) => {
+    await page.route(`${API}/**`, route => route.fulfill({ json: { items: [], total: 0 } }))
     await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok' } }))
     await page.goto('/login.html')
     let verifyOtpBody
@@ -208,7 +213,7 @@ test.describe('otp flow', () => {
       const body = JSON.parse(route.request().postData())
       if (body.device_id && verifyOtpBody) {
         return route.fulfill({ status: 200, contentType: 'application/json',
-          body: JSON.stringify({ token: 'jwt2', user: { name: 'Admin', email: 'admin@test.local' } }) })
+          body: JSON.stringify({ token: mkToken(['income:view', 'expenses:view'], 3600), user: { name: 'Admin', email: 'admin@test.local' } }) })
       }
       return route.fulfill({ status: 200, contentType: 'application/json',
         body: JSON.stringify({ step: 'otp_required' }) })
@@ -216,7 +221,7 @@ test.describe('otp flow', () => {
     await page.route('**/auth/verify-otp', route => {
       verifyOtpBody = JSON.parse(route.request().postData())
       return route.fulfill({ status: 200, contentType: 'application/json',
-        body: JSON.stringify({ token: 'jwt1', user: { name: 'Admin', email: 'admin@test.local' } }) })
+        body: JSON.stringify({ token: mkToken(['income:view', 'expenses:view'], 3600), user: { name: 'Admin', email: 'admin@test.local' } }) })
     })
 
     await page.locator('#email').fill('admin@test.local')
@@ -333,12 +338,14 @@ test.describe('login payload verification', () => {
   })
 
   test('otp verify sends email and otp in request body', async ({ page }) => {
+    await page.route(`${API}/**`, route => route.fulfill({ json: { items: [], total: 0 } }))
+    await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok' } }))
     await page.goto('/login.html')
     await page.route('**/auth/login', route => route.fulfill({ json: { step: 'otp_required' } }))
     let verifyBody
     await page.route('**/auth/verify-otp', route => {
       verifyBody = route.request().postDataJSON()
-      route.fulfill({ json: { token: 'jwt', user: { name: 'Test', email: 'otp@temple.local' } } })
+      route.fulfill({ json: { token: mkToken(['income:view', 'expenses:view'], 3600), user: { name: 'Test', email: 'otp@temple.local' } } })
     })
     await page.locator('#email').fill('otp@temple.local')
     await page.locator('button[type="submit"]').click()

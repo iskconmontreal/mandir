@@ -184,12 +184,13 @@ export function mockFinance(page, { donations = [], expenses = [], members = [],
 
 // ── Navigation ──
 export async function openFinance(page, tab = 'transactions') {
-  if (tab === 'donations' || tab === 'income') tab = 'donors'
-  if (tab === 'expenses') tab = 'transactions'
-  if (tab === 'net') tab = 'transactions'
-  await page.goto(`/app/finance/#${tab}`)
+  const type = tab === 'donations' || tab === 'income' ? 'income'
+    : tab === 'expenses' ? 'expense'
+    : ''
+  if (tab === 'donations' || tab === 'income' || tab === 'expenses' || tab === 'net') tab = 'transactions'
+  await page.goto(`/app/finance/${type ? `?net_type=${type}` : ''}#${tab}`)
   await page.getByTestId('tab-group').waitFor()
   if (tab === 'transactions') {
-    await page.getByTestId('expense-item').first().waitFor({ timeout: 10000 }).catch(() => {})
+    await page.getByTestId(type === 'income' ? 'tx-income' : 'tx-expense').first().waitFor({ timeout: 10000 }).catch(() => {})
   }
 }

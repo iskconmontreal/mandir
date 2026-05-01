@@ -9,53 +9,67 @@ preloads:
 
 <div :if="loading" class="section-loader"><img src="/assets/preloader.svg"></div>
 
-<div :if="!loading && status !== 'ok'" class="card">
+<div :if="!loading" class="card">
   <div class="card-header">
-    <h3>Status</h3>
+    <h3>Camera</h3>
+    <span :if="status === 'ok'" class="badge badge-ok">Reachable</span>
     <span :if="status === 'unreachable'" class="badge badge-warn">Offline</span>
+    <span :if="status === 'auth_failed'" class="badge badge-warn">Auth failed</span>
+    <span :if="status === 'error'" class="badge badge-warn">Error</span>
     <span :if="status === 'not_configured'" class="badge badge-dim">Not configured</span>
   </div>
-  <p class="dim" style="font-size:var(--f-sm)" :text="url || 'No URL configured'"></p>
-</div>
-
-<div :if="!loading && status === 'ok'" class="av-frame-wrap">
-  <iframe :src="BASE + '/api/proxy/camera/'" class="av-frame"></iframe>
+  <p class="dim" style="font-size:var(--f-sm)" :text="status === 'not_configured' ? 'No URL configured' : url"></p>
+  <p :if="status === 'auth_failed'" class="device-note">
+    Goloka can reach the camera, but the configured camera credentials failed.
+  </p>
+  <div :if="status === 'ok'" class="device-frame-wrap">
+    <iframe class="device-frame" :src="frameUrl" title="Camera control"></iframe>
+  </div>
+  <div :if="status === 'ok'" style="margin-top:var(--sp-3)">
+    <a :href="frameUrl" target="_blank" rel="noopener" class="btn btn-primary">Open Camera Interface</a>
+  </div>
 </div>
 
 <style>
-  .av-frame-wrap {
-    width: 100%;
-    height: calc(100vh - 180px);
-    min-height: 400px;
-    border-radius: var(--r-lg);
-    overflow: hidden;
+  .badge-ok { background: var(--c-ok-bg, #d1fae5); color: var(--c-ok, #065f46); }
+  .badge-warn { background: var(--c-warn-bg); color: var(--c-warn); }
+  .badge-dim { background: var(--c-surface); color: var(--c-text-dim); }
+  .device-note { margin-top: var(--sp-3); font-size: var(--f-sm); color: var(--c-text-dim); }
+  .device-frame-wrap {
+    margin-top: var(--sp-4);
+    height: min(72vh, 720px);
     border: 1px solid var(--c-border);
+    border-radius: var(--r-md);
+    overflow: hidden;
+    background: var(--c-surface);
   }
-  .av-frame {
+  .device-frame {
     width: 100%;
     height: 100%;
     border: 0;
+    display: block;
   }
-  .badge-warn { background: var(--c-warn-bg); color: var(--c-warn); }
-  .badge-dim { background: var(--c-surface); color: var(--c-text-dim); }
 </style>
 
 <script type="module">
   import { init } from 'lib/app.js'
-  import { api, BASE } from 'lib/api.js'
+  import { api } from 'lib/api.js'
 
   const s = init({
-    BASE,
     loading: true,
     status: 'not_configured',
     url: '',
+    frameUrl: '',
   })
 
   api.getProxyStatus()
     .then(st => {
-      s.status = st?.camera?.status || 'not_configured'
-      s.url = st?.camera?.url || ''
+      const status = st?.camera?.status || 'not_configured'
+      const path = st?.camera?.url || '/api/proxy/camera/'
+      if (status !== 'not_configured') s.url = api.proxyUrl(path)
+      if (status === 'ok') s.frameUrl = api.proxyAuthorizedUrl(path)
+      s.status = status
       s.loading = false
     })
-    .catch(() => { s.loading = false })
+    .catch(e => { console.error('camera proxy status', e); s.loading = false })
 </script>

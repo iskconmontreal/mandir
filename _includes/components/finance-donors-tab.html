@@ -1,0 +1,55 @@
+<define-element>
+  <finance-donors-tab active:boolean="false" search:string="" rows:array loading:boolean="false" error:string="" memberemails:object>
+    <style>:host { display: contents; }</style>
+    <template>
+      <section :if="active" data-testid="donors-tab">
+        <div class="filter-bar">
+          <div class="filter-search-wrap">
+            <input class="filter-search" type="search" :value="search" :oninput.debounce-150="e => emit('searchchange', e.target.value)" placeholder="Search donors…">
+          </div>
+          <div class="filter-bar-actions">
+            <button class="btn btn-primary filter-bar-create" :onclick="emit('create')">+ Income</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div :if="error" class="login-error" :text="error" style="margin:var(--s-md)"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Donor</th>
+                  <th style="text-align:center">Donations</th>
+                  <th style="text-align:right">YTD Total</th>
+                  <th style="text-align:right">Last Donation</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :each="d in getFilteredRows()" class="row-link" :onclick="emit('viewdetails', d)">
+                  <td>
+                    <strong :text="d.name"></strong>
+                    <div class="dim" style="font-size:var(--f-sm)" :text="memberemails[d.member_id] || ''"></div>
+                  </td>
+                  <td style="text-align:center" :text="d.count"></td>
+                  <td style="text-align:right" :text="'$' + fmtAmt(d.total)"></td>
+                  <td style="text-align:right" :text="fmtDate(d.lastDate || d.last_date)"></td>
+                </tr>
+                <tr :if="!getFilteredRows().length && !loading">
+                  <td colspan="4" class="dim" style="text-align:center;padding:var(--s-xl)">No donors found.</td>
+                </tr>
+                <tr :if="loading">
+                  <td colspan="4" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </template>
+    <script>
+      this.getFilteredRows = function() {
+        return this.filterDonorRows(this.rows || [], this.search || '')
+      }
+    </script>
+  </finance-donors-tab>
+</define-element>

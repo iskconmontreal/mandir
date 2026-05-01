@@ -133,7 +133,7 @@ test.describe('members section', () => {
     await page.click('button:has-text("+ Member")')
     await expect(page.getByRole('heading', { name: 'Add Member' })).toBeVisible()
 
-    await page.fill('#m-name', 'Radha Devi')
+    await page.fill('#m-spiritual', 'Radha Devi')
     await page.fill('#m-email', 'radha@test.local')
     await page.fill('#m-phone', '514-222-3333')
     await page.click('button[type="submit"]')

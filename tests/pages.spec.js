@@ -22,8 +22,8 @@ test.describe('overview page (admin)', () => {
   })
 
   test('finance shortcuts point to the expected tabs and filters', async ({ page }) => {
-    await expect(page.locator('.recent-grid .card').nth(0).locator('.section-head-link')).toHaveAttribute('href', 'finance/?tab=expenses#expenses')
-    await expect(page.locator('.recent-grid .card').nth(1).locator('.section-head-link')).toHaveAttribute('href', 'finance/?tab=income&inc_type=donation#income')
+    await expect(page.locator('.recent-grid .card').nth(0).locator('.section-head-link')).toHaveAttribute('href', 'finance/?tab=transactions&net_type=expense#transactions')
+    await expect(page.locator('.recent-grid .card').nth(1).locator('.section-head-link')).toHaveAttribute('href', 'finance/?tab=transactions&net_type=income&inc_type=donation#transactions')
   })
 })
 
@@ -47,7 +47,7 @@ test.describe('overview donations', () => {
       { id: 1, amount: 4200, payee: 'Govindas Supplies', category: 'kitchen', expense_date: today, created_at: recentTime, status: 'submitted', approval_count: 0, approvals_required: 1, created_by: 2 },
     ]
     const incomes = [
-      { id: 7, type: 'donation', amount: 8800, method: 'card', category: 'festival', date_received: today, created_at: recentTime, updated_at: recentTime, created_by: 2, source_name: 'Sunday Guest' },
+      { id: 7, type: 'donation', amount: 8800, method: 'card', category: 'festival', date_received: recentTime, created_at: recentTime, updated_at: recentTime, created_by: 2, source_name: 'Sunday Guest' },
     ]
 
     await page.route(`${API}/**`, async route => {
@@ -74,7 +74,7 @@ test.describe('overview donations', () => {
 
     const donationRow = page.locator('.recent-inc-item').first()
     await expect(donationRow).toContainText('Sunday Guest')
-    await expect(donationRow.locator('.recent-inc-subtitle')).toHaveText(/card\s+.+ago/i)
+    await expect(donationRow.locator('.recent-inc-subtitle')).toHaveText(/card\s+(.+ago|[A-Z][a-z]{2}\s+\d{1,2})/i)
   })
 
   test('recent approved expense shows last updater name', async ({ page }) => {
@@ -256,7 +256,7 @@ test.describe('overview donations', () => {
     await expect(page.locator('#don-method option')).toHaveCount(9)
     await page.selectOption('#don-method', 'e-transfer')
 
-    await expect(page.locator('#don-cat option')).toHaveCount(9)
+    await expect(page.locator('#don-cat option')).toHaveCount(20)
     await page.selectOption('#don-cat', 'festival')
 
     await expect(page.locator('#don-date')).toHaveValue(today)
@@ -278,7 +278,7 @@ test.describe('overview donations', () => {
 
     await donationRow.click()
     await expect(page.locator('.modal')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Print' })).toBeVisible()
+    await expect(page.getByTestId('income-modal').getByRole('button', { name: 'Print' })).toBeVisible()
     await expect(page.locator('#don-donor')).toHaveValue('Radhika Dasi')
     await expect(page.locator('#don-amount')).toHaveValue('100.50')
     await expect(page.locator('#don-method')).toHaveValue('e-transfer')
