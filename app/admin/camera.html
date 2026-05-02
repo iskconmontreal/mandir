@@ -63,11 +63,14 @@ preloads:
   })
 
   api.getProxyStatus()
-    .then(st => {
+    .then(async st => {
       const status = st?.camera?.status || 'not_configured'
       const path = st?.camera?.url || '/api/proxy/camera/'
       if (status !== 'not_configured') s.url = api.proxyUrl(path)
-      if (status === 'ok') s.frameUrl = api.proxyAuthorizedUrl(path)
+      if (status === 'ok') {
+        await api.proxySession()
+        s.frameUrl = api.proxyAuthorizedUrl(path)
+      }
       s.status = status
       s.loading = false
     })
