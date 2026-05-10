@@ -3,6 +3,7 @@ preloads:
   - /lib/processor.js
   - /lib/finance.js
   - /lib/icons.js
+  - /lib/boutique.js
 ---
 <style>
   .boutique-cart-items {
@@ -235,39 +236,14 @@ preloads:
   import { icon, methodIcon, trendIcon } from 'lib/icons.js'
   import { trend, trendDiff } from 'lib/finance.js'
   import { api } from 'lib/api.js'
+  import { tagCls, localDayKey, localMonthKey, methodSlug,
+           annotateCarts, buildBreakdown, buildDaysFromCarts, monthAggregates } from 'lib/boutique.js'
 
   setupProcessor(sprae, { fmtAmt, methodIcon, icon, trendIcon, api })
 
   if (!auth.can('income:view')) {
     location.replace(new URL('../', location.href).href)
     throw new Error('redirecting')
-  }
-
-  const CAT_COLOR = {
-    'Boutique':         'blue',
-    'Books':            'teal',
-    'Sankirtan Books':  'indigo',
-    'Restaurant':       'amber',
-    'Temple Donation':  'green',
-  }
-  const CAT_VAR = {
-    'Boutique':        'var(--c-cat-blue)',
-    'Books':           'var(--c-cat-teal)',
-    'Sankirtan Books': 'var(--c-cat-indigo)',
-    'Restaurant':      'var(--c-cat-amber)',
-    'Temple Donation': 'var(--c-cat-green)',
-  }
-  const tagCls = c => 'cat-' + (CAT_COLOR[c] || 'gray')
-  const catVar = c => CAT_VAR[c] || 'var(--c-cat-gray)'
-
-  function localDayKey(iso) {
-    const d = new Date(iso)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
-
-  function localMonthKey(iso) {
-    const d = new Date(iso)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   }
 
   const now = new Date()
@@ -296,88 +272,6 @@ preloads:
 
   function fmtTime(iso) {
     return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-  }
-
-  function methodSlug(m) {
-    return String(m || 'cash').toLowerCase().replace(/\s+/g, '-')
-  }
-
-  function buildBreakdown(day) {
-    const total = day.collected || 1
-    const segs = []
-    let greenAmount = 0
-
-    for (const entry of day.byCategory) {
-      if (entry.category === 'Temple Donation') {
-        greenAmount += entry.amount
-      } else {
-        segs.push({
-          pct: (entry.amount / total) * 100,
-          color: catVar(entry.category),
-          title: `${entry.category}: $${fmtAmt(entry.amount)} (${Math.round((entry.amount / total) * 100)}%)`,
-        })
-      }
-    }
-    greenAmount += day.donation
-
-    if (greenAmount > 0) {
-      segs.push({
-        pct: (greenAmount / total) * 100,
-        color: 'var(--c-cat-green)',
-        title: `Donations: $${fmtAmt(greenAmount)} (${Math.round((greenAmount / total) * 100)}%)`,
-      })
-    }
-
-    return segs.filter(s => s.pct > 0).map(s => ({
-      style: `--seg-color:${s.color};--seg-hover-color:${s.color};width:${Math.max(s.pct, 2)}%`,
-      title: s.title,
-    }))
-  }
-
-  function annotateCarts(carts) {
-    return carts.map(raw => ({
-      ...raw,
-      donation: Math.max(0, (raw.collected_cents || 0) - (raw.due_cents || 0)),
-    }))
-  }
-
-  function buildDaysFromCarts(carts) {
-    const days = {}
-    for (const cart of carts) {
-      const key = localDayKey(cart.occurred_at)
-      if (!days[key]) days[key] = {
-        key, carts: [], collected: 0, donation: 0, catTotals: {}, byCategory: [], breakdown: [],
-      }
-      const day = days[key]
-      day.carts.push(cart)
-      day.collected += cart.collected_cents || 0
-      day.donation += cart.donation
-      for (const item of (cart.items || [])) {
-        const lt = (item.price_cents || 0) * (item.qty || 0)
-        day.catTotals[item.category] = (day.catTotals[item.category] || 0) + lt
-      }
-    }
-    const list = Object.values(days).sort((a, b) => b.key.localeCompare(a.key))
-    for (const day of list) {
-      day.carts.sort((a, b) => new Date(b.occurred_at) - new Date(a.occurred_at))
-      day.byCategory = Object.entries(day.catTotals)
-        .map(([category, amount]) => ({ category, amount }))
-        .filter(e => e.amount > 0)
-        .sort((a, b) => b.amount - a.amount)
-      day.breakdown = buildBreakdown(day)
-    }
-    return list
-  }
-
-  function monthAggregates(carts, monthKey) {
-    let sales = 0, donations = 0, count = 0
-    for (const cart of carts) {
-      if (localMonthKey(cart.occurred_at) !== monthKey) continue
-      sales += cart.collected_cents || 0
-      donations += cart.donation
-      count += 1
-    }
-    return { sales, donations, count }
   }
 
   const s = init({
