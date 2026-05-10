@@ -1,0 +1,363 @@
+---
+preloads:
+  - /lib/processor.js
+  - /lib/finance.js
+  - /lib/icons.js
+  - /lib/boutique.js
+---
+<style>
+  .boutique-cart-items {
+    padding: 0 var(--s-md) var(--s-sm) calc(var(--s-lg) + var(--s-md));
+  }
+  .boutique-item-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 9rem minmax(var(--recent-inc-amt-min, 6rem), auto);
+    gap: var(--s-sm);
+    align-items: center;
+    padding: var(--s-xs) 0;
+    font-size: var(--f-sm);
+  }
+  .boutique-item-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .boutique-item-tag { justify-self: start; }
+  .boutique-item-amt {
+    text-align: right;
+    color: var(--c-text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .boutique-cart-donation {
+    padding: var(--s-xs) var(--s-md) var(--s-sm) calc(var(--s-lg) + var(--s-md));
+    font-size: var(--f-sm);
+  }
+  .boutique-day-cat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-sm);
+    padding: var(--s-xs) 0 var(--s-sm);
+    font-size: var(--f-sm);
+  }
+</style>
+
+<div class="page-header" style="display:flex; align-items:baseline; justify-content:space-between">
+  <h1>Boutique</h1>
+  <a class="btn-link" href="{{ '/app/finance/' | relative_url }}">← Finance</a>
+</div>
+
+<!-- Stat tabs (informational, non-interactive) — same pattern as finance-stat-tabs -->
+<div class="card-tab-group">
+  <div class="card-tab card-tab-active">
+    <div class="stat-label">Sales</div>
+    <div class="stat-value"><span class="stat-ok" :text="'+$' + fmtAmt(salesMonth)"></span></div>
+    <div class="stat-sub dim">
+      <span :if="salesTrend.dir" class="trend-arrow" :class="salesTrend.cls" :html="trendIcon(salesTrend.dir)"></span>
+      <span :text="salesTrend.num"></span><span :text="salesTrend.label"></span>
+    </div>
+  </div>
+  <div class="card-tab">
+    <div class="stat-label">Donations</div>
+    <div class="stat-value"><span class="stat-ok" :text="'+$' + fmtAmt(donationsMonth)"></span></div>
+    <div class="stat-sub dim">
+      <span :if="donationsTrend.dir" class="trend-arrow" :class="donationsTrend.cls" :html="trendIcon(donationsTrend.dir)"></span>
+      <span :text="donationsTrend.num"></span><span :text="donationsTrend.label"></span>
+    </div>
+  </div>
+  <div class="card-tab">
+    <div class="stat-label">Carts</div>
+    <div class="stat-value"><span :text="cartsMonth + (cartsMonth === 1 ? ' cart' : ' carts')"></span></div>
+    <div class="stat-sub dim">
+      <span :if="cartsTrend.dir" class="trend-arrow" :class="cartsTrend.cls" :html="trendIcon(cartsTrend.dir)"></span>
+      <span :text="cartsTrend.num"></span><span :text="cartsTrend.label"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Filter bar (matches Finance's transactions tab layout) -->
+<div class="filter-bar">
+  <div class="filter-search-wrap" :onclick.outside="filterPanel = false">
+    <input class="filter-search filter-search-input" type="search" placeholder="Search items, payment method…"
+      :value="search" :oninput.debounce-150="e => { search = e.target.value }">
+
+    <div class="filter-inline-chips" :class="{'hidden': !(filterCat || filterMethod || dateFrom || dateTo)}">
+      <span :if="filterCat" class="chip filter-inline-chip" :onclick="filterCat = ''" :text="filterCat + ' ×'"></span>
+      <span :if="filterMethod" class="chip filter-inline-chip" :onclick="filterMethod = ''" :text="filterMethod + ' ×'"></span>
+      <span :if="dateFrom" class="chip filter-inline-chip" :onclick="dateFrom = ''" :text="'From ' + dateFrom + ' ×'"></span>
+      <span :if="dateTo" class="chip filter-inline-chip" :onclick="dateTo = ''" :text="'To ' + dateTo + ' ×'"></span>
+    </div>
+
+    <div class="filter-search-seg">
+      <button class="btn btn-filter filter-search-btn"
+        :class="{'filter-search-btn-active': filterPanel || filterCat || filterMethod || dateFrom || dateTo}"
+        :onclick="filterPanel = !filterPanel">Filter</button>
+
+      <div class="filter-dropdown" :class="{'hidden': !filterPanel}">
+
+        <div class="field">
+          <label>Category</label>
+          <div class="tag-cloud">
+            <span :each="c in allCats" class="tag" :class="tagCls(c) + (filterCat === c ? ' tag-active' : '')"
+              :onclick="filterCat = filterCat === c ? '' : c"
+              :text="c"></span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Payment Method</label>
+          <div class="tag-cloud">
+            <span :each="m in allMethods" class="tag"
+              :class="filterMethod === m ? 'tag-active' : ''"
+              :onclick="filterMethod = filterMethod === m ? '' : m"
+              style="display:inline-flex;align-items:center;gap:var(--s-xs)">
+              <span :html="methodIcon(methodSlug(m))" style="display:inline-flex;width:1em;height:1em"></span>
+              <span :text="m"></span>
+            </span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Date range</label>
+          <div style="display:flex;gap:var(--s-sm);align-items:center">
+            <input type="date" :value="dateFrom" :onchange="e => dateFrom = e.target.value" style="flex:1">
+            <span class="dim">—</span>
+            <input type="date" :value="dateTo" :onchange="e => dateTo = e.target.value" style="flex:1">
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--s-sm);border-top:1px solid var(--c-border)">
+          <button class="btn-link" :if="filterCat || filterMethod || dateFrom || dateTo"
+            :onclick="filterCat = ''; filterMethod = ''; dateFrom = ''; dateTo = ''">Clear all</button>
+          <span :if="!filterCat && !filterMethod && !dateFrom && !dateTo"></span>
+          <button class="btn btn-primary btn-sm" :onclick="filterPanel = false"
+            :text="'Show ' + filteredDays.reduce((n, d) => n + d.carts.length, 0) + ' results'"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div :if="loading" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</div>
+
+<div :if="!loading && error" class="login-error" style="margin:var(--s-md)" :text="error"></div>
+
+<div :if="!loading && !error && !filteredDays.length" class="dim" style="text-align:center;padding:var(--s-xl)">No counter sales found</div>
+
+<div :if="!loading && !error && filteredDays.length" class="finance-year-section">
+  <div class="finance-year-months">
+    <div :each="(day, di) in filteredDays" :class="{'finance-month-wrap-open': dayOpen[day.key], 'finance-month-wrap-divider': di > 0}">
+
+      <button type="button" class="exp-group-header"
+        :class="{'exp-group-header-open': dayOpen[day.key]}"
+        :aria-expanded="dayOpen[day.key] ? 'true' : 'false'"
+        :onclick="dayOpen = { ...dayOpen, [day.key]: !dayOpen[day.key] }">
+        <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
+        <span class="exp-group-heading">
+          <span class="exp-group-label">
+            <span class="finance-month-label-desktop" :text="fmtDayShort(day.key)"></span>
+            <span class="finance-month-label-mobile" :text="fmtDayLong(day.key)"></span>
+          </span>
+          <span class="exp-group-count" :text="day.carts.length"></span>
+        </span>
+        <span :if="day.breakdown.length" class="exp-group-breakdown">
+          <span :each="seg in day.breakdown" class="exp-group-breakdown-seg" :style="seg.style" :title="seg.title"></span>
+        </span>
+        <span class="exp-group-total stat-ok" :text="'+$' + fmtAmt(day.collected)"></span>
+      </button>
+
+      <div class="recent-inc-list finance-exp-list finance-inc-list-group" :class="{'finance-exp-list-open': dayOpen[day.key]}" :aria-hidden="dayOpen[day.key] ? 'false' : 'true'">
+
+        <div class="boutique-day-cat-row" style="padding-left:calc(var(--s-lg) + var(--s-md));padding-right:var(--s-md)">
+          <span :each="entry in day.byCategory" style="display:inline-flex;align-items:center;gap:var(--s-xs)">
+            <span class="badge" :class="tagCls(entry.category)" :text="entry.category"></span>
+            <span class="dim" :text="'$' + fmtAmt(entry.amount)"></span>
+          </span>
+          <span :if="day.donation > 0" style="display:inline-flex;align-items:center;gap:var(--s-xs)">
+            <span class="badge cat-green">Donation</span>
+            <span class="stat-ok" :text="'+$' + fmtAmt(day.donation)"></span>
+          </span>
+        </div>
+
+        <div :each="cart in day.carts">
+
+          <div class="recent-inc-item finance-inc-item" :class="'recent-inc-icon-' + methodSlug(cart.payment_method)">
+            <span class="recent-inc-icon-col" :class="'recent-inc-icon-' + methodSlug(cart.payment_method)">
+              <span class="recent-inc-icon" :html="methodIcon(methodSlug(cart.payment_method))"></span>
+            </span>
+            <div class="recent-inc-main">
+              <div class="recent-inc-info">
+                <div class="recent-inc-title-row">
+                  <div style="display:flex;align-items:baseline;gap:var(--s-xs);flex-wrap:wrap">
+                    <div class="recent-inc-title" :text="'Cart #' + cart.id"></div>
+                    <span class="recent-inc-title-sub dim" :text="cart.items.length + (cart.items.length === 1 ? ' item' : ' items')"></span>
+                  </div>
+                </div>
+                <div class="recent-inc-subtitle">
+                  <span class="recent-inc-method" :class="'recent-inc-method-' + methodSlug(cart.payment_method)" :text="cart.payment_method"></span>
+                  <time class="recent-inc-time" :text="fmtTime(cart.occurred_at)"></time>
+                </div>
+              </div>
+            </div>
+            <span class="recent-inc-actions"></span>
+            <div class="recent-inc-type"></div>
+            <div class="recent-inc-amount">
+              <div class="recent-inc-value stat-ok" :text="'+$' + fmtAmt(cart.collected_cents)"></div>
+            </div>
+          </div>
+
+          <div class="boutique-cart-items">
+            <div :each="item in cart.items" class="boutique-item-row">
+              <span class="boutique-item-name" :text="item.qty > 1 ? item.qty + '× ' + item.name : item.name"></span>
+              <span class="boutique-item-tag">
+                <span class="badge" :class="tagCls(item.category)" :text="item.category"></span>
+              </span>
+              <span class="boutique-item-amt" :text="'$' + fmtAmt(item.price_cents * item.qty)"></span>
+            </div>
+          </div>
+
+          <div :if="cart.donation > 0" class="boutique-cart-donation">
+            <span class="badge cat-green">Donation</span>
+            <span class="stat-ok" style="margin-left:var(--s-xs)" :text="'+$' + fmtAmt(cart.donation)"></span>
+            <span class="dim" style="margin-left:var(--s-xs)" :text="'(due $' + fmtAmt(cart.due_cents) + ')'"></span>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import sprae from 'sprae'
+  import { setupProcessor } from 'lib/processor.js'
+  import { init, fmtAmt, auth } from 'lib/app.js'
+  import { icon, methodIcon, trendIcon } from 'lib/icons.js'
+  import { trend, trendDiff } from 'lib/finance.js'
+  import { api } from 'lib/api.js'
+  import { tagCls, localDayKey, localMonthKey, methodSlug,
+           annotateCarts, buildBreakdown, buildDaysFromCarts, monthAggregates } from 'lib/boutique.js'
+
+  setupProcessor(sprae, { fmtAmt, methodIcon, icon, trendIcon, api })
+
+  if (!auth.can('income:view')) {
+    location.replace(new URL('../', location.href).href)
+    throw new Error('redirecting')
+  }
+
+  const now = new Date()
+  const today = localDayKey(now.toISOString())
+  const yesterday = (() => {
+    const d = new Date(); d.setDate(d.getDate() - 1)
+    return localDayKey(d.toISOString())
+  })()
+  const curMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const prevMonthKey = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`
+
+  function fmtDayShort(key) {
+    if (key === today) return 'Today'
+    if (key === yesterday) return 'Yesterday'
+    const [y, m, d] = key.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  }
+
+  function fmtDayLong(key) {
+    if (key === today) return 'Today'
+    if (key === yesterday) return 'Yesterday'
+    const [y, m, d] = key.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+  }
+
+  function fmtTime(iso) {
+    return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const s = init({
+    loading: true,
+    error: '',
+    search: '',
+    filterCat: '',
+    filterMethod: '',
+    dateFrom: '',
+    dateTo: '',
+    filterPanel: false,
+    allCats: ['Boutique', 'Books', 'Sankirtan Books', 'Restaurant', 'Temple Donation'],
+    allMethods: [],
+    allCarts: [],
+    daysData: [],
+    dayOpen: {},
+    salesMonth: 0,
+    salesPrev: 0,
+    donationsMonth: 0,
+    donationsPrev: 0,
+    cartsMonth: 0,
+    cartsPrev: 0,
+    fmtAmt,
+    fmtDayShort,
+    fmtDayLong,
+    fmtTime,
+    methodIcon,
+    methodSlug,
+    tagCls,
+    trendIcon,
+
+    get salesTrend() { return trend(this.salesMonth, this.salesPrev) },
+    get donationsTrend() { return trend(this.donationsMonth, this.donationsPrev) },
+    get cartsTrend() { return trendDiff(this.cartsMonth, this.cartsPrev) },
+
+    get filteredDays() {
+      const q = this.search.trim().toLowerCase()
+      const cat = this.filterCat
+      const method = this.filterMethod
+      const from = this.dateFrom
+      const to = this.dateTo
+
+      if (!q && !cat && !method && !from && !to) return this.daysData
+
+      const matched = this.allCarts.filter(cart => {
+        const key = localDayKey(cart.occurred_at)
+        if (from && key < from) return false
+        if (to && key > to) return false
+        if (method && cart.payment_method !== method) return false
+        if (cat && !(cart.items || []).some(i => i.category === cat)) return false
+        if (q) {
+          const inName = (cart.items || []).some(i => (i.name || '').toLowerCase().includes(q))
+          const inMethod = (cart.payment_method || '').toLowerCase().includes(q)
+          if (!inName && !inMethod) return false
+        }
+        return true
+      }).map(cart => {
+        if (!cat) return cart
+        return { ...cart, items: (cart.items || []).filter(i => i.category === cat) }
+      })
+
+      return buildDaysFromCarts(matched)
+    },
+  })
+
+  api.getCounterSales()
+    .then(raw => {
+      const carts = annotateCarts(raw || [])
+      const days = buildDaysFromCarts(carts)
+      const m = monthAggregates(carts, curMonthKey)
+      const p = monthAggregates(carts, prevMonthKey)
+
+      s.allCarts = carts
+      s.daysData = days
+      s.dayOpen = days.length ? { [days[0].key]: true } : {}
+      s.allMethods = [...new Set(carts.map(c => c.payment_method).filter(Boolean))]
+      s.salesMonth = m.sales
+      s.salesPrev = p.sales
+      s.donationsMonth = m.donations
+      s.donationsPrev = p.donations
+      s.cartsMonth = m.count
+      s.cartsPrev = p.count
+      s.loading = false
+    })
+    .catch(err => {
+      s.error = err?.message || 'Failed to load counter sales. Please check your connection.'
+      s.loading = false
+    })
+</script>

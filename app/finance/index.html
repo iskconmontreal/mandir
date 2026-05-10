@@ -7,6 +7,7 @@ preloads:
 ---
 <div class="page-header" style="display:flex; align-items:baseline; justify-content:space-between">
   <h1>Finance</h1>
+  <a :if="can('income:view')" class="btn-link" style="color:var(--c-accent)" href="{{ '/app/finance/boutique/' | relative_url }}">Boutique sales →</a>
 </div>
 
 <finance-stat-tabs :active="activeTab" :net="net" :nettrend="netTrend"
