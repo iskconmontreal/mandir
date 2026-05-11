@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   normTab, normIncomeType, normIncomeMethod, normIncomeMethods, normExpenseCats, normAmt,
-  bucketOf, labelOf, sourceOf,
+  bucketOf, labelOf, displayLabel, sourceOf,
   incomeTypeMatch, incomeMethodMatch, filterDonorRows,
   dateOnly, expenseMonthKey, incomeMonthKey, monthRange,
   monthOpenState, monthKeysWithData, monthItemMap,
@@ -11,6 +11,29 @@ import {
   trend, trendDiff,
   localMonthKey, changedAt, STATUS_ORDER,
 } from '../../lib/finance.js'
+
+describe('displayLabel', () => {
+  it('returns "Shop Counter Sale" for source=boutique-counter', () => {
+    expect(displayLabel({ type: 'sale', details: { source: 'boutique-counter' } })).toBe('Shop Counter Sale')
+  })
+  it('returns "Counter Donation" for source=boutique-counter-donation', () => {
+    expect(displayLabel({ type: 'donation', category: 'general', details: { source: 'boutique-counter-donation' } })).toBe('Counter Donation')
+  })
+  it('returns "Counter Overpayment" for source=boutique-counter-overpayment', () => {
+    expect(displayLabel({ type: 'donation', details: { source: 'boutique-counter-overpayment' } })).toBe('Counter Overpayment')
+  })
+  it('parses string details JSON', () => {
+    expect(displayLabel({ type: 'sale', details: '{"source":"boutique-counter"}' })).toBe('Shop Counter Sale')
+  })
+  it('falls back to fmtCat(labelOf(x)) for unrelated sources', () => {
+    expect(displayLabel({ type: 'donation', category: 'building_fund' })).toBe('Building Fund')
+    expect(displayLabel({ type: 'grant' })).toBe('Grant')
+  })
+  it('falls back gracefully when details is missing or unparseable', () => {
+    expect(displayLabel({ type: 'sale' })).toBe('Sale')
+    expect(displayLabel({ type: 'sale', details: 'not-json' })).toBe('Sale')
+  })
+})
 
 // ── normTab ──
 describe('normTab', () => {
