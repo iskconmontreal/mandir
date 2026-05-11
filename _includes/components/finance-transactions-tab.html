@@ -243,7 +243,7 @@
         var rows = [['Date', 'Type', 'Description', 'Category', 'Amount', 'Note']]
         for (var tx of this.filteredByType()) {
           if (tx._isExp) rows.push([(tx.expense_date || '').slice(0, 10), 'Expense', tx.payee, tx.category, '-' + this.fn('rawAmt')?.(tx.amount), tx.note || ''])
-          else rows.push([(tx.date_received || '').slice(0, 10), 'Income', this.fn('sourceOf')?.(tx, this.membernames), this.fn('labelOf')?.(tx), '+' + this.fn('rawAmt')?.(tx.amount), tx.note || ''])
+          else rows.push([(tx.date_received || '').slice(0, 10), 'Income', this.fn('sourceOf')?.(tx, this.membernames), this.fn('displayLabel')?.(tx), '+' + this.fn('rawAmt')?.(tx.amount), tx.note || ''])
         }
         var csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
         var blob = new Blob([csv], { type: 'text/csv' })
@@ -263,7 +263,7 @@
           + '<td>' + (((tx._isExp ? tx.expense_date : tx.date_received) || '').slice(0, 10)) + '</td>'
           + '<td>' + (tx._isExp ? 'Expense' : 'Income') + '</td>'
           + '<td>' + (tx._isExp ? (tx.payee || '') : this.fn('sourceOf')?.(tx, this.membernames)) + '</td>'
-          + '<td>' + this.fn('fmtCat')?.(tx._isExp ? tx.category : this.fn('labelOf')?.(tx)) + '</td>'
+          + '<td>' + (tx._isExp ? this.fn('fmtCat')?.(tx.category) : this.fn('displayLabel')?.(tx)) + '</td>'
           + '<td style="text-align:right">' + (tx._isExp ? '\u2212' : '+') + '$' + this.fn('fmtAmt')?.(tx.amount || 0) + '</td>'
           + '</tr>').join('')
         w.document.write('<table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>')

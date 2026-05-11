@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   tagCls, localDayKey, localMonthKey, methodSlug,
   annotateCarts, buildDaysFromCarts, monthAggregates, buildBreakdown,
+  monthShopSales,
 } from '../../lib/boutique.js'
 
 // ── Helpers used across tests ──────────────────────────────────────────────
@@ -108,6 +109,65 @@ describe('annotateCarts', () => {
     const [cart] = annotateCarts([raw])
     expect(cart.id).toBe(99)
     expect(cart.payment_method).toBe('Card')
+  })
+
+  it('uses Goloka-provided overpayment_cents when present', () => {
+    const [cart] = annotateCarts([makeCart({
+      due_cents: 500, collected_cents: 700, overpayment_cents: 200,
+    })])
+    expect(cart.overpayment).toBe(200)
+    expect(cart.donation).toBe(200)
+  })
+
+  it('exposes itemsTotal = due - temple_donation', () => {
+    const [cart] = annotateCarts([makeCart({
+      due_cents: 1000, collected_cents: 1000, temple_donation_cents: 300,
+    })])
+    expect(cart.itemsTotal).toBe(700)
+    expect(cart.templeDonation).toBe(300)
+  })
+
+  it('itemsTotal equals due when no temple donation', () => {
+    const [cart] = annotateCarts([makeCart({
+      due_cents: 800, collected_cents: 800,
+    })])
+    expect(cart.itemsTotal).toBe(800)
+    expect(cart.templeDonation).toBe(0)
+  })
+})
+
+// ── monthShopSales ─────────────────────────────────────────────────────────
+
+describe('monthShopSales', () => {
+  it('sums (due - temple_donation) for carts in the target month', () => {
+    const carts = annotateCarts([
+      // May: $10 due, $2 temple donation → $8 shop revenue
+      { occurred_at: '2026-05-01T10:00:00Z', due_cents: 1000, collected_cents: 1000, temple_donation_cents: 200, items: [] },
+      // May: $5 due, $0 temple → $5 shop revenue
+      { occurred_at: '2026-05-15T10:00:00Z', due_cents: 500,  collected_cents: 500,  temple_donation_cents: 0,   items: [] },
+      // April: ignored
+      { occurred_at: '2026-04-20T10:00:00Z', due_cents: 999,  collected_cents: 999,  temple_donation_cents: 0,   items: [] },
+    ])
+    expect(monthShopSales(carts, '2026-05')).toBe(1300)
+  })
+
+  it('excludes overpayment (overpayment sits on top of due_cents)', () => {
+    const carts = annotateCarts([
+      { occurred_at: '2026-05-01T10:00:00Z', due_cents: 500, collected_cents: 700, temple_donation_cents: 0, items: [] },
+    ])
+    // due is 500, overpayment 200 — shop sales = 500, not 700
+    expect(monthShopSales(carts, '2026-05')).toBe(500)
+  })
+
+  it('returns 0 when no carts match the month', () => {
+    const carts = annotateCarts([
+      { occurred_at: '2026-05-01T10:00:00Z', due_cents: 500, collected_cents: 500, items: [] },
+    ])
+    expect(monthShopSales(carts, '2025-12')).toBe(0)
+  })
+
+  it('returns 0 for empty cart list', () => {
+    expect(monthShopSales([], '2026-05')).toBe(0)
   })
 })
 

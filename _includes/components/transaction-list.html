@@ -90,7 +90,7 @@
                     <button type="button" class="btn btn-sm btn-icon btn-outline" :if="canissuereceipt && tx.type === 'donation' && tx.member_id && !tx.tax_receipt_id && !receiptissuing?.[tx.id]" title="Issue tax receipt" :onclick.stop="e => _emit('issuereceipt', tx)" :html="receiptIcon"></button>
                   </span>
                   <div class="recent-inc-type">
-                    <span class="badge" :class="catCls((tx.type || 'donation') === 'donation' ? (tx.category || 'general') : (tx.type || 'other'))" :text="fmtCat((tx.type || 'donation') === 'donation' ? (tx.category || 'general') : (tx.type || 'other'))"></span>
+                    <span class="badge" :class="catCls((tx.type || 'donation') === 'donation' ? (tx.category || 'general') : (tx.type || 'other'))" :text="displayLabel(tx)"></span>
                   </div>
                   <div class="recent-inc-amount">
                     <div class="recent-inc-value stat-ok" :text="'+$' + fmtAmt(tx.amount || 0)"></div>

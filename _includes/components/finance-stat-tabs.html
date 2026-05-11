@@ -1,5 +1,5 @@
 <define-element>
-  <finance-stat-tabs active:string="transactions" net:number="0" nettrend:object expmonth:number="0" expprevmonth:number="0" donorsmonth:number="0" donorsprevmonth:number="0">
+  <finance-stat-tabs active:string="transactions" net:number="0" nettrend:object expmonth:number="0" expprevmonth:number="0" donorsmonth:number="0" donorsprevmonth:number="0" shopsalesmonth:number="0" shopsalesprev:number="0">
     <style>:host { display: contents; }</style>
     <template>
       <div class="card-tab-group" data-testid="tab-group">
@@ -21,12 +21,26 @@
           <div class="stat-value"><span :text="donorsmonth + (donorsmonth === 1 ? ' donor' : ' donors')"></span></div>
           <div class="stat-sub dim"><span :if="trendDiff(donorsmonth, donorsprevmonth).dir" class="trend-arrow" :class="trendDiff(donorsmonth, donorsprevmonth).cls" :html="trendIcon(trendDiff(donorsmonth, donorsprevmonth).dir)"></span><span :text="trendDiff(donorsmonth, donorsprevmonth).num"></span><span :text="trendDiff(donorsmonth, donorsprevmonth).label"></span></div>
         </div>
+        <div class="card-tab" :class="{['card-tab-active']: active === 'shop-sales'}"
+          :onclick="e => _switch(e, 'shop-sales')">
+          <div class="stat-label">Shop Sales</div>
+          <div class="stat-value"><span :text="'$' + fmtAmt(shopsalesmonth)"></span></div>
+          <div class="stat-sub dim"><span :if="trend(shopsalesmonth, shopsalesprev).dir" class="trend-arrow" :class="trend(shopsalesmonth, shopsalesprev).cls" :html="trendIcon(trend(shopsalesmonth, shopsalesprev).dir)"></span><span :text="trend(shopsalesmonth, shopsalesprev).num"></span><span :text="trend(shopsalesmonth, shopsalesprev).label"></span></div>
+        </div>
       </div>
     </template>
     <script>
       this._switch = function(e, tab) {
+        const target = e.currentTarget
         this.emit('tabchange', tab)
-        e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+        // Defer the scroll past the re-render to avoid "Transition aborted"
+        // when the card element is recreated during the tab change.
+        requestAnimationFrame(() => {
+          try {
+            const ret = target?.scrollIntoView?.({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+            if (ret && typeof ret.catch === 'function') ret.catch(() => {})
+          } catch {}
+        })
       }
     </script>
   </finance-stat-tabs>

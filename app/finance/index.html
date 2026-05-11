@@ -5,13 +5,13 @@ preloads:
   - /lib/form.js
   - /lib/icons.js
 ---
-<div class="page-header" style="display:flex; align-items:baseline; justify-content:space-between">
+<div class="page-header">
   <h1>Finance</h1>
-  <a :if="can('income:view')" class="btn-link" style="color:var(--c-accent)" href="{{ '/app/finance/boutique/' | relative_url }}">Boutique sales →</a>
 </div>
 
 <finance-stat-tabs :active="activeTab" :net="net" :nettrend="netTrend"
   :expmonth="expMonth" :expprevmonth="expPrevMonth" :donorsmonth="donorsMonth" :donorsprevmonth="donorsPrevMonth"
+  :shopsalesmonth="shopSalesMonth" :shopsalesprev="shopSalesPrev"
   :ontabchange="e => switchTab(e.detail)">
 </finance-stat-tabs>
 
@@ -51,6 +51,130 @@ preloads:
   :onpay="e => expenseQuickPay(e.detail)"
   :onattach="e => attachExpense(e.detail)">
 </finance-transactions-tab>
+
+<!-- Boutique Counter Sales — its own tab, activated via the Shop Sales card -->
+<section :if="activeTab === 'shop-sales'" id="boutique-counter-sales">
+  <div :if="!boutiqueDays.length" class="dim" style="text-align:center;padding:var(--s-xl)" :text="boutiqueLoaded ? 'No counter sales yet' : 'Loading…'"></div>
+
+  <div :each="(day, di) in boutiqueDays" style="margin-bottom:var(--s-lg)">
+    <!-- Day header -->
+    <button type="button" class="exp-group-header"
+      :class="{'exp-group-header-open': boutiqueDayOpen[day.key]}"
+      :aria-expanded="boutiqueDayOpen[day.key] ? 'true' : 'false'"
+      :onclick="boutiqueDayOpen = { ...boutiqueDayOpen, [day.key]: !boutiqueDayOpen[day.key] }">
+      <span class="exp-group-chevron" :html="icon('chevron_down')"></span>
+      <span class="exp-group-heading">
+        <span class="exp-group-label" :text="fmtBoutiqueDay(day.key)"></span>
+        <span class="exp-group-count" :text="day.carts.length"></span>
+      </span>
+      <span :if="day.breakdown.length" class="exp-group-breakdown">
+        <span :each="seg in day.breakdown" class="exp-group-breakdown-seg" :style="seg.style" :title="seg.title"></span>
+      </span>
+      <span class="exp-group-total stat-ok" :text="'+$' + fmtAmt(day.collected)"></span>
+    </button>
+
+    <!-- Day body (collapsible) -->
+    <div class="recent-inc-list finance-exp-list" :class="{'finance-exp-list-open': boutiqueDayOpen[day.key]}" :aria-hidden="boutiqueDayOpen[day.key] ? 'false' : 'true'">
+
+      <!-- Per-day breakdown row (non-zero categories + overpayment) -->
+      <div class="boutique-day-cat-row">
+        <span :each="entry in day.byCategory" style="display:inline-flex;align-items:center;gap:var(--s-xs)">
+          <span class="badge" :class="boutiqueTagCls(entry.category)" :text="entry.category"></span>
+          <span class="dim" :text="'$' + fmtAmt(entry.amount)"></span>
+        </span>
+        <span :if="day.donation > 0" style="display:inline-flex;align-items:center;gap:var(--s-xs)">
+          <span class="badge cat-green">Overpayment</span>
+          <span class="stat-ok" :text="'+$' + fmtAmt(day.donation)"></span>
+        </span>
+      </div>
+
+      <!-- Cart cards -->
+      <div :each="(cart, ci) in day.carts" class="boutique-cart-card" :class="{'boutique-cart-card-divider': ci > 0}">
+        <!-- Cart header: time + payment -->
+        <div class="boutique-cart-header">
+          <span :html="methodIcon(boutiqueMethodSlug(cart.payment_method))" style="display:inline-flex;width:1.1em;height:1.1em;color:var(--c-text-dim)"></span>
+          <time class="dim" :text="fmtBoutiqueTime(cart.occurred_at)"></time>
+          <span :text="cart.payment_method"></span>
+          <span class="dim" :text="'· Cart #' + cart.id"></span>
+        </div>
+        <!-- Items list -->
+        <div class="boutique-cart-items">
+          <div :each="item in cart.items" class="boutique-item-row">
+            <span class="boutique-item-name" :text="item.qty > 1 ? item.qty + '× ' + item.name : item.name"></span>
+            <span class="boutique-item-tag"><span class="badge" :class="boutiqueTagCls(item.category)" :text="item.category"></span></span>
+            <span class="boutique-item-amt" :text="'$' + fmtAmt(item.price_cents * item.qty)"></span>
+          </div>
+        </div>
+        <!-- Per-cart summary -->
+        <div class="boutique-cart-summary">
+          <div><span class="dim">Items Total</span><span :text="'$' + fmtAmt(cart.itemsTotal)"></span></div>
+          <div :if="cart.templeDonation > 0"><span class="dim">Temple Donation</span><span class="stat-ok" :text="'+$' + fmtAmt(cart.templeDonation)"></span></div>
+          <div :if="cart.overpayment > 0"><span class="dim">Overpayment</span><span class="stat-ok" :text="'+$' + fmtAmt(cart.overpayment)"></span></div>
+          <div class="boutique-cart-collected"><span>Collected</span><span class="stat-ok" :text="'+$' + fmtAmt(cart.collected_cents)"></span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<style>
+  .boutique-day-cat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-md);
+    padding: var(--s-sm) var(--s-md);
+    font-size: var(--f-sm);
+  }
+  .boutique-cart-card-divider {
+    border-top: 1px solid var(--c-border);
+  }
+  .boutique-cart-header {
+    display: flex;
+    align-items: center;
+    gap: var(--s-sm);
+    padding: var(--s-sm) var(--s-md) var(--s-xs);
+    font-size: var(--f-sm);
+  }
+  .boutique-cart-items {
+    padding: 0 var(--s-md) var(--s-sm) calc(var(--s-md) + 1.5em);
+  }
+  .boutique-item-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 9rem minmax(5rem, auto);
+    gap: var(--s-sm);
+    align-items: center;
+    padding: 2px 0;
+    font-size: var(--f-sm);
+  }
+  .boutique-item-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .boutique-item-tag { justify-self: start; }
+  .boutique-item-amt {
+    text-align: right;
+    color: var(--c-text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .boutique-cart-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 var(--s-md) var(--s-sm) calc(var(--s-md) + 1.5em);
+    font-size: var(--f-sm);
+  }
+  .boutique-cart-summary > div {
+    display: flex;
+    justify-content: space-between;
+  }
+  .boutique-cart-collected {
+    font-weight: 600;
+  }
+</style>
+
 <script src="../../lib/define-element.js" defer></script>
 {% include components/finance-stat-tabs.html %}
 {% include components/finance-reports-tab.html %}
@@ -88,8 +212,9 @@ preloads:
   import { icon, actionIcon, statusIcon, methodIcon, activityIcon, trendIcon } from 'lib/icons.js'
   import { api, BASE } from 'lib/api.js'
 
-  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, EXP_METHODS, AMT_MAX, catCls, catHex, catBgHex, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, localMonthKey, changedAt, parseMemberNames, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName, normTab, normIncomeType, normIncomeMethod, normIncomeMethods, normExpenseCats, normAmt, bucketOf, labelOf, sourceOf, incomeTypeMatch, incomeMethodMatch, filterDonorRows, expenseMonthKey, incomeMonthKey, monthRange, monthOpenState, monthKeysWithData, monthItemMap, buildMonthGroups, buildNetMonthGroups, filterNetTransactions, filterNetTransactionsByType, groupMonthsByYear, sortExpenses, sortIncome, toNetTransactions, HIST_BINS, amtHist, trend, trendDiff } from 'lib/finance.js'
+  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, EXP_METHODS, AMT_MAX, catCls, catHex, catBgHex, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, localMonthKey, changedAt, parseMemberNames, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName, normTab, normIncomeType, normIncomeMethod, normIncomeMethods, normExpenseCats, normAmt, bucketOf, labelOf, displayLabel, sourceOf, incomeTypeMatch, incomeMethodMatch, filterDonorRows, expenseMonthKey, incomeMonthKey, monthRange, monthOpenState, monthKeysWithData, monthItemMap, buildMonthGroups, buildNetMonthGroups, filterNetTransactions, filterNetTransactionsByType, groupMonthsByYear, sortExpenses, sortIncome, toNetTransactions, HIST_BINS, amtHist, trend, trendDiff } from 'lib/finance.js'
   import { formDefaults, createPrintDonation } from 'lib/form.js'
+  import { tagCls as boutiqueTagCls, methodSlug as boutiqueMethodSlug, annotateCarts, buildDaysFromCarts, monthShopSales } from 'lib/boutique.js'
 
   // CE processor + registration (must be before init() so CEs are defined when sprae processes DOM)
   setupProcessor(sprae, {
@@ -98,7 +223,8 @@ preloads:
     apiBase: BASE, api,
     EXP_CATS, EXP_METHODS, DON_METHODS, INCOME_TYPES,
     EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName, filterDonorRows, trend, trendDiff,
-    AMT_MAX, catHex, catBgHex, normIncomeMethod, bucketOf, labelOf, sourceOf, incomeTypeMatch, incomeMethodMatch,
+    AMT_MAX, catHex, catBgHex, normIncomeMethod, bucketOf, labelOf, displayLabel, sourceOf, incomeTypeMatch, incomeMethodMatch,
+    boutiqueTagCls, boutiqueMethodSlug,
     localMonthKey, monthKeysWithData, buildNetMonthGroups, filterNetTransactions, filterNetTransactionsByType,
     groupMonthsByYear, toNetTransactions, amtHistFor: amtHist,
     approveIcon: actionIcon('approve'), payIcon: actionIcon('pay'), printIcon: actionIcon('print'), emailIcon: actionIcon('email'), receiptIcon: actionIcon('receipt'),
@@ -219,6 +345,22 @@ preloads:
     expTotal: 0, donTotal: 0,
     expMonth: 0, expPrevMonth: 0, incMonth: 0, incPrevMonth: 0,
     donorsMonth: 0, donorsPrevMonth: 0,
+    shopSalesMonth: 0, shopSalesPrev: 0,
+    boutiqueCarts: [], boutiqueDays: [], boutiqueDayOpen: {}, boutiqueLoaded: false,
+    // expose helpers on state so the boutique section's template can call them
+    fmtAmt, boutiqueTagCls, boutiqueMethodSlug,
+    fmtBoutiqueDay: (key) => {
+      const todayKey = new Date().toISOString().slice(0, 10).split('-').map(Number)
+      const today = new Date(todayKey[0], todayKey[1] - 1, todayKey[2])
+      const yest = new Date(today); yest.setDate(today.getDate() - 1)
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      const yestStr = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, '0')}-${String(yest.getDate()).padStart(2, '0')}`
+      if (key === todayStr) return 'Today'
+      if (key === yestStr) return 'Yesterday'
+      const [y, m, d] = key.split('-').map(Number)
+      return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
+    },
+    fmtBoutiqueTime: (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
     donorRows: [], donorTotal: 0,
     pageSize: perPage,
     expStatuses: Object.keys(EXP_STATUSES),
@@ -1223,6 +1365,24 @@ preloads:
     finally { s.taxReceiptsLoading = false }
   }
 
+  async function loadBoutique() {
+    try {
+      const raw = await api.getCounterSales()
+      const carts = annotateCarts(raw || [])
+      const days = buildDaysFromCarts(carts)
+      const dayOpen = days.length ? { [days[0].key]: true } : {}
+      s.boutiqueCarts = carts
+      s.boutiqueDays = days
+      s.boutiqueDayOpen = dayOpen
+      s.shopSalesMonth = monthShopSales(carts, currentMonthKey)
+      s.shopSalesPrev = monthShopSales(carts, prevMonthKey)
+      s.boutiqueLoaded = true
+    } catch (err) {
+      // Silent fail — boutique data is supplementary; rest of Finance still works.
+      s.boutiqueLoaded = true
+    }
+  }
+
   async function loadAll() {
     const hasVisibleExpenses = !!(s.expenses.length || Object.keys(s.expMonthItems || {}).some(key => (s.expMonthItems[key] || []).length))
     s.loading = !hasVisibleExpenses
@@ -1376,4 +1536,6 @@ preloads:
     if (s.activeTab === 'transactions' && !s.donRangeLoaded) loadIncomeRange()
     if (s.activeTab === 'reports') loadTaxReceipts()
   })
+
+  loadBoutique()
 </script>
