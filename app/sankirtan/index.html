@@ -1,0 +1,135 @@
+---
+preloads:
+  - /lib/processor.js
+  - /lib/icons.js
+---
+<div class="page-header">
+  <h1>Sankirtan</h1>
+</div>
+
+<sankirtan-tab-bar :active="activeTab" :ontabchange="e => switchTab(e.detail)">
+</sankirtan-tab-bar>
+
+<sankirtan-catalog-tab
+  :active="activeTab === 'catalog'"
+  :books="books"
+  :loading="loading"
+  :error="loadErr"
+  :canmanage="can('sankirtan:manage')"
+  :onreload="loadBooks">
+</sankirtan-catalog-tab>
+
+<sankirtan-sessions-tab
+  :active="activeTab === 'sessions'"
+  :sessions="sessions"
+  :loading="sessionsLoading"
+  :error="sessionsErr">
+</sankirtan-sessions-tab>
+
+<sankirtan-leaderboard-tab
+  :active="activeTab === 'leaderboard'"
+  :results="leaderboard"
+  :period="lbPeriod"
+  :loading="lbLoading"
+  :error="lbErr"
+  :onperiodchange="e => { lbPeriod = e.detail; loadLeaderboard() }">
+</sankirtan-leaderboard-tab>
+
+<script src="../../lib/define-element.js" defer></script>
+{% include components/sankirtan-tab-bar.html %}
+{% include components/sankirtan-catalog-tab.html %}
+{% include components/sankirtan-sessions-tab.html %}
+{% include components/sankirtan-leaderboard-tab.html %}
+
+<script type="module">
+  import sprae from 'sprae'
+  import { setupProcessor } from 'lib/processor.js'
+  import { init, fmtAmt, toast, auth } from 'lib/app.js'
+  import { icon } from 'lib/icons.js'
+  import { api } from 'lib/api.js'
+
+  setupProcessor(sprae, { fmtAmt, toast, icon, api })
+
+  if (!auth.can('sankirtan:view') && !auth.can('sankirtan:manage')) {
+    location.replace(new URL('../', location.href).href)
+    throw new Error('redirecting')
+  }
+
+  const VALID_TABS = ['catalog', 'sessions', 'leaderboard']
+  const urlTab = () => {
+    const t = new URLSearchParams(location.search).get('tab')
+    return VALID_TABS.includes(t) ? t : 'catalog'
+  }
+
+  const s = init({
+    activeTab: urlTab(),
+    loading: false,
+    loadErr: null,
+    books: [],
+    booksLoaded: false,
+    sessions: [],
+    sessionsLoaded: false,
+    sessionsLoading: false,
+    sessionsErr: null,
+    leaderboard: [],
+    lbLoaded: false,
+    lbPeriod: 'month',
+    lbLoading: false,
+    lbErr: null,
+
+    switchTab(tab) {
+      s.activeTab = tab
+      const url = new URL(location.href)
+      url.searchParams.set('tab', tab)
+      history.pushState(null, '', url)
+      if (tab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
+      if (tab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
+    },
+
+    async loadBooks() {
+      s.loading = true
+      s.loadErr = null
+      try {
+        const res = await api.getSankirtanBooks()
+        s.books = res.items || res || []
+        s.booksLoaded = true
+      } catch (e) {
+        s.loadErr = e.message || 'Failed to load books'
+      } finally {
+        s.loading = false
+      }
+    },
+
+    async loadSessions() {
+      s.sessionsLoading = true
+      s.sessionsErr = null
+      try {
+        const res = await api.getSankirtanSessions()
+        s.sessions = res.items || res || []
+        s.sessionsLoaded = true
+      } catch (e) {
+        s.sessionsErr = e.message || 'Failed to load sessions'
+      } finally {
+        s.sessionsLoading = false
+      }
+    },
+
+    async loadLeaderboard() {
+      s.lbLoading = true
+      s.lbErr = null
+      try {
+        const res = await api.getSankirtanLeaderboard(s.lbPeriod)
+        s.leaderboard = res.results || []
+        s.lbLoaded = true
+      } catch (e) {
+        s.lbErr = e.message || 'Failed to load leaderboard'
+      } finally {
+        s.lbLoading = false
+      }
+    },
+  })
+
+  window.addEventListener('popstate', () => { s.activeTab = urlTab() })
+
+  s.loadBooks()
+</script>
