@@ -39,6 +39,10 @@
           <span :html="icon('nav_members')"></span>
           Community
         </a>
+        <a :if="can('sankirtan:view') || can('sankirtan:manage')" class="nav-item" :class="{active: active('sankirtan')}" href="{{ '/app/sankirtan/' | relative_url }}">
+          <span :html="icon('nav_sankirtan')"></span>
+          Sankirtan
+        </a>
       </nav>
 
       <div class="topbar-user" style="position:relative">

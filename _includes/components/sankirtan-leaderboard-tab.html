@@ -1,0 +1,57 @@
+<define-element>
+  <sankirtan-leaderboard-tab active:boolean="false" results:array period:string="month" loading:boolean="false" error:string="">
+    <style>:host { display: contents; }</style>
+    <template>
+      <section :if="active">
+
+        <!-- Period selector -->
+        <div class="pill-tabs" style="margin-bottom:var(--s-lg)" role="tablist">
+          <button type="button" class="pill-tab" role="tab"
+            :class="{'pill-tab-active': period === 'month'}"
+            :onclick="emit('periodchange', 'month')">This Month</button>
+          <button type="button" class="pill-tab" role="tab"
+            :class="{'pill-tab-active': period === 'year'}"
+            :onclick="emit('periodchange', 'year')">This Year</button>
+          <button type="button" class="pill-tab" role="tab"
+            :class="{'pill-tab-active': period === 'all'}"
+            :onclick="emit('periodchange', 'all')">All Time</button>
+        </div>
+
+        <div :if="error" class="login-error" :text="error"></div>
+        <div :if="loading" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
+        <div :if="!loading && !results.length && !error" class="dim" style="padding:var(--s-lg); text-align:center">No data for this period.</div>
+
+        <div :if="!loading && results.length" class="card table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:3rem">#</th>
+                <th>Distributor</th>
+                <th style="text-align:right">Points</th>
+                <th style="text-align:right">Books</th>
+                <th style="text-align:right">Collected</th>
+                <th style="text-align:right">Sessions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :each="(row, i) in results">
+                <td class="dim" :text="i + 1"></td>
+                <td style="font-weight:var(--f-wt-b)" :text="row.distributor_name"></td>
+                <td style="text-align:right"
+                  :class="i === 0 ? 'stat-ok' : ''"
+                  :text="row.points"></td>
+                <td style="text-align:right" :text="row.books"></td>
+                <td style="text-align:right" :text="'$' + fmtAmt(row.collected_cents)"></td>
+                <td style="text-align:right" :text="row.session_count"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </section>
+    </template>
+    <script>
+      // fmtAmt injected via setupProcessor
+    </script>
+  </sankirtan-leaderboard-tab>
+</define-element>

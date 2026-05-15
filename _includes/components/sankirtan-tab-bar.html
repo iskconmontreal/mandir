@@ -1,0 +1,18 @@
+<define-element>
+  <sankirtan-tab-bar active:string="catalog">
+    <style>:host { display: contents; }</style>
+    <template>
+      <div class="pill-tabs" style="margin-bottom:var(--s-xl)" role="tablist">
+        <button type="button" class="pill-tab" role="tab"
+          :class="{'pill-tab-active': active === 'catalog'}"
+          :onclick="emit('tabchange', 'catalog')">Catalog</button>
+        <button type="button" class="pill-tab" role="tab"
+          :class="{'pill-tab-active': active === 'sessions'}"
+          :onclick="emit('tabchange', 'sessions')">Sessions</button>
+        <button type="button" class="pill-tab" role="tab"
+          :class="{'pill-tab-active': active === 'leaderboard'}"
+          :onclick="emit('tabchange', 'leaderboard')">Leaderboard</button>
+      </div>
+    </template>
+  </sankirtan-tab-bar>
+</define-element>

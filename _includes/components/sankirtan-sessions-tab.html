@@ -1,0 +1,134 @@
+<define-element>
+  <sankirtan-sessions-tab active:boolean="false" sessions:array loading:boolean="false" error:string="">
+    <style>:host { display: contents; }</style>
+    <template>
+      <section :if="active"
+        :scope="{filterFrom:'', filterTo:'', filterWho:'', expandedId:null}">
+
+        <div :if="error" class="login-error" :text="error"></div>
+
+        <!-- Filter bar -->
+        <div class="filter-bar" style="margin-bottom:var(--s-lg)">
+          <input type="date" title="From date"
+            style="width:auto"
+            :value="filterFrom"
+            :change="v => filterFrom = v">
+          <input type="date" title="To date"
+            style="width:auto"
+            :value="filterTo"
+            :change="v => filterTo = v">
+          <input type="text" placeholder="Distributor name…"
+            style="flex:1; min-width:10rem"
+            :value="filterWho"
+            :oninput="e => filterWho = e.target.value">
+          <button :if="filterFrom || filterTo || filterWho" type="button" class="btn btn-outline btn-sm"
+            :onclick="filterFrom = ''; filterTo = ''; filterWho = ''">Clear</button>
+        </div>
+
+        <div :if="loading && !sessions.length" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
+        <div :if="!loading && !groupedSessions().length && !error" class="dim" style="padding:var(--s-lg); text-align:center">No sessions found.</div>
+
+        <!-- Date-grouped session list -->
+        <div :each="group in groupedSessions()">
+          <div style="font-weight:var(--f-wt-b); color:var(--c-text-dim); font-size:var(--f-sm);
+                      padding:var(--s-xs) 0; margin-top:var(--s-lg);
+                      border-bottom:1px solid var(--c-border)"
+            :text="group.label"></div>
+
+          <div :each="sess in group.sessions" class="card"
+            style="margin-top:var(--s-sm); padding:var(--s-md); cursor:pointer"
+            :onclick="expandedId = (expandedId === sess.id ? null : sess.id)">
+
+            <!-- Session summary row -->
+            <div style="display:flex; align-items:center; gap:var(--s-md); flex-wrap:wrap">
+              <span :html="icon('chevron_right')"
+                style="flex-shrink:0; transition:transform .15s"
+                :style="{transform: expandedId === sess.id ? 'rotate(90deg)' : 'none'}"></span>
+              <span style="flex:1; font-weight:var(--f-wt-b); min-width:8rem"
+                :text="sess.distributor_name || 'Unknown'"></span>
+              <span class="dim" style="font-size:var(--f-sm)"
+                :text="fmtTime(sess.occurred_at)"></span>
+              <span class="badge"
+                :text="(sess.total_books || 0) + ' book' + (sess.total_books === 1 ? '' : 's')"></span>
+              <span class="badge cat-purple"
+                :text="(sess.total_points || 0) + ' pts'"></span>
+              <span class="stat-ok" style="font-size:var(--f-sm); font-weight:var(--f-wt-b)"
+                :text="'$' + fmtAmt(sess.collected_cents)"></span>
+              <span :if="sess.payment_method" class="badge"
+                :text="sess.payment_method"></span>
+            </div>
+
+            <!-- Expanded books list -->
+            <div :if="expandedId === sess.id"
+              style="margin-top:var(--s-md); padding-top:var(--s-sm); border-top:1px solid var(--c-border)"
+              :onclick.stop="">
+              <div :if="!sess.books?.length" class="dim" style="font-size:var(--f-sm)">No book details recorded.</div>
+              <table :if="sess.books?.length" style="font-size:var(--f-sm)">
+                <thead>
+                  <tr>
+                    <th>Book</th>
+                    <th>Category</th>
+                    <th>Qty</th>
+                    <th>Points</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr :each="sb in sess.books">
+                    <td :text="sb.title_snapshot"></td>
+                    <td><span class="badge" :class="catCls(sb.category_snapshot)" :text="sb.category_snapshot"></span></td>
+                    <td :text="sb.qty"></td>
+                    <td :text="sb.line_points"></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div :if="sess.note" class="dim"
+                style="font-size:var(--f-sm); margin-top:var(--s-sm)"
+                :text="sess.note"></div>
+              <div :if="sess.location" class="dim"
+                style="font-size:var(--f-sm)"
+                :text="'Location: ' + sess.location"></div>
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+    </template>
+    <script>
+      this.catCls = function(cat) {
+        return ({ S1:'cat-blue', S2:'cat-teal', S3:'cat-green', S4:'cat-purple',
+                  H1:'cat-blue', H2:'cat-teal', H3:'cat-green', H4:'cat-purple' })[cat] || 'cat-gray'
+      }
+      this.fmtTime = function(iso) {
+        if (!iso) return '—'
+        return new Date(iso).toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' })
+      }
+      this.filteredSessions = function() {
+        var self = this
+        return (self.sessions || []).filter(function(s) {
+          var dt = (s.occurred_at || '').slice(0, 10)
+          if (self.filterFrom && dt < self.filterFrom) return false
+          if (self.filterTo && dt > self.filterTo) return false
+          if (self.filterWho && !(s.distributor_name || '').toLowerCase().includes(self.filterWho.toLowerCase())) return false
+          return true
+        })
+      }
+      this.groupedSessions = function() {
+        var filtered = this.filteredSessions()
+        var map = {}, keys = []
+        filtered.forEach(function(s) {
+          var day = (s.occurred_at || '').slice(0, 10) || 'unknown'
+          if (!map[day]) { map[day] = []; keys.push(day) }
+          map[day].push(s)
+        })
+        keys.sort(function(a, b) { return b.localeCompare(a) })
+        return keys.map(function(k) {
+          var label = k === 'unknown' ? 'Undated' : new Date(k + 'T00:00:00').toLocaleDateString(undefined, {
+            weekday:'long', year:'numeric', month:'long', day:'numeric'
+          })
+          return { label: label, sessions: map[k] }
+        })
+      }
+    </script>
+  </sankirtan-sessions-tab>
+</define-element>

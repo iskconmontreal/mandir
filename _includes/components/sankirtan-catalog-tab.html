@@ -1,0 +1,348 @@
+<define-element>
+  <sankirtan-catalog-tab active:boolean="false" books:array loading:boolean="false" error:string="" canmanage:boolean="false">
+    <style>
+      :host { display: contents; }
+      .book-list { display: flex; flex-direction: column; gap: var(--s-md); }
+      .book-card { padding: var(--s-md) var(--s-lg); }
+      .book-card.is-inactive { opacity: 0.55; }
+      .book-title {
+        font-size: var(--f-lg);
+        font-weight: var(--f-wt-b);
+        margin: 0 0 var(--s-sm) 0;
+        line-height: 1.2;
+      }
+      .book-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--s-sm) var(--s-md);
+        font-size: var(--f-sm);
+      }
+      .book-meta .meta-label { color: var(--c-text-dim); margin-right: var(--s-xs); }
+      .book-meta .meta-value { font-weight: var(--f-wt-b); }
+      .book-stock {
+        margin-top: var(--s-sm);
+        padding-top: var(--s-sm);
+        border-top: 1px solid var(--c-border);
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--s-md);
+        font-size: var(--f-sm);
+        color: var(--c-text-dim);
+      }
+      .book-stock .stock-item .stock-value { color: var(--c-text); font-weight: var(--f-wt-b); }
+      .book-actions { margin-left: auto; display: flex; gap: var(--s-xs); align-items: center; }
+      .modal-close svg, .modal-close svg * { pointer-events: none; }
+      .badge.badge-low {
+        background: #ffe5d0;
+        color: #c2410c;
+      }
+    </style>
+    <template>
+      <section :if="active">
+
+        <div :if="error" class="login-error" :text="error"></div>
+
+        <!-- Filter bar -->
+        <div class="filter-bar" style="margin-bottom:var(--s-md)">
+          <div class="filter-search-wrap" style="flex:1">
+            <input class="filter-search" type="search" placeholder="Search title…"
+              :value="filterSearch" :oninput="e => filterSearch = e.target.value">
+          </div>
+          <select :value="filterCategory" :change="v => filterCategory = v" style="width:auto">
+            <option value="">All categories</option>
+            <option :each="c in CATEGORIES" :value="c" :text="c"></option>
+          </select>
+          <select :value="filterLanguage" :change="v => filterLanguage = v" style="width:auto">
+            <option value="">All languages</option>
+            <option :each="l in LANGUAGES" :value="l" :text="l"></option>
+          </select>
+          <select :value="filterCover" :change="v => filterCover = v" style="width:auto">
+            <option value="">All covers</option>
+            <option value="Soft">Soft</option>
+            <option value="Hard">Hard</option>
+          </select>
+          <button :if="filterSearch || filterCategory || filterLanguage || filterCover"
+            type="button" class="btn btn-outline"
+            :onclick="filterSearch=''; filterCategory=''; filterLanguage=''; filterCover=''">Clear</button>
+          <label style="display:flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); color:var(--c-text-dim); margin-left:auto">
+            Low stock when ≤
+            <input type="number" min="0" inputmode="numeric"
+              style="width:4.5rem"
+              :value="lowStockThreshold"
+              :oninput="e => setLowStockThreshold(parseInt(e.target.value) || 0)">
+          </label>
+          <div class="filter-bar-actions">
+            <button :if="canmanage" type="button" class="btn btn-primary"
+              :onclick="openAdd()">+ Add Book</button>
+          </div>
+        </div>
+
+        <div :if="loading && !books.length" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
+        <div :if="!loading && !books.length && !error" class="dim" style="padding:var(--s-lg); text-align:center">No books in catalog yet.</div>
+        <div :if="books.length && !filteredBooks().length" class="dim" style="padding:var(--s-lg); text-align:center">No books match the current filters.</div>
+
+        <div :if="filteredBooks().length" class="book-list">
+          <div :each="b in filteredBooks()" class="card book-card" :class="{'is-inactive': !b.active}">
+            <h3 class="book-title" :text="b.title"></h3>
+
+            <div class="book-meta">
+              <span class="badge" :class="catCls(b.category)" :text="b.category"></span>
+              <span class="badge" :class="coverCls(b.category)" :text="coverLabel(b.category)"></span>
+              <span :if="b.language" class="badge cat-gray" :text="b.language"></span>
+              <span><span class="meta-label">Points:</span><span class="meta-value" :text="b.points_per_unit"></span></span>
+              <span><span class="meta-label">Cost:</span><span class="meta-value" :text="b.cost_cents ? '$' + fmtAmt(b.cost_cents) : '—'"></span></span>
+              <span><span class="meta-label">Pages:</span><span class="meta-value" :text="b.pages || '—'"></span></span>
+              <span :if="b.active" class="badge badge-paid">Active</span>
+              <span :if="!b.active" class="badge">Inactive</span>
+
+              <span :if="canmanage" class="book-actions">
+                <button type="button" class="btn btn-outline btn-sm"
+                  :onclick="openEdit(b)">Edit</button>
+                <span :if="!b._confirm">
+                  <button type="button" class="btn btn-outline btn-sm"
+                    style="color:var(--c-err)"
+                    :onclick="b._confirm = true">Delete</button>
+                </span>
+                <span :if="b._confirm" style="display:inline-flex; align-items:center; gap:var(--s-xs)">
+                  <span class="dim" style="font-size:var(--f-sm)">Delete?</span>
+                  <button type="button" class="btn btn-danger btn-sm"
+                    :class="{'btn-loading': b._deleting}"
+                    :onclick="doDelete(b)">Yes</button>
+                  <button type="button" class="btn-link" style="font-size:var(--f-sm)"
+                    :onclick="b._confirm = false">No</button>
+                </span>
+              </span>
+            </div>
+
+            <div class="book-stock">
+              <span class="stock-item">Initial <span class="stock-value" :text="b.initial_stock || 0"></span></span>
+              <span class="stock-item">
+                Stock <span class="stock-value" :text="b.stock ?? 0"></span>
+                <span :if="isLowStock(b)" class="badge badge-low" style="margin-left:var(--s-xs)">Low</span>
+              </span>
+              <span class="stock-item">
+                Distributed <span class="stock-value" :class="distributedOf(b) > 0 ? 'stat-ok' : ''" :text="distributedOf(b)"></span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add / Edit modal -->
+        <div :if="showModal" class="modal-overlay"
+          :onclick="e => { if (e.target === e.currentTarget) closeModal() }"
+          :onkeydown.esc.document="closeModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <h2 :text="modalBook ? 'Edit Book' : 'Add Book'"></h2>
+              <button class="modal-close" type="button" aria-label="Close"
+                :onclick="closeModal" :html="icon('close')"></button>
+            </div>
+            <form class="modal-body" :onsubmit.prevent="saveBook()">
+              <div class="form-row">
+                <div class="field">
+                  <label for="bk-title">Title</label>
+                  <input id="bk-title" type="text" required
+                    placeholder="e.g. Bhagavad-gita As It Is"
+                    :value="form.title"
+                    :oninput="e => form.title = e.target.value">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="bk-lang">Language</label>
+                  <select id="bk-lang"
+                    :change="v => form.language = v">
+                    <option value="" :selected="!form.language">— Select —</option>
+                    <option :each="l in LANGUAGES" :value="l" :text="l" :selected="l === form.language"></option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="bk-cat">Category</label>
+                  <select id="bk-cat"
+                    :change="v => { form.category = v; form.points_per_unit = autoPoints(v) }">
+                    <option :each="c in CATEGORIES" :value="c" :text="c" :selected="c === form.category"></option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="bk-pts">Score</label>
+                  <input id="bk-pts" type="number" step="0.25" min="0"
+                    :value="form.points_per_unit || ''"
+                    :oninput="e => form.points_per_unit = parseFloat(e.target.value) || 0">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="bk-cost">Cost ($ CAD)</label>
+                  <input id="bk-cost" type="text" inputmode="decimal" placeholder="0.00"
+                    :value="form.cost_cents ? (form.cost_cents / 100).toFixed(2) : ''"
+                    :oninput="e => form.cost_cents = Math.round(parseFloat(e.target.value || 0) * 100)">
+                </div>
+                <div class="field">
+                  <label for="bk-pages">Pages</label>
+                  <input id="bk-pages" type="number" min="1" placeholder="e.g. 856"
+                    :value="form.pages || ''"
+                    :oninput="e => form.pages = parseInt(e.target.value) || null">
+                </div>
+              </div>
+              <div :if="!modalBook" class="form-row">
+                <div class="field">
+                  <label for="bk-stock">Initial stock</label>
+                  <input id="bk-stock" type="text" inputmode="numeric" placeholder="0"
+                    :value="form.stock || ''"
+                    :oninput="e => form.stock = parseInt(e.target.value) || 0">
+                </div>
+              </div>
+              <div :if="modalBook" class="form-row">
+                <div class="field">
+                  <label for="bk-init-stock">Initial stock <span class="dim" style="font-weight:normal">(baseline)</span></label>
+                  <input id="bk-init-stock" type="text" inputmode="numeric"
+                    :value="form.initial_stock ?? ''"
+                    :oninput="e => form.initial_stock = parseInt(e.target.value) || 0">
+                </div>
+                <div class="field">
+                  <label for="bk-cur-stock">Current stock</label>
+                  <input id="bk-cur-stock" type="text" inputmode="numeric"
+                    :value="form.stock ?? ''"
+                    :oninput="e => form.stock = parseInt(e.target.value) || 0">
+                </div>
+              </div>
+              <div :if="saveErr" class="login-error" :text="saveErr"></div>
+              <button type="submit" class="btn btn-primary"
+                :class="{'btn-loading': saving}"
+                :text="modalBook ? 'Save Changes' : 'Add Book'"></button>
+            </form>
+          </div>
+        </div>
+
+      </section>
+    </template>
+    <script>
+      this.CATEGORIES = ['S1','S2','S3','S4','H1','H2','H3','H4']
+      this.LANGUAGES = ['English','French','Arabic','Bengali','Hindi']
+      // Low-stock threshold — user-configurable, persisted per-browser in localStorage.
+      this.LOW_STOCK_KEY = 'mandir_sankirtan_low_stock_threshold'
+      this.lowStockThreshold = parseInt(localStorage.getItem(this.LOW_STOCK_KEY) || '5', 10)
+      if (isNaN(this.lowStockThreshold) || this.lowStockThreshold < 0) this.lowStockThreshold = 5
+      this.setLowStockThreshold = function(v) {
+        var n = Math.max(0, parseInt(v, 10) || 0)
+        this.lowStockThreshold = n
+        localStorage.setItem(this.LOW_STOCK_KEY, String(n))
+      }
+      this.isLowStock = function(b) { return (b.stock || 0) <= this.lowStockThreshold }
+      this.showModal = false
+      this.modalBook = null
+      this.form = { title:'', language:'', category:'S1', points_per_unit:0, cost_cents:0, pages:null, stock:0, initial_stock:0 }
+      this.distributedOf = function(b) {
+        return Math.max(0, (b.initial_stock || 0) - (b.stock || 0))
+      }
+      this.saving = false
+      this.saveErr = null
+      this.filterSearch = ''
+      this.filterCategory = ''
+      this.filterLanguage = ''
+      this.filterCover = ''
+      this.filteredBooks = function() {
+        var self = this
+        var q = (self.filterSearch || '').toLowerCase()
+        return (self.books || []).filter(function(b) {
+          if (q && !(b.title || '').toLowerCase().includes(q)) return false
+          if (self.filterCategory && b.category !== self.filterCategory) return false
+          if (self.filterLanguage && b.language !== self.filterLanguage) return false
+          if (self.filterCover) {
+            var cover = (b.category && b.category[0] === 'H') ? 'Hard' : 'Soft'
+            if (cover !== self.filterCover) return false
+          }
+          return true
+        })
+      }
+      this.catCls = function(cat) {
+        return ({ S1:'cat-blue', S2:'cat-teal', S3:'cat-green', S4:'cat-purple',
+                  H1:'cat-blue', H2:'cat-teal', H3:'cat-green', H4:'cat-purple' })[cat] || 'cat-gray'
+      }
+      this.coverLabel = function(cat) { return (cat && cat[0] === 'H') ? 'Hard' : 'Soft' }
+      this.coverCls = function(cat) { return (cat && cat[0] === 'H') ? 'cat-brown' : 'cat-amber' }
+      this.autoPoints = function(cat) {
+        return ({ S1:0.25, H1:0.25, S2:0.5, H2:0.5, S3:1.0, H3:1.0, S4:2.0, H4:2.0 })[cat] || 0.25
+      }
+      this.openAdd = function() {
+        this.form.title = ''
+        this.form.language = ''
+        this.form.category = 'S1'
+        this.form.points_per_unit = this.autoPoints('S1')
+        this.form.cost_cents = 0
+        this.form.pages = null
+        this.form.stock = 0
+        this.form.initial_stock = 0
+        this.modalBook = null
+        this.saveErr = null
+        this.showModal = true
+      }
+      this.openEdit = function(b) {
+        this.form.title = b.title || ''
+        this.form.language = b.language || ''
+        this.form.category = b.category || 'S1'
+        this.form.points_per_unit = b.points_per_unit || 0
+        this.form.cost_cents = b.cost_cents || 0
+        this.form.pages = b.pages || null
+        this.form.stock = b.stock ?? 0
+        this.form.initial_stock = b.initial_stock ?? 0
+        this.modalBook = b
+        this.saveErr = null
+        this.showModal = true
+      }
+      this.closeModal = function() { this.showModal = false }
+      this.saveBook = function() {
+        var self = this
+        self.saving = true
+        self.saveErr = null
+        var payload = {
+          title: self.form.title,
+          language: self.form.language || '',
+          category: self.form.category,
+          points_per_unit: self.form.points_per_unit,
+          cost_cents: self.form.cost_cents || 0,
+          pages: self.form.pages || null,
+        }
+        if (self.modalBook) {
+          payload.stock = self.form.stock || 0
+          payload.initial_stock = self.form.initial_stock || 0
+        } else {
+          payload.stock = self.form.stock || 0
+        }
+        var req = self.modalBook
+          ? self.api.updateSankirtanBook(self.modalBook.id, payload)
+          : self.api.createSankirtanBook(payload)
+        req
+          .then(function() {
+            self.saving = false
+            self.showModal = false
+            self.toast && self.toast(self.modalBook ? 'Book updated' : 'Book added', 'success')
+            self.emit('reload')
+          })
+          .catch(function(e) {
+            self.saving = false
+            self.saveErr = e.message || 'Failed to save'
+          })
+      }
+      this.doDelete = function(b) {
+        var self = this
+        b._deleting = true
+        self.api.deleteSankirtanBook(b.id)
+          .then(function() {
+            b._deleting = false
+            b._confirm = false
+            self.toast && self.toast('Book deleted', 'success')
+            self.emit('reload')
+          })
+          .catch(function(e) {
+            b._deleting = false
+            b._confirm = false
+            self.toast && self.toast(e.message || 'Failed to delete')
+          })
+      }
+    </script>
+  </sankirtan-catalog-tab>
+</define-element>
