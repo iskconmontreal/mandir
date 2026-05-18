@@ -1,5 +1,5 @@
 import { expect, request } from '@playwright/test'
-import { test, loginAsReal, API } from './e2e.fixtures.js'
+import { test, loginAsReal, uniqueJpeg, API } from './e2e.fixtures.js'
 
 test.describe('e2e: approve → pay flow', () => {
   // Helper: create expense with receipt attachment via API
@@ -7,16 +7,9 @@ test.describe('e2e: approve → pay flow', () => {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
     const multiHeaders = { Authorization: `Bearer ${token}` }
 
-    // Upload a unique receipt image (embed timestamp in EXIF comment to avoid content-hash dedup)
+    // Upload a content-unique receipt image
     const ts = Date.now()
-    const comment = Buffer.from(`e2e-${ts}`)
-    // Minimal valid JPEG with unique comment segment
-    const jpegBytes = Buffer.concat([
-      Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]),
-      Buffer.from([0xff, 0xfe, (comment.length + 2) >> 8, (comment.length + 2) & 0xff]),
-      comment,
-      Buffer.from([0xff, 0xd9]),
-    ])
+    const jpegBytes = uniqueJpeg('receipt')
     const upload = await page.request.post(`${API}/api/documents/upload`, {
       headers: multiHeaders,
       multipart: {
@@ -172,13 +165,7 @@ test.describe('e2e: attachment deletion rules', () => {
     const tHeaders = { Authorization: `Bearer ${tToken}` }
 
     const ts = Date.now()
-    const comment = Buffer.from(`del-test-${ts}`)
-    const jpegBytes = Buffer.concat([
-      Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]),
-      Buffer.from([0xff, 0xfe, (comment.length + 2) >> 8, (comment.length + 2) & 0xff]),
-      comment,
-      Buffer.from([0xff, 0xd9]),
-    ])
+    const jpegBytes = uniqueJpeg('del')
     const upload = await tPage.request.post(`${API}/api/documents/upload`, {
       headers: tHeaders,
       multipart: { file: { name: `del-${ts}.jpg`, mimeType: 'image/jpeg', buffer: jpegBytes }, intent: 'expense' },
@@ -219,13 +206,7 @@ test.describe('e2e: attachment deletion rules', () => {
     const tHeaders = { Authorization: `Bearer ${tToken}` }
 
     const ts = Date.now()
-    const comment = Buffer.from(`appr-del-${ts}`)
-    const jpegBytes = Buffer.concat([
-      Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]),
-      Buffer.from([0xff, 0xfe, (comment.length + 2) >> 8, (comment.length + 2) & 0xff]),
-      comment,
-      Buffer.from([0xff, 0xd9]),
-    ])
+    const jpegBytes = uniqueJpeg('appr')
     const upload = await tPage.request.post(`${API}/api/documents/upload`, {
       headers: tHeaders,
       multipart: { file: { name: `appr-${ts}.jpg`, mimeType: 'image/jpeg', buffer: jpegBytes }, intent: 'expense' },

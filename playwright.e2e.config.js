@@ -17,6 +17,10 @@ const ENV = [
   'JWT_SECRET=e2e-test-secret-minimum-32-characters-long',
   'ALLOWED_ORIGINS=http://localhost:4000',
   'PORT=8081',
+  // Disable OCR: real extraction runs a 16s Apple Vision/Ollama pass per
+  // receipt, which hangs the server under parallel upload load. Uploads
+  // still decode + WebP-convert; only the slow text extraction is skipped.
+  'OCR_STRATEGY=none',
 ].join(' ')
 
 const BUILD = `cd ${GOLOKA} && CGO_ENABLED=1 go build -tags devtools -o ${BIN} ./cmd/goloka`

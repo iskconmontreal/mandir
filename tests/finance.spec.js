@@ -17,14 +17,15 @@ test.describe('finance section', () => {
 
   test.afterEach(() => { expect(errors).toEqual([]) })
 
-  test('shows three tabs: Transactions, Reports, Donors', async ({ page }) => {
+  test('shows four tabs: Transactions, Reports, Donors, Shop Sales', async ({ page }) => {
     await mockFinance(page)
     await openFinance(page)
     const tabs = page.getByTestId('tab-group').locator('.card-tab')
-    await expect(tabs).toHaveCount(3)
+    await expect(tabs).toHaveCount(4)
     await expect(tabs.nth(0).locator('.stat-label')).toHaveText('Transactions')
     await expect(tabs.nth(1).locator('.stat-label')).toHaveText('Reports')
     await expect(tabs.nth(2).locator('.stat-label')).toHaveText('Donors')
+    await expect(tabs.nth(3).locator('.stat-label')).toHaveText('Shop Sales')
   })
 
 
@@ -689,9 +690,12 @@ test.describe('finance section', () => {
     await page.getByTestId('tab-group').waitFor()
     await expect(page.getByTestId('tx-expense').filter({ hasText: 'Current Expense' })).toBeVisible()
     await expect(page.getByTestId('tx-expense').filter({ hasText: 'Previous Expense' })).toBeVisible()
-    expect(expenseRequests.filter(req => req.dateFrom === currentMonthStart)).toHaveLength(1)
-    expect(expenseRequests.filter(req => req.dateFrom === previousMonthStart)).toHaveLength(1)
+    // The transactions tab loads every month in one ranged request — it must NOT
+    // also pre-fetch current/previous individually (that double-fetch just
+    // refetched the same rows the range load already covers).
     expect(expenseRequests.map(req => req.dateFrom)).toContain(rangeStart)
+    expect(expenseRequests.filter(req => req.dateFrom === currentMonthStart)).toHaveLength(0)
+    expect(expenseRequests.filter(req => req.dateFrom === previousMonthStart)).toHaveLength(0)
     const olderHeader = page.getByTestId('tx-month-header').filter({ hasText: olderExpenseLabel }).first()
     await expect(olderHeader).toHaveAttribute('aria-expanded', 'false')
     await olderHeader.click()

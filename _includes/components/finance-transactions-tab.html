@@ -33,7 +33,7 @@
         <transaction-list
           :years="yearGroups()" :mopen="monthopen" :mfresh="monthfresh" :search="search" :loading="loading" :error="error"
           :quickloading="quickloading" :myapprovals="myapprovals" :filtertype="filtertype"
-          :empty="!loading && !filteredCount()" :canapprove="canapprove" :memberemails="memberemails" :emailsending="emailsending"
+          :empty="!loading && !filteredCount()" :filtered="hasActiveFilters()" :canapprove="canapprove" :memberemails="memberemails" :emailsending="emailsending"
           :canissuereceipt="canissuereceipt" :receiptissuing="receiptissuing"
           :onviewexp.delay-0="e => emit('viewexp', e.detail)"
           :onviewinc.delay-0="e => emit('viewinc', e.detail)"
@@ -150,6 +150,11 @@
       this.filteredCount = function() {
         return this.filteredByType().length
       }
+      this.hasActiveFilters = function() {
+        return !!(this.search || this.filtertype || this.datefrom || this.dateto
+          || this.amtmin || this.amtmax || this.expfilterstatus || this.incfiltertype
+          || (this.expfiltercats || []).length || (this.incfiltermethods || []).length)
+      }
       this.monthKeys = function() {
         return this.fn('monthKeysWithData')?.(this.basekeys || [], this.filteredByType(), tx => this.fn('localMonthKey')?.(tx._date), new Date().toISOString().slice(0, 7)) || []
       }
@@ -220,8 +225,13 @@
             changed = true
           }
         }
+        // Keep at least one month *with data* open. Testing next.some(Boolean)
+        // alone is wrong: a stale-open empty month (e.g. the current month after
+        // a search that only matches an older month) satisfies it while the one
+        // group that has results stays collapsed and invisible.
         var first = groups.find(g => g.count > 0)?.key
-        if (first && !Object.values(next).some(Boolean)) {
+        var dataMonthOpen = groups.some(g => g.count > 0 && next[g.key])
+        if (first && !dataMonthOpen) {
           next[first] = true
           changed = true
         }

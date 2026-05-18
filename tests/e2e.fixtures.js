@@ -6,6 +6,25 @@ import { test as base, request } from '@playwright/test'
 export const API = 'http://localhost:8081'
 const DEVICE = 'dev-device'
 
+// A valid 8×8 baseline JPEG. goloka's upload pipeline decodes images and
+// re-encodes them to WebP, so receipt uploads must be genuinely decodable.
+const BASE_JPEG = Buffer.from(
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRof' +
+  'Hh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwh' +
+  'MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAAR' +
+  'CAAIAAgDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAA' +
+  'AAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAABv/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAM' +
+  'AwEAAhEDEQA/AJwAOdv/2Q==',
+  'base64',
+)
+
+// Returns a valid, content-unique JPEG buffer for receipt-upload tests.
+// Bytes appended after the EOI marker are ignored by image decoders but
+// change the SHA-256, so each call dodges goloka's content-hash dedup.
+export function uniqueJpeg(tag = '') {
+  return Buffer.concat([BASE_JPEG, Buffer.from(`\ne2e-${tag}-${Date.now()}-${Math.random()}`)])
+}
+
 const CREDS = {
   admin:     { email: 'admin@test.local',     password: 'test123' },
   treasurer: { email: 'treasurer@test.local', password: 'test123' },

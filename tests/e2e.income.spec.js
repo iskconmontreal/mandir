@@ -60,10 +60,10 @@ test.describe('e2e: income', () => {
     if (created) await page.request.delete(`${API}/api/income/${created.id}`, { headers: authHeaders })
   })
 
-  test('income filter clear all restores rows after empty result', async ({ page }) => {
+  test('income filter removal restores rows after empty result', async ({ page }) => {
     const create = await page.request.post(`${API}/api/income`, {
       headers: { ...authHeaders, 'Content-Type': 'application/json' },
-      data: { amount: 4321, type: 'donation', method: 'cash', category: 'general', date_received: '2026-03-07', note: 'e2e clear all regression' },
+      data: { amount: 4321, type: 'donation', method: 'cash', category: 'general', date_received: '2026-03-07', note: 'e2e filter clear regression' },
     })
     expect(create.ok()).toBeTruthy()
 
@@ -76,19 +76,19 @@ test.describe('e2e: income', () => {
     expect(before).toBeGreaterThan(0)
 
     await section.locator('.btn-filter').click()
-    await section.locator('.filter-dropdown select').first().selectOption('sale')
-    await page.waitForTimeout(150)
-
-    if (await section.getByTestId('tx-income').count()) {
-      const nextYear = String(new Date().getFullYear() + 1)
-      await section.locator('.filter-dropdown input[type="date"]').first().fill(`${nextYear}-01-01`)
-    }
+    await expect(section.locator('.filter-dropdown')).toBeVisible()
+    // Filter to a future date range — guarantees an empty result set
+    const nextYear = String(new Date().getFullYear() + 1)
+    await section.locator('.filter-dropdown input[type="date"]').first().fill(`${nextYear}-01-01`)
 
     await expect(section.getByTestId('tx-income')).toHaveCount(0)
-    await expect(section).toContainText('No income matches filters')
+    await expect(section).toContainText('No transactions match your filters')
 
-    await expect(section.locator('.filter-dropdown')).toBeVisible()
-    await section.locator('.filter-dropdown .btn-link', { hasText: 'Clear all' }).click()
+    // Close the filter panel, then drop just the date filter via its chip —
+    // staying in income mode, the income rows must reappear.
+    await section.locator('.btn-filter').click()
+    await expect(section.locator('.filter-dropdown')).not.toBeVisible()
+    await section.locator('[data-testid="filter-chips"] .filter-inline-chip').filter({ hasText: /^From / }).click()
 
     await expect(page).toHaveURL(/\?tab=transactions&net_type=income#transactions$/)
     await expect(section.getByTestId('tx-income').first()).toBeVisible({ timeout: 15_000 })

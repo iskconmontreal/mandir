@@ -188,19 +188,19 @@ preloads:
 <expense-form :show="showExpForm" :detail="expFormDetail" :mode="expFormMode"
   :canapprove="can('expenses:approve')" :isadmin="hasRole('admin') || hasRole('administrator')"
   :membernames="memberNames" :usernames="userNames" :myuserid="MY_USER_ID"
-  :onsave="e => { showExpForm = false; freshId = e.detail?.id || null; if (freshId) setTimeout(() => freshId = null, 5000); loadAll() }"
+  :onsave="() => { showExpForm = false; loadAll() }"
   :oncancel="() => { showExpForm = false }">
 </expense-form>
 
 <donation-form :show="showDonCreateForm"
   :isfinance="true" :cancreate="can('members:create')" :membernames="memberNames" :memberemails="memberEmails" :usernames="userNames" :myuserid="MY_USER_ID"
-  :onsave="e => { closeDonCreate(); freshId = e.detail?.id || null; if (freshId) setTimeout(() => freshId = null, 5000); loadAll() }"
+  :onsave="() => { closeDonCreate(); loadAll() }"
   :oncancel="() => { closeDonCreate() }">
 </donation-form>
 
 <donation-form :show="showDonDetailForm" :detail="donFormDetail"
   :isfinance="true" :cancreate="can('members:create')" :membernames="memberNames" :memberemails="memberEmails" :usernames="userNames" :myuserid="MY_USER_ID"
-  :onsave="e => { closeDonDetail(); freshId = e.detail?.id || null; if (freshId) setTimeout(() => freshId = null, 5000); loadAll() }"
+  :onsave="() => { closeDonDetail(); loadAll() }"
   :oncancel="() => { closeDonDetail() }"
   :onprint="e => printDonation(e.detail)">
 </donation-form>
@@ -258,6 +258,15 @@ preloads:
   const monthLabel = now.toLocaleString('default', { month: 'short' })
   const perPage = 20
   const normYear = value => years.includes(+value) ? +value : curYear
+  // Net-tab type filter: explicit ?net_type wins, else inferred from the legacy tab/hash.
+  const netTypeFromUrl = url => {
+    const tab = url.searchParams.get('tab'), hash = url.hash
+    const inferred =
+      tab === 'expenses' || hash === '#expenses' ? 'expense' :
+      tab === 'donations' || tab === 'income' || hash === '#donations' || hash === '#income' ? 'income' : ''
+    const raw = url.searchParams.get('net_type') || inferred
+    return ['expense', 'income'].includes(raw) ? raw : ''
+  }
   const urlState = () => {
     const url = new URL(location.href)
     return {
@@ -269,7 +278,7 @@ preloads:
       donFilterMethods: normIncomeMethods(url.searchParams.get('inc_method') || ''),
       donorSearch: url.searchParams.get('donor_q') || '',
       netSearch: url.searchParams.get('net_q') || url.searchParams.get('exp_q') || url.searchParams.get('inc_q') || '',
-      netFilterType: ['expense', 'income'].includes(url.searchParams.get('net_type') || (url.searchParams.get('tab') === 'expenses' || url.hash === '#expenses' ? 'expense' : url.searchParams.get('tab') === 'donations' || url.searchParams.get('tab') === 'income' || url.hash === '#donations' || url.hash === '#income' ? 'income' : '')) ? (url.searchParams.get('net_type') || (url.searchParams.get('tab') === 'expenses' || url.hash === '#expenses' ? 'expense' : url.searchParams.get('tab') === 'donations' || url.searchParams.get('tab') === 'income' || url.hash === '#donations' || url.hash === '#income' ? 'income' : '')) : '',
+      netFilterType: netTypeFromUrl(url),
       netAmtMin: normAmt(url.searchParams.get('net_amt_min') || url.searchParams.get('exp_amt_min') || url.searchParams.get('inc_amt_min')),
       netAmtMax: normAmt(url.searchParams.get('net_amt_max') || url.searchParams.get('exp_amt_max') || url.searchParams.get('inc_amt_max')),
       netDateFrom: url.searchParams.get('net_from') || url.searchParams.get('exp_from') || url.searchParams.get('inc_from') || '',
@@ -313,15 +322,6 @@ preloads:
       prev: `${prevYear}-${String(prevMonth).padStart(2, '0')}`,
     }
   }
-  function observe(el, cb) {
-    if (!el) return
-    let visible = false
-    const io = new IntersectionObserver(entries => { visible = entries[0].isIntersecting; if (visible) cb() }, { rootMargin: '200px' })
-    io.observe(el)
-    const timer = setInterval(() => { if (visible) cb() }, 800)
-    return () => { io.disconnect(); clearInterval(timer) }
-  }
-
   function dlCSV(rows, name) {
     const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -388,8 +388,6 @@ preloads:
     taxReceipts: [],
     taxReceiptsLoading: false,
     actionAmt: '',
-    freshId: null,
-    isFresh(id) { return id && id === this.freshId },
 
     incomeBucket: bucketOf,
     incomeLabel: labelOf,
@@ -903,26 +901,8 @@ preloads:
       return buildNetMonthGroups(this.reportMonthKeys, this.netTransactions)
     },
 
-    patchState(patch) {
-      Object.assign(this, patch)
-      if (Object.keys(patch).some(k => k === 'expSearch' || k === 'expFilterCats' || k === 'expFilterStatus' || k === 'expAmtMin' || k === 'expAmtMax' || k === 'expDateFrom' || k === 'expDateTo')) refreshExpMonthOpen()
-      if (Object.keys(patch).some(k => k === 'donSearch' || k === 'donFilterType' || k === 'donFilterMethods' || k === 'donAmtMin' || k === 'donAmtMax' || k === 'donDateFrom' || k === 'donDateTo')) refreshDonMonthOpen()
-      if ('expSearch' in patch) scheduleExpSearch(patch.expSearch)
-      writeUrl(this)
-    },
-    setYear(year) {
-      const next = normYear(year)
-      if (next === this.year) return
-      this.year = next
-      writeUrl(this)
-      loadAll()
-    },
-    clearExpenseFilters() {
-      this.patchState({ expFilterCats: [], expFilterStatus: '', expAmtMin: '', expAmtMax: '', expDateFrom: '', expDateTo: '', expPage: 1 })
-    },
-    clearIncomeFilters() {
-      this.patchState({ donFilterType: '', donFilterMethods: [], donAmtMin: '', donAmtMax: '', donDateFrom: '', donDateTo: '', donPage: 1 })
-    },
+    // patchState / setYear / clearExpenseFilters / clearIncomeFilters are bound below,
+    // after init() returns, so they can close over `s` and the hoisted loader functions.
     switchTab(tab) {
       if (s.showAdd) s.cancelAdd()
       s.activeTab = tab
@@ -1205,13 +1185,12 @@ preloads:
     return map
   }
 
-  async function fetchExpenseMonthItems(key) {
+  // Fetch every page of a month-ranged listing (expenses or income) into one array.
+  async function fetchMonthItems(fetchPage, key) {
     const params = monthRange(key)
-    let page = 1
-    let items = []
-    let total = 0
+    let page = 1, items = [], total = 0
     while (true) {
-      const res = await api.getExpenses({ ...params, limit: BATCH, page })
+      const res = await fetchPage({ ...params, limit: BATCH, page })
       const chunk = res.items || []
       total = res.total ?? (items.length + chunk.length)
       items = items.concat(chunk)
@@ -1220,6 +1199,7 @@ preloads:
     }
     return items
   }
+  function fetchExpenseMonthItems(key) { return fetchMonthItems(api.getExpenses, key) }
 
   async function loadExpenseMonth(key) {
     if (s.expMonthLoaded[key] || s.expMonthLoading[key]) return
@@ -1287,19 +1267,7 @@ preloads:
 
   const donMonthPrimeReq = {}
 
-  async function fetchIncomeMonthItems(key) {
-    const params = monthRange(key)
-    let page = 1, items = [], total = 0
-    while (true) {
-      const res = await api.getIncome({ ...params, limit: BATCH, page })
-      const chunk = res.items || []
-      total = res.total ?? (items.length + chunk.length)
-      items = items.concat(chunk)
-      if (!chunk.length || items.length >= total) break
-      page++
-    }
-    return items
-  }
+  function fetchIncomeMonthItems(key) { return fetchMonthItems(api.getIncome, key) }
 
   async function loadIncomeMonth(key) {
     if (s.donMonthLoaded[key] || s.donMonthLoading[key]) return
@@ -1384,6 +1352,10 @@ preloads:
   }
 
   async function loadAll() {
+    // On the transactions tab the month list is driven by loadExpenseRange /
+    // loadIncomeRange, which fetch every month. Pre-fetching current/prev here
+    // would just fetch them a second time and discard the result.
+    const onTxTab = s.activeTab === 'transactions'
     const hasVisibleExpenses = !!(s.expenses.length || Object.keys(s.expMonthItems || {}).some(key => (s.expMonthItems[key] || []).length))
     s.loading = !hasVisibleExpenses
     s.expRefreshing = hasVisibleExpenses
@@ -1405,13 +1377,13 @@ preloads:
       // current/prev month might have no data (e.g. new year) — find the first month with data.
       const expMetaKeys = s.expMonthKeys.filter(k => { const m = nextExpMeta[k]; return m && (m.count > 0 || m.total > 0) })
       const firstExpKey = expMetaKeys[0]
-      const visibleExpKeys = [...new Set([
+      const visibleExpKeys = onTxTab ? [] : [...new Set([
         ...openExpKeys.filter(key => s.expMonthKeys.includes(key) && nextExpMeta[key]?.count > 0),
         ...(firstExpKey && !openExpKeys.includes(firstExpKey) ? [firstExpKey] : []),
       ])]
       const donMetaKeys = defaultMonthKeys.filter(k => { const m = nextIncMeta[k]; return m && (m.count > 0 || m.total > 0) })
       const firstDonKey = donMetaKeys[0]
-      const visibleDonKeys = [...new Set([
+      const visibleDonKeys = onTxTab ? [] : [...new Set([
         ...openDonKeys.filter(k => nextIncMeta[k]?.count > 0),
         ...(firstDonKey && !openDonKeys.includes(firstDonKey) ? [firstDonKey] : []),
       ])]
@@ -1419,8 +1391,11 @@ preloads:
         Promise.all(visibleExpKeys.map(async key => [key, await fetchExpenseMonthItems(key)])),
         Promise.all(visibleDonKeys.map(async key => [key, await fetchIncomeMonthItems(key)])),
       ])
-      const nextExpMonthItems = Object.fromEntries(expEntries)
-      const nextDonMonthItems = Object.fromEntries(donEntries)
+      // On the transactions tab keep whatever month items are already loaded so
+      // the list never blanks mid-refresh — loadExpenseRange/loadIncomeRange below
+      // replace them with the full range.
+      const nextExpMonthItems = onTxTab ? s.expMonthItems : Object.fromEntries(expEntries)
+      const nextDonMonthItems = onTxTab ? s.donMonthItems : Object.fromEntries(donEntries)
       batch(() => {
         s.expMonthMeta = nextExpMeta
         s.expMonthItems = nextExpMonthItems
@@ -1455,6 +1430,9 @@ preloads:
         refreshDonMonthOpen()
         refreshIncomeStats()
       })
+      // Transactions tab: load the full month range inside loadAll's loading
+      // window so the list shows "Loading…" — never an empty flash — until done.
+      if (onTxTab) await Promise.all([loadExpenseRange(), loadIncomeRange()])
     } catch (e) {
       s.loadErr = e.message || 'Failed to load finance data'
     } finally {
@@ -1532,8 +1510,6 @@ preloads:
   window.addEventListener('popstate', applyUrlStateFromLocation)
 
   loadAll().then(() => {
-    if (s.activeTab === 'transactions' && !s.expRangeLoaded) loadExpenseRange()
-    if (s.activeTab === 'transactions' && !s.donRangeLoaded) loadIncomeRange()
     if (s.activeTab === 'reports') loadTaxReceipts()
   })
 

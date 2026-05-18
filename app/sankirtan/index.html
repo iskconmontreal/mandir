@@ -129,7 +129,11 @@ preloads:
     },
   })
 
-  window.addEventListener('popstate', () => { s.activeTab = urlTab() })
+  window.addEventListener('popstate', () => {
+    s.activeTab = urlTab()
+    if (s.activeTab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
+    if (s.activeTab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
+  })
 
   s.loadBooks()
 </script>

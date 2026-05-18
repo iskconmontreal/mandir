@@ -1,10 +1,10 @@
 <define-element>
-  <transaction-list years:array mopen:object mfresh:string="" loading:boolean="false" error:string="" search:string="" empty:boolean="false" canapprove:boolean="false" quickloading:object myapprovals:object memberemails:object emailsending:object filtertype:string="" canissuereceipt:boolean="false" receiptissuing:object>
+  <transaction-list years:array mopen:object mfresh:string="" loading:boolean="false" error:string="" search:string="" empty:boolean="false" filtered:boolean="false" canapprove:boolean="false" quickloading:object myapprovals:object memberemails:object emailsending:object filtertype:string="" canissuereceipt:boolean="false" receiptissuing:object>
     <style>:host { display: contents; } :host([filtertype="expense"]) .recent-inc-item { display: none !important; } :host([filtertype="income"]) .recent-exp-item { display: none !important; }</style>
     <template>
       <div :if="error" class="login-error" :text="error" style="margin:var(--s-md)"></div>
       <div :if="loading" class="dim" style="text-align:center;padding:var(--s-lg)">Loading…</div>
-      <div :if="empty" class="dim" style="text-align:center;padding:var(--s-xl)">No transactions yet</div>
+      <div :if="empty" class="dim" style="text-align:center;padding:var(--s-xl)" :text="filtered ? 'No transactions match your filters' : 'No transactions yet'"></div>
       <div :each="yr in years" class="finance-year-section" :class="{'hidden': filtertype && !(yr?.items || []).some(g => filtertype === 'expense' ? g.expCount : g.incCount)}">
         <div class="finance-year-sticky" data-testid="year-label" :if="yr && yr.key !== 'unknown'" :text="yr?.key || ''"></div>
         <div class="finance-year-months">
