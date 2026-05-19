@@ -23,7 +23,7 @@
           <button type="button" class="btn btn-sm btn-icon btn-outline" :if="d.member_id && memberemails?.[d.member_id] && !emailsending?.[d.id]" :title="'Email receipt to ' + memberemails[d.member_id]" :onclick.stop="e => emit('email', d)" :html="emailIcon"></button>
         </span>
         <div class="recent-inc-type">
-          <span class="badge" :class="catCls(kind(d))" :text="fmtCat(kind(d))"></span>
+          <span class="badge" :class="displayCls(d)" :text="displayLabel(d)"></span>
         </div>
         <div class="recent-inc-amount">
           <div class="recent-inc-value stat-ok" :text="'+$' + fmtAmt(d.amount || 0)"></div>

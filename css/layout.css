@@ -1976,6 +1976,7 @@ form {
 .cat-brown  { background: var(--c-cat-brown-bg); color: var(--c-cat-brown); }
 .cat-indigo { background: var(--c-cat-indigo-bg); color: var(--c-cat-indigo); }
 .cat-gray   { background: var(--c-cat-gray-bg); color: color-mix(in srgb, var(--c-cat-gray) 56%, var(--c-text)); }
+.cat-saffron { background: var(--c-cat-saffron-bg); color: var(--c-cat-saffron); }
 .exp-card-meta {
   font-size: var(--f-xs);
   color: var(--c-text-dim);

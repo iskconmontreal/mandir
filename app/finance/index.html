@@ -212,7 +212,7 @@ preloads:
   import { icon, actionIcon, statusIcon, methodIcon, activityIcon, trendIcon } from 'lib/icons.js'
   import { api, BASE } from 'lib/api.js'
 
-  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, EXP_METHODS, AMT_MAX, catCls, catHex, catBgHex, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, localMonthKey, changedAt, parseMemberNames, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName, normTab, normIncomeType, normIncomeMethod, normIncomeMethods, normExpenseCats, normAmt, bucketOf, labelOf, displayLabel, sourceOf, incomeTypeMatch, incomeMethodMatch, filterDonorRows, expenseMonthKey, incomeMonthKey, monthRange, monthOpenState, monthKeysWithData, monthItemMap, buildMonthGroups, buildNetMonthGroups, filterNetTransactions, filterNetTransactionsByType, groupMonthsByYear, sortExpenses, sortIncome, toNetTransactions, HIST_BINS, amtHist, trend, trendDiff } from 'lib/finance.js'
+  import { EXP_STATUSES, STATUS_ORDER, DON_METHODS, INCOME_TYPES, EXP_CATS, EXP_METHODS, AMT_MAX, catCls, catHex, catBgHex, fmtStatus, fmtDate, fmtMonthShort, fmtMonth, localMonthKey, changedAt, parseMemberNames, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName, normTab, normIncomeType, normIncomeMethod, normIncomeMethods, normExpenseCats, normAmt, bucketOf, labelOf, displayLabel, displayCls, sourceOf, incomeTypeMatch, incomeMethodMatch, filterDonorRows, expenseMonthKey, incomeMonthKey, monthRange, monthOpenState, monthKeysWithData, monthItemMap, buildMonthGroups, buildNetMonthGroups, filterNetTransactions, filterNetTransactionsByType, groupMonthsByYear, sortExpenses, sortIncome, toNetTransactions, HIST_BINS, amtHist, trend, trendDiff } from 'lib/finance.js'
   import { formDefaults, createPrintDonation } from 'lib/form.js'
   import { tagCls as boutiqueTagCls, methodSlug as boutiqueMethodSlug, annotateCarts, buildDaysFromCarts, monthShopSales } from 'lib/boutique.js'
 
@@ -223,7 +223,7 @@ preloads:
     apiBase: BASE, api,
     EXP_CATS, EXP_METHODS, DON_METHODS, INCOME_TYPES,
     EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName, filterDonorRows, trend, trendDiff,
-    AMT_MAX, catHex, catBgHex, normIncomeMethod, bucketOf, labelOf, displayLabel, sourceOf, incomeTypeMatch, incomeMethodMatch,
+    AMT_MAX, catHex, catBgHex, normIncomeMethod, bucketOf, labelOf, displayLabel, displayCls, sourceOf, incomeTypeMatch, incomeMethodMatch,
     boutiqueTagCls, boutiqueMethodSlug,
     localMonthKey, monthKeysWithData, buildNetMonthGroups, filterNetTransactions, filterNetTransactionsByType,
     groupMonthsByYear, toNetTransactions, amtHistFor: amtHist,

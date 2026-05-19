@@ -2,8 +2,7 @@
   <sankirtan-sessions-tab active:boolean="false" sessions:array loading:boolean="false" error:string="">
     <style>:host { display: contents; }</style>
     <template>
-      <section :if="active"
-        :scope="{filterFrom:'', filterTo:'', filterWho:'', expandedId:null}">
+      <section :if="active">
 
         <div :if="error" class="login-error" :text="error"></div>
 
@@ -21,8 +20,12 @@
             style="flex:1; min-width:10rem"
             :value="filterWho"
             :oninput="e => filterWho = e.target.value">
-          <button :if="filterFrom || filterTo || filterWho" type="button" class="btn btn-outline btn-sm"
-            :onclick="filterFrom = ''; filterTo = ''; filterWho = ''">Clear</button>
+          <input type="text" placeholder="Location…"
+            style="flex:1; min-width:10rem"
+            :value="filterLocation"
+            :oninput="e => filterLocation = e.target.value">
+          <button :if="filterFrom || filterTo || filterWho || filterLocation" type="button" class="btn btn-outline btn-sm"
+            :onclick="filterFrom = ''; filterTo = ''; filterWho = ''; filterLocation = ''">Clear</button>
         </div>
 
         <div :if="loading && !sessions.length" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
@@ -37,15 +40,17 @@
 
           <div :each="sess in group.sessions" class="card"
             style="margin-top:var(--s-sm); padding:var(--s-md); cursor:pointer"
-            :onclick="expandedId = (expandedId === sess.id ? null : sess.id)">
+            :onclick="toggleSession(sess)">
 
             <!-- Session summary row -->
             <div style="display:flex; align-items:center; gap:var(--s-md); flex-wrap:wrap">
               <span :html="icon('chevron_right')"
                 style="flex-shrink:0; transition:transform .15s"
-                :style="{transform: expandedId === sess.id ? 'rotate(90deg)' : 'none'}"></span>
-              <span style="flex:1; font-weight:var(--f-wt-b); min-width:8rem"
-                :text="sess.distributor_name || 'Unknown'"></span>
+                :style="{transform: sess._open ? 'rotate(90deg)' : 'none'}"></span>
+              <div style="flex:1; min-width:8rem; display:flex; flex-direction:column">
+                <span style="font-weight:var(--f-wt-b)" :text="sess.distributor_name || 'Unknown'"></span>
+                <span :if="sess.location" class="dim" style="font-size:var(--f-sm)" :text="sess.location"></span>
+              </div>
               <span class="dim" style="font-size:var(--f-sm)"
                 :text="fmtTime(sess.occurred_at)"></span>
               <span class="badge"
@@ -59,10 +64,11 @@
             </div>
 
             <!-- Expanded books list -->
-            <div :if="expandedId === sess.id"
+            <div :if="sess._open"
               style="margin-top:var(--s-md); padding-top:var(--s-sm); border-top:1px solid var(--c-border)"
               :onclick.stop="">
-              <div :if="!sess.books?.length" class="dim" style="font-size:var(--f-sm)">No book details recorded.</div>
+              <div :if="sess._loadingBooks" class="dim" style="font-size:var(--f-sm)">Loading…</div>
+              <div :if="!sess._loadingBooks && !sess.books?.length" class="dim" style="font-size:var(--f-sm)">No book details recorded.</div>
               <table :if="sess.books?.length" style="font-size:var(--f-sm)">
                 <thead>
                   <tr>
@@ -84,9 +90,6 @@
               <div :if="sess.note" class="dim"
                 style="font-size:var(--f-sm); margin-top:var(--s-sm)"
                 :text="sess.note"></div>
-              <div :if="sess.location" class="dim"
-                style="font-size:var(--f-sm)"
-                :text="'Location: ' + sess.location"></div>
             </div>
 
           </div>
@@ -95,9 +98,29 @@
       </section>
     </template>
     <script>
+      this.filterFrom = ''
+      this.filterTo = ''
+      this.filterWho = ''
+      this.filterLocation = ''
       this.catCls = function(cat) {
         return ({ S1:'cat-blue', S2:'cat-teal', S3:'cat-green', S4:'cat-purple',
                   H1:'cat-blue', H2:'cat-teal', H3:'cat-green', H4:'cat-purple' })[cat] || 'cat-gray'
+      }
+      this.toggleSession = function(sess) {
+        var self = this
+        sess._open = !sess._open
+        if (sess._open && !sess.books?.length && !sess._loadingBooks) {
+          sess._loadingBooks = true
+          self.api.getSankirtanSession(sess.id)
+            .then(function(full) {
+              sess.books = full.books || []
+              sess._loadingBooks = false
+            })
+            .catch(function(e) {
+              sess._loadingBooks = false
+              self.toast && self.toast(e.message || 'Failed to load session details')
+            })
+        }
       }
       this.fmtTime = function(iso) {
         if (!iso) return '—'
@@ -110,6 +133,7 @@
           if (self.filterFrom && dt < self.filterFrom) return false
           if (self.filterTo && dt > self.filterTo) return false
           if (self.filterWho && !(s.distributor_name || '').toLowerCase().includes(self.filterWho.toLowerCase())) return false
+          if (self.filterLocation && !(s.location || '').toLowerCase().includes(self.filterLocation.toLowerCase())) return false
           return true
         })
       }

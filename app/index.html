@@ -164,7 +164,7 @@ preloads:
   import { init, fmtAmt, fmtCat, rawAmt, toCents, toast, auth } from 'lib/app.js'
   import { api, BASE } from 'lib/api.js'
   import { greeting } from 'lib/greeting.js'
-  import { catCls, changedAt, fmtDate, fmtStatus, parseMemberNames, EXP_CATS, EXP_METHODS, DON_CATS, DON_METHODS, INCOME_TYPES, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName } from 'lib/finance.js'
+  import { catCls, changedAt, fmtDate, fmtStatus, parseMemberNames, EXP_CATS, EXP_METHODS, DON_CATS, DON_METHODS, INCOME_TYPES, EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName, displayLabel, displayCls } from 'lib/finance.js'
   import { icon, methodIcon, statusIcon, activityIcon, actionIcon } from 'lib/icons.js'
   import { formDefaults, createPrintDonation } from 'lib/form.js'
 
@@ -187,6 +187,7 @@ preloads:
     apiBase: BASE, api,
     EXP_CATS, EXP_METHODS, DON_CATS, DON_METHODS, INCOME_TYPES,
     EXP_FIELDS, setErr, buildMetaHistory, eventBadge, eventLabel, eventDetail, actorName,
+    displayLabel, displayCls,
   })
 
   const s = init({
