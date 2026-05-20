@@ -67,7 +67,7 @@
           <div class="form-row">
             <div class="field" :if="isfinance">
               <label for="don-type">Type</label>
-              <select id="don-type" :oninput="e => { donForm.type = e.target.value; if (e.target.value !== 'donation') donForm.category = ''; else if (!donForm.category) donForm.category = 'general' }" :onchange="e => { donForm.type = e.target.value; if (e.target.value !== 'donation') donForm.category = ''; else if (!donForm.category) donForm.category = 'general' }">
+              <select id="don-type" :oninput="e => { donForm.type = e.target.value; if (!donForm.category) donForm.category = 'general' }" :onchange="e => { donForm.type = e.target.value; if (!donForm.category) donForm.category = 'general' }">
                 <option value="donation" :selected="donForm.type === 'donation'" :text="fmtCat('donation')"></option>
                 <option value="sale" :selected="donForm.type === 'sale'" :text="fmtCat('sale')"></option>
                 <option value="grant" :selected="donForm.type === 'grant'" :text="fmtCat('grant')"></option>
@@ -112,7 +112,7 @@
           <div class="form-row">
             <div class="field">
               <label for="don-cat">Category</label>
-              <select id="don-cat" :disabled="donForm.type !== 'donation'" :oninput="e => donForm.category = e.target.value" :onchange="e => donForm.category = e.target.value">
+              <select id="don-cat" :oninput="e => donForm.category = e.target.value" :onchange="e => donForm.category = e.target.value">
                 <option :each="c in EXP_CATS" :value="c" :text="fmtCat(c)" :selected="donForm.category === c"></option>
               </select>
             </div>
@@ -373,7 +373,7 @@
         var data = { amount: self.toCents(f.amount), attachment_ids: f.attachment ? [f.attachment.id] : undefined }
         if (f.type) data.type = f.type
         if (f.method) data.method = f.method
-        if ((f.type || 'donation') === 'donation' && f.category) data.category = f.category
+        if (f.category) data.category = f.category
         if (f.date_received) data.date_received = f.date_received
         if (f.note) data.note = f.note
         if (f.reference) data.reference = f.reference
