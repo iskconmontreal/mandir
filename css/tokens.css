@@ -30,6 +30,8 @@
   --c-cat-indigo-bg: color-mix(in srgb, var(--c-cat-indigo) 12%, var(--c-surface));
   --c-cat-gray:   oklch(0.72 0.02 255);
   --c-cat-gray-bg: color-mix(in srgb, var(--c-cat-gray) 18%, var(--c-surface));
+  --c-cat-saffron: oklch(0.68 0.19 55);
+  --c-cat-saffron-bg: color-mix(in srgb, var(--c-cat-saffron) 14%, var(--c-surface));
 
   /* Space — 4px base, limited scale */
   --s-xs:  0.25rem;   /* 4 */
