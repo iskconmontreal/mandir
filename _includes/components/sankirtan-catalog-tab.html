@@ -4,7 +4,37 @@
       :host { display: contents; }
       .book-list { display: flex; flex-direction: column; gap: var(--s-md); }
       .book-card { padding: var(--s-md) var(--s-lg); }
-      .book-card.is-inactive { opacity: 0.55; }
+      .book-card.is-inactive { opacity: 0.6; }
+
+      /* Toggle switch (for Active field in Edit modal) */
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 2.5rem;
+        height: 1.4rem;
+        flex-shrink: 0;
+      }
+      .toggle-switch input { opacity: 0; width: 0; height: 0; }
+      .toggle-switch .slider {
+        position: absolute; inset: 0;
+        background: var(--c-border);
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .toggle-switch .slider::before {
+        content: '';
+        position: absolute;
+        left: 2px; top: 2px;
+        width: calc(1.4rem - 4px);
+        height: calc(1.4rem - 4px);
+        background: var(--c-surface);
+        border-radius: 50%;
+        transition: transform 0.15s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+      }
+      .toggle-switch input:checked + .slider { background: var(--c-ok); }
+      .toggle-switch input:checked + .slider::before { transform: translateX(1.1rem); }
       .book-title {
         font-size: var(--f-lg);
         font-weight: var(--f-wt-b);
@@ -62,9 +92,15 @@
             <option value="Soft">Soft</option>
             <option value="Hard">Hard</option>
           </select>
-          <button :if="filterSearch || filterCategory || filterLanguage || filterCover"
+          <label style="display:flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); color:var(--c-text-dim)">
+            <input type="checkbox"
+              :checked="filterBoutique"
+              :onchange="e => filterBoutique = e.target.checked">
+            Sold at boutique only
+          </label>
+          <button :if="filterSearch || filterCategory || filterLanguage || filterCover || filterBoutique"
             type="button" class="btn btn-outline"
-            :onclick="filterSearch=''; filterCategory=''; filterLanguage=''; filterCover=''">Clear</button>
+            :onclick="filterSearch=''; filterCategory=''; filterLanguage=''; filterCover=''; filterBoutique=false">Clear</button>
           <label style="display:flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); color:var(--c-text-dim); margin-left:auto">
             Low stock when ≤
             <input type="number" min="0" inputmode="numeric"
@@ -87,14 +123,14 @@
             <h3 class="book-title" :text="b.title"></h3>
 
             <div class="book-meta">
-              <span class="badge" :class="catCls(b.category)" :text="b.category"></span>
               <span class="badge" :class="coverCls(b.category)" :text="coverLabel(b.category)"></span>
               <span :if="b.language" class="badge cat-gray" :text="b.language"></span>
+              <span :if="(b.boutique_price_cents || 0) > 0" class="badge cat-teal">At Boutique</span>
               <span><span class="meta-label">Points:</span><span class="meta-value" :text="b.points_per_unit"></span></span>
               <span><span class="meta-label">Cost:</span><span class="meta-value" :text="b.cost_cents ? '$' + fmtAmt(b.cost_cents) : '—'"></span></span>
               <span><span class="meta-label">Pages:</span><span class="meta-value" :text="b.pages || '—'"></span></span>
               <span :if="b.active" class="badge badge-paid">Active</span>
-              <span :if="!b.active" class="badge">Inactive</span>
+              <span :if="b.active === false" class="badge badge-rejected">Inactive</span>
 
               <span :if="canmanage" class="book-actions">
                 <button type="button" class="btn btn-outline btn-sm"
@@ -175,10 +211,16 @@
               </div>
               <div class="form-row">
                 <div class="field">
-                  <label for="bk-cost">Cost ($ CAD)</label>
+                  <label for="bk-cost">Cost ($ CAD) <span class="dim" style="font-weight:normal">(temple's cost)</span></label>
                   <input id="bk-cost" type="text" inputmode="decimal" placeholder="0.00"
                     :value="form.cost_cents ? (form.cost_cents / 100).toFixed(2) : ''"
                     :oninput="e => form.cost_cents = Math.round(parseFloat(e.target.value || 0) * 100)">
+                </div>
+                <div class="field">
+                  <label for="bk-boutique-price">Boutique Price ($ CAD) <span class="dim" style="font-weight:normal">(selling price)</span></label>
+                  <input id="bk-boutique-price" type="text" inputmode="decimal" placeholder="0.00"
+                    :value="form.boutique_price_cents ? (form.boutique_price_cents / 100).toFixed(2) : ''"
+                    :oninput="e => form.boutique_price_cents = Math.round(parseFloat(e.target.value || 0) * 100)">
                 </div>
                 <div class="field">
                   <label for="bk-pages">Pages</label>
@@ -209,6 +251,19 @@
                     :oninput="e => form.stock = parseInt(e.target.value) || 0">
                 </div>
               </div>
+              <div :if="modalBook" class="form-row">
+                <div class="field">
+                  <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
+                    <span class="toggle-switch">
+                      <input type="checkbox"
+                        :checked="form.active"
+                        :onchange="e => form.active = e.target.checked">
+                      <span class="slider"></span>
+                    </span>
+                    <span :text="form.active ? 'Active' : 'Inactive'"></span>
+                  </label>
+                </div>
+              </div>
               <div :if="saveErr" class="login-error" :text="saveErr"></div>
               <button type="submit" class="btn btn-primary"
                 :class="{'btn-loading': saving}"
@@ -234,7 +289,7 @@
       this.isLowStock = function(b) { return (b.stock || 0) <= this.lowStockThreshold }
       this.showModal = false
       this.modalBook = null
-      this.form = { title:'', language:'', category:'S1', points_per_unit:0, cost_cents:0, pages:null, stock:0, initial_stock:0 }
+      this.form = { title:'', language:'', category:'S1', points_per_unit:0, cost_cents:0, boutique_price_cents:0, pages:null, stock:0, initial_stock:0, active:true }
       this.distributedOf = function(b) {
         return Math.max(0, (b.initial_stock || 0) - (b.stock || 0))
       }
@@ -242,6 +297,7 @@
       this.saveErr = null
       this.filterSearch = ''
       this.filterCategory = ''
+      this.filterBoutique = false
       this.filterLanguage = ''
       this.filterCover = ''
       this.filteredBooks = function() {
@@ -255,6 +311,7 @@
             var cover = (b.category && b.category[0] === 'H') ? 'Hard' : 'Soft'
             if (cover !== self.filterCover) return false
           }
+          if (self.filterBoutique && !((b.boutique_price_cents || 0) > 0)) return false
           return true
         })
       }
@@ -262,8 +319,8 @@
         return ({ S1:'cat-blue', S2:'cat-teal', S3:'cat-green', S4:'cat-purple',
                   H1:'cat-blue', H2:'cat-teal', H3:'cat-green', H4:'cat-purple' })[cat] || 'cat-gray'
       }
-      this.coverLabel = function(cat) { return (cat && cat[0] === 'H') ? 'Hard' : 'Soft' }
-      this.coverCls = function(cat) { return (cat && cat[0] === 'H') ? 'cat-brown' : 'cat-amber' }
+      this.coverLabel = function(cat) { return (cat && cat[0] === 'H') ? 'Hard cover' : 'Soft cover' }
+      this.coverCls = function(cat) { return (cat && cat[0] === 'H') ? 'cat-purple' : 'cat-blue' }
       this.autoPoints = function(cat) {
         return ({ S1:0.25, H1:0.25, S2:0.5, H2:0.5, S3:1.0, H3:1.0, S4:2.0, H4:2.0 })[cat] || 0.25
       }
@@ -273,6 +330,7 @@
         this.form.category = 'S1'
         this.form.points_per_unit = this.autoPoints('S1')
         this.form.cost_cents = 0
+        this.form.boutique_price_cents = 0
         this.form.pages = null
         this.form.stock = 0
         this.form.initial_stock = 0
@@ -286,9 +344,11 @@
         this.form.category = b.category || 'S1'
         this.form.points_per_unit = b.points_per_unit || 0
         this.form.cost_cents = b.cost_cents || 0
+        this.form.boutique_price_cents = b.boutique_price_cents || 0
         this.form.pages = b.pages || null
         this.form.stock = b.stock ?? 0
         this.form.initial_stock = b.initial_stock ?? 0
+        this.form.active = b.active !== false
         this.modalBook = b
         this.saveErr = null
         this.showModal = true
@@ -298,23 +358,32 @@
         var self = this
         self.saving = true
         self.saveErr = null
-        var payload = {
-          title: self.form.title,
-          language: self.form.language || '',
-          category: self.form.category,
-          points_per_unit: self.form.points_per_unit,
-          cost_cents: self.form.cost_cents || 0,
-          pages: self.form.pages || null,
+        var formChanges = {
+          title:                self.form.title,
+          language:             self.form.language || '',
+          category:             self.form.category,
+          points_per_unit:      self.form.points_per_unit,
+          cost_cents:           self.form.cost_cents || 0,
+          boutique_price_cents: self.form.boutique_price_cents || 0,
+          pages:                self.form.pages || null,
         }
+        var payload, req
         if (self.modalBook) {
-          payload.stock = self.form.stock || 0
-          payload.initial_stock = self.form.initial_stock || 0
+          // PUT: preserve every existing server field (boutique_price_cents, etc.)
+          // by spreading modalBook first, then overlaying form values.
+          payload = Object.assign({}, self.modalBook, formChanges, {
+            stock:         self.form.stock || 0,
+            initial_stock: self.form.initial_stock || 0,
+            active:        !!self.form.active,
+          })
+          delete payload.id
+          delete payload.created_at
+          delete payload.updated_at
+          req = self.api.updateSankirtanBook(self.modalBook.id, payload)
         } else {
-          payload.stock = self.form.stock || 0
+          payload = Object.assign({ stock: self.form.stock || 0 }, formChanges)
+          req = self.api.createSankirtanBook(payload)
         }
-        var req = self.modalBook
-          ? self.api.updateSankirtanBook(self.modalBook.id, payload)
-          : self.api.createSankirtanBook(payload)
         req
           .then(function() {
             self.saving = false
