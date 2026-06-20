@@ -1,12 +1,10 @@
+// Playwright config: main test runner (unit tests, no backend)
+// FEATURE: tests — fast unit/feature tests without backend
+
 import { defineConfig } from '@playwright/test'
+import { BASE_CONFIG } from './playwright.common.js'
 
 export default defineConfig({
-  testDir: 'tests',
-  testIgnore: ['**/unit/**'],
-  use: {
-    baseURL: 'http://localhost:4000',
-  },
-  projects: [
-    { name: 'chromium', use: { browserName: 'chromium' } },
-  ],
+  ...BASE_CONFIG,
+  testIgnore: ['**/unit/**', '**/e2e.*', '**/rotation.*'],
 })
