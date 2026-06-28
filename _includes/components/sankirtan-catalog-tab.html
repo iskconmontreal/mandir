@@ -299,7 +299,7 @@
                   :value="componentSearch" :oninput="e => componentSearch = e.target.value">
                 <div style="max-height:12rem; overflow:auto; border:1px solid var(--c-border); border-radius:var(--r-sm); margin-top:var(--s-xs)">
                   <label :each="rb in componentResults()" style="display:flex; align-items:center; gap:var(--s-sm); padding:var(--s-xs) var(--s-sm); cursor:pointer">
-                    <input type="checkbox" :value="isComponent(rb.id)" :change="() => toggleComponent(rb.id)">
+                    <input type="checkbox" :checked="isComponent(rb.id)" :onchange="toggleComponent(rb.id)">
                     <span :text="rb.title"></span>
                     <span :if="rb.language" class="badge cat-gray" :text="rb.language"></span>
                     <span class="dim" style="margin-left:auto; font-size:var(--f-sm)" :text="rb.points_per_unit + ' pts · $' + ((rb.cost_cents || 0) / 100).toFixed(2)"></span>
@@ -430,9 +430,11 @@
       this.bookById = function(id) { var list = (this.books && this.books.length) ? this.books : (this._catalog || []); return list.find(function(x) { return x.id === id }) }
       this.isComponent = function(id) { return this.form.items.indexOf(id) >= 0 }
       this.toggleComponent = function(id) {
-        var i = this.form.items.indexOf(id)
-        if (i >= 0) this.form.items.splice(i, 1)
-        else this.form.items.push(id)
+        var items = this.form.items.slice()
+        var i = items.indexOf(id)
+        if (i >= 0) items.splice(i, 1)
+        else items.push(id)
+        this.form.items = items          // reassign → sprae reacts, checkbox ticks
         // Auto-fill score & cost from the new component set (editable afterwards).
         this.form.points_per_unit = this.stackPointsSum()
         this.form.cost_cents = this.stackCostSum()
