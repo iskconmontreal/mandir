@@ -26,21 +26,25 @@
             <thead>
               <tr>
                 <th style="width:3rem">#</th>
-                <th>Distributor</th>
-                <th style="text-align:right">Points</th>
-                <th style="text-align:right">Books</th>
-                <th style="text-align:right">Collected</th>
+                <th class="th-sort" :class="sortCls('distributor_name')" :onclick="sort('distributor_name')">Distributor</th>
+                <th class="th-sort" style="text-align:right" :class="sortCls('points')" :onclick="sort('points')">Points</th>
+                <th class="th-sort" style="text-align:right" :class="sortCls('books')" :onclick="sort('books')">Books</th>
+                <th class="th-sort" style="text-align:right" :class="sortCls('collected_cents')" :onclick="sort('collected_cents')">Collected</th>
+                <th class="th-sort" style="text-align:right" :class="sortCls('bbt_pct')" :onclick="sort('bbt_pct')" title="Temple cost ÷ donation — lower means more goes to the temple">BBT %</th>
               </tr>
             </thead>
             <tbody>
-              <tr :each="(row, i) in results">
+              <tr :each="(row, i) in sortedResults()">
                 <td class="dim" :text="i + 1"></td>
                 <td style="font-weight:var(--f-wt-b)" :text="row.distributor_name"></td>
                 <td style="text-align:right"
-                  :class="i === 0 ? 'stat-ok' : ''"
+                  :class="(sortBy === 'points' && i === 0) ? 'stat-ok' : ''"
                   :text="row.points"></td>
                 <td style="text-align:right" :text="row.books"></td>
                 <td style="text-align:right" :text="'$' + fmtAmt(row.collected_cents)"></td>
+                <td style="text-align:right"
+                  :class="row.bbt_pct != null && row.bbt_pct <= 50 ? 'stat-ok' : ''"
+                  :text="row.bbt_pct == null ? '—' : Math.round(row.bbt_pct) + '%'"></td>
               </tr>
             </tbody>
           </table>
@@ -50,6 +54,27 @@
     </template>
     <script>
       // fmtAmt injected via setupProcessor
+      this.sortBy = 'points'      // default matches the server's points-DESC order
+      this.sortDir = 'desc'
+      // Intuitive first-click direction: names A→Z; "more is better" metrics high→low;
+      // BBT % low→high (lower = more to the temple).
+      this.defaultDir = function(col) { return col === 'distributor_name' || col === 'bbt_pct' ? 'asc' : 'desc' }
+      this.sort = function(col) {
+        if (this.sortBy === col) this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc'
+        else { this.sortBy = col; this.sortDir = this.defaultDir(col) }
+      }
+      this.sortCls = function(col) { return this.sortBy === col ? (this.sortDir === 'asc' ? 'th-sort-asc' : 'th-sort-desc') : '' }
+      this.sortedResults = function() {
+        var col = this.sortBy, dir = this.sortDir === 'asc' ? 1 : -1
+        return [...(this.results || [])].sort(function(a, b) {
+          var av = a[col], bv = b[col]
+          if (av == null && bv == null) return 0
+          if (av == null) return 1          // nulls (e.g. bbt_pct "—") always last, both directions
+          if (bv == null) return -1
+          if (typeof av === 'string' || typeof bv === 'string') return String(av).localeCompare(String(bv)) * dir
+          return (av - bv) * dir
+        })
+      }
     </script>
   </sankirtan-leaderboard-tab>
 </define-element>

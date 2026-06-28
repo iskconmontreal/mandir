@@ -79,9 +79,14 @@
             <input class="filter-search" type="search" placeholder="Search title…"
               :value="filterSearch" :oninput="e => filterSearch = e.target.value">
           </div>
-          <select :value="filterCategory" :change="v => filterCategory = v" style="width:auto">
-            <option value="">All categories</option>
-            <option :each="c in CATEGORIES" :value="c" :text="c"></option>
+          <select :value="filterType" :change="v => filterType = v" style="width:auto">
+            <option value="">All</option>
+            <option value="book">Books</option>
+            <option value="stack">Stacks</option>
+          </select>
+          <select :value="filterSize" :change="v => filterSize = v" style="width:auto">
+            <option value="">All sizes</option>
+            <option :each="s in SIZES" :value="s" :text="s"></option>
           </select>
           <select :value="filterLanguage" :change="v => filterLanguage = v" style="width:auto">
             <option value="">All languages</option>
@@ -94,21 +99,14 @@
           </select>
           <label style="display:flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); color:var(--c-text-dim)">
             <input type="checkbox"
-              :checked="filterBoutique"
-              :onchange="e => filterBoutique = e.target.checked">
+              :value="filterBoutique"
+              :change="v => filterBoutique = v">
             Sold at boutique only
           </label>
-          <button :if="filterSearch || filterCategory || filterLanguage || filterCover || filterBoutique"
+          <button :if="filterSearch || filterType || filterSize || filterLanguage || filterCover || filterBoutique"
             type="button" class="btn btn-outline"
-            :onclick="filterSearch=''; filterCategory=''; filterLanguage=''; filterCover=''; filterBoutique=false">Clear</button>
-          <label style="display:flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); color:var(--c-text-dim); margin-left:auto">
-            Low stock when ≤
-            <input type="number" min="0" inputmode="numeric"
-              style="width:4.5rem"
-              :value="lowStockThreshold"
-              :oninput="e => setLowStockThreshold(parseInt(e.target.value) || 0)">
-          </label>
-          <div class="filter-bar-actions">
+            :onclick="filterSearch=''; filterType=''; filterSize=''; filterLanguage=''; filterCover=''; filterBoutique=false">Clear</button>
+          <div class="filter-bar-actions" style="margin-left:auto">
             <button :if="canmanage" type="button" class="btn btn-primary"
               :onclick="openAdd()">+ Add Book</button>
           </div>
@@ -123,12 +121,16 @@
             <h3 class="book-title" :text="b.title"></h3>
 
             <div class="book-meta">
-              <span class="badge" :class="coverCls(b.category)" :text="coverLabel(b.category)"></span>
-              <span :if="b.language" class="badge cat-gray" :text="b.language"></span>
-              <span :if="(b.boutique_price_cents || 0) > 0" class="badge cat-teal">At Boutique</span>
+              <span :if="b.is_stack" class="badge cat-purple">Stack</span>
+              <span :if="!b.is_stack" class="badge" :class="coverCls(b.category)" :text="coverLabel(b.category)"></span>
+              <span :if="!b.is_stack" class="badge" :class="catCls(b.category)" :text="sizeLabel(b.category)"></span>
+              <span :if="!b.is_stack && b.language" class="badge cat-gray" :text="b.language"></span>
+              <span :each="lg in (b.is_stack ? stackLangs(b) : [])" class="badge cat-gray" :text="lg"></span>
+              <span :if="b.sold_at_boutique" class="badge cat-teal">At Boutique</span>
               <span><span class="meta-label">Points:</span><span class="meta-value" :text="b.points_per_unit"></span></span>
               <span><span class="meta-label">Cost:</span><span class="meta-value" :text="b.cost_cents ? '$' + fmtAmt(b.cost_cents) : '—'"></span></span>
-              <span><span class="meta-label">Pages:</span><span class="meta-value" :text="b.pages || '—'"></span></span>
+              <span :if="!b.is_stack"><span class="meta-label">Pages:</span><span class="meta-value" :text="b.pages || '—'"></span></span>
+              <span :if="b.is_stack"><span class="meta-label">Contains:</span><span class="meta-value" :text="(b.books_per_unit || stackContents(b).length) + ' books'"></span></span>
               <span :if="b.active" class="badge badge-paid">Active</span>
               <span :if="b.active === false" class="badge badge-rejected">Inactive</span>
 
@@ -151,22 +153,27 @@
               </span>
             </div>
 
-            <div class="book-stock">
+            <div class="book-stock" :if="!b.is_stack">
               <span class="stock-item">Initial <span class="stock-value" :text="b.initial_stock || 0"></span></span>
               <span class="stock-item">
                 Stock <span class="stock-value" :text="b.stock ?? 0"></span>
-                <span :if="isLowStock(b)" class="badge badge-low" style="margin-left:var(--s-xs)">Low</span>
+                <span :if="isLowStock(b)" class="badge badge-low" style="margin-left:var(--s-xs)">Need to order</span>
               </span>
               <span class="stock-item">
                 Distributed <span class="stock-value" :class="distributedOf(b) > 0 ? 'stat-ok' : ''" :text="distributedOf(b)"></span>
               </span>
+            </div>
+            <div class="book-stock" :if="b.is_stack">
+              <span class="stock-item">Available <span class="stock-value" :text="stackAvailable(b)"></span> <span class="dim">(min of components)</span></span>
+              <span class="stock-item">Books: <span class="stock-value" :text="stackTitles(b) || '—'"></span></span>
             </div>
           </div>
         </div>
 
         <!-- Add / Edit modal -->
         <div :if="showModal" class="modal-overlay"
-          :onclick="e => { if (e.target === e.currentTarget) closeModal() }"
+          :onpointerdown="e => { _downOnBackdrop = (e.target === e.currentTarget) }"
+          :onclick="e => { if (_downOnBackdrop && e.target === e.currentTarget) closeModal() }"
           :onkeydown.esc.document="closeModal()">
           <div class="modal">
             <div class="modal-header">
@@ -184,32 +191,124 @@
                     :oninput="e => form.title = e.target.value">
                 </div>
               </div>
+
+              <!-- Stack toggle (Add only) / kind label (Edit) -->
               <div class="form-row">
-                <div class="field">
-                  <label for="bk-lang">Language</label>
-                  <select id="bk-lang"
-                    :change="v => form.language = v">
-                    <option value="" :selected="!form.language">— Select —</option>
-                    <option :each="l in LANGUAGES" :value="l" :text="l" :selected="l === form.language"></option>
-                  </select>
+                <div class="field" :if="!modalBook">
+                  <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
+                    <span class="toggle-switch">
+                      <input type="checkbox"
+                        :value="form.is_stack"
+                        :change="v => setIsStack(v)">
+                      <span class="slider"></span>
+                    </span>
+                    <span>This is a stack <span class="dim" style="font-weight:normal">(a bundle of distinct books)</span></span>
+                  </label>
+                </div>
+                <div class="field" :if="modalBook">
+                  <span class="badge" :class="form.is_stack ? 'cat-purple' : 'cat-gray'" :text="form.is_stack ? 'Stack' : 'Book'"></span>
                 </div>
               </div>
-              <div class="form-row">
-                <div class="field">
-                  <label for="bk-cat">Category</label>
-                  <select id="bk-cat"
-                    :change="v => { form.category = v; form.points_per_unit = autoPoints(v) }">
-                    <option :each="c in CATEGORIES" :value="c" :text="c" :selected="c === form.category"></option>
-                  </select>
+
+              <!-- ── Book-only fields ── -->
+              <div :if="!form.is_stack" style="display:flex; flex-direction:column; gap:var(--s-md)">
+                <div class="form-row">
+                  <div class="field">
+                    <label for="bk-lang">Language</label>
+                    <select id="bk-lang" :disabled="form.is_stack" :change="v => form.language = v">
+                      <option value="" :selected="!form.language">— Select —</option>
+                      <option :each="l in LANGUAGES" :value="l" :text="l" :selected="l === form.language"></option>
+                    </select>
+                  </div>
                 </div>
-                <div class="field">
-                  <label for="bk-pts">Score</label>
-                  <input id="bk-pts" type="number" step="0.25" min="0"
-                    :value="form.points_per_unit || ''"
-                    :oninput="e => form.points_per_unit = parseFloat(e.target.value) || 0">
+                <div class="form-row">
+                  <div class="field">
+                    <label for="bk-cover">Cover</label>
+                    <select id="bk-cover"
+                      :change="v => { form.cover = v; form.points_per_unit = autoPointsFromPages(form.pages) }">
+                      <option value="Soft" :selected="form.cover === 'Soft'">Soft cover</option>
+                      <option value="Hard" :selected="form.cover === 'Hard'">Hard cover</option>
+                    </select>
+                    <p class="dim" style="font-size:var(--f-sm); margin:var(--s-xs) 0 0" :if="form.pages"
+                      :text="coverLabel(form.cover === 'Hard' ? 'H' : 'S') + ' · ' + sizeLabel(categoryFrom(form.cover, form.pages)) + ' book'"></p>
+                  </div>
+                  <div class="field">
+                    <label for="bk-pages">Pages</label>
+                    <input id="bk-pages" type="number" min="1" placeholder="e.g. 320"
+                      :value="form.pages || ''"
+                      :oninput="e => { form.pages = parseInt(e.target.value) || null; form.points_per_unit = autoPointsFromPages(form.pages) }">
+                  </div>
+                  <div class="field">
+                    <label for="bk-low-stock">Low-stock threshold</label>
+                    <input id="bk-low-stock" type="number" min="0" inputmode="numeric" placeholder="5"
+                      :value="form.low_stock_threshold ?? ''"
+                      :oninput="e => form.low_stock_threshold = parseInt(e.target.value) || 0">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="field">
+                    <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
+                      <span class="toggle-switch">
+                        <input type="checkbox"
+                          :value="form.sold_at_boutique"
+                          :change="v => form.sold_at_boutique = v">
+                        <span class="slider"></span>
+                      </span>
+                      <span>Sold at boutique <span class="dim" style="font-weight:normal">(revenue not counted as sankirtan)</span></span>
+                    </label>
+                  </div>
+                </div>
+                <div :if="!modalBook" class="form-row">
+                  <div class="field">
+                    <label for="bk-stock">Initial stock</label>
+                    <input id="bk-stock" type="text" inputmode="numeric" placeholder="0"
+                      :value="form.stock || ''"
+                      :oninput="e => form.stock = parseInt(e.target.value) || 0">
+                  </div>
+                </div>
+                <div :if="modalBook" class="form-row">
+                  <div class="field">
+                    <label for="bk-init-stock">Initial stock <span class="dim" style="font-weight:normal">(baseline)</span></label>
+                    <input id="bk-init-stock" type="text" inputmode="numeric"
+                      :value="form.initial_stock ?? ''"
+                      :oninput="e => form.initial_stock = parseInt(e.target.value) || 0">
+                  </div>
+                  <div class="field">
+                    <label for="bk-cur-stock">Current stock</label>
+                    <input id="bk-cur-stock" type="text" inputmode="numeric"
+                      :value="form.stock ?? ''"
+                      :oninput="e => form.stock = parseInt(e.target.value) || 0">
+                  </div>
                 </div>
               </div>
-              <div class="form-row">
+
+              <!-- ── Stack-only fields: component picker ── -->
+              <div :if="form.is_stack" class="field">
+                <label>Books in this stack
+                  <span class="dim" style="font-weight:normal" :text="'· contains ' + form.items.length + ' book' + (form.items.length === 1 ? '' : 's')"></span>
+                </label>
+                <div :if="form.items.length" style="display:flex; flex-wrap:wrap; gap:var(--s-xs); margin-bottom:var(--s-sm)">
+                  <span :each="cb in stackComponentBooks()" class="badge cat-blue" style="display:inline-flex; align-items:center; gap:var(--s-xs)">
+                    <span :text="cb.title + (cb.language ? ' (' + cb.language + ')' : '')"></span>
+                    <button type="button" class="btn-link" style="font-size:var(--f-sm); color:inherit" :onclick="toggleComponent(cb.id)">×</button>
+                  </span>
+                </div>
+                <p :if="stackLanguages().length" class="dim" style="font-size:var(--f-sm)"
+                  :text="'Languages: ' + stackLanguages().join(' · ')"></p>
+                <input type="search" placeholder="Search books to add…"
+                  :value="componentSearch" :oninput="e => componentSearch = e.target.value">
+                <div style="max-height:12rem; overflow:auto; border:1px solid var(--c-border); border-radius:var(--r-sm); margin-top:var(--s-xs)">
+                  <label :each="rb in componentResults()" style="display:flex; align-items:center; gap:var(--s-sm); padding:var(--s-xs) var(--s-sm); cursor:pointer">
+                    <input type="checkbox" :checked="isComponent(rb.id)" :onchange="toggleComponent(rb.id)">
+                    <span :text="rb.title"></span>
+                    <span :if="rb.language" class="badge cat-gray" :text="rb.language"></span>
+                    <span class="dim" style="margin-left:auto; font-size:var(--f-sm)" :text="rb.points_per_unit + ' pts · $' + ((rb.cost_cents || 0) / 100).toFixed(2)"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- ── Shared: Cost / Retail / Score ── -->
+              <div class="form-row" style="align-items:flex-end">
                 <div class="field">
                   <label for="bk-cost">Cost ($ CAD) <span class="dim" style="font-weight:normal">(temple's cost)</span></label>
                   <input id="bk-cost" type="text" inputmode="decimal" placeholder="0.00"
@@ -217,47 +316,26 @@
                     :oninput="e => form.cost_cents = Math.round(parseFloat(e.target.value || 0) * 100)">
                 </div>
                 <div class="field">
-                  <label for="bk-boutique-price">Boutique Price ($ CAD) <span class="dim" style="font-weight:normal">(selling price)</span></label>
-                  <input id="bk-boutique-price" type="text" inputmode="decimal" placeholder="0.00"
-                    :value="form.boutique_price_cents ? (form.boutique_price_cents / 100).toFixed(2) : ''"
-                    :oninput="e => form.boutique_price_cents = Math.round(parseFloat(e.target.value || 0) * 100)">
+                  <label for="bk-retail-price">Retail Price ($ CAD)</label>
+                  <input id="bk-retail-price" type="text" inputmode="decimal" placeholder="0.00"
+                    :value="form.retail_price_cents ? (form.retail_price_cents / 100).toFixed(2) : ''"
+                    :oninput="e => form.retail_price_cents = Math.round(parseFloat(e.target.value || 0) * 100)">
                 </div>
                 <div class="field">
-                  <label for="bk-pages">Pages</label>
-                  <input id="bk-pages" type="number" min="1" placeholder="e.g. 856"
-                    :value="form.pages || ''"
-                    :oninput="e => form.pages = parseInt(e.target.value) || null">
+                  <label for="bk-score">Score <span class="dim" style="font-weight:normal" :if="form.is_stack">(Σ components)</span></label>
+                  <input id="bk-score" type="number" step="0.25" min="0" placeholder="0"
+                    :value="form.points_per_unit || ''"
+                    :oninput="e => form.points_per_unit = parseFloat(e.target.value) || 0">
                 </div>
               </div>
-              <div :if="!modalBook" class="form-row">
-                <div class="field">
-                  <label for="bk-stock">Initial stock</label>
-                  <input id="bk-stock" type="text" inputmode="numeric" placeholder="0"
-                    :value="form.stock || ''"
-                    :oninput="e => form.stock = parseInt(e.target.value) || 0">
-                </div>
-              </div>
-              <div :if="modalBook" class="form-row">
-                <div class="field">
-                  <label for="bk-init-stock">Initial stock <span class="dim" style="font-weight:normal">(baseline)</span></label>
-                  <input id="bk-init-stock" type="text" inputmode="numeric"
-                    :value="form.initial_stock ?? ''"
-                    :oninput="e => form.initial_stock = parseInt(e.target.value) || 0">
-                </div>
-                <div class="field">
-                  <label for="bk-cur-stock">Current stock</label>
-                  <input id="bk-cur-stock" type="text" inputmode="numeric"
-                    :value="form.stock ?? ''"
-                    :oninput="e => form.stock = parseInt(e.target.value) || 0">
-                </div>
-              </div>
+
               <div :if="modalBook" class="form-row">
                 <div class="field">
                   <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
                     <span class="toggle-switch">
                       <input type="checkbox"
-                        :checked="form.active"
-                        :onchange="e => form.active = e.target.checked">
+                        :value="form.active"
+                        :change="v => form.active = v">
                       <span class="slider"></span>
                     </span>
                     <span :text="form.active ? 'Active' : 'Inactive'"></span>
@@ -267,7 +345,7 @@
               <div :if="saveErr" class="login-error" :text="saveErr"></div>
               <button type="submit" class="btn btn-primary"
                 :class="{'btn-loading': saving}"
-                :text="modalBook ? 'Save Changes' : 'Add Book'"></button>
+                :text="modalBook ? 'Save Changes' : (form.is_stack ? 'Add Stack' : 'Add Book')"></button>
             </form>
           </div>
         </div>
@@ -275,43 +353,50 @@
       </section>
     </template>
     <script>
-      this.CATEGORIES = ['S1','S2','S3','S4','H1','H2','H3','H4']
+      this.SIZES = ['Small','Medium','Big','Mahabig']
       this.LANGUAGES = ['English','French','Arabic','Bengali','Hindi']
-      // Low-stock threshold — user-configurable, persisted per-browser in localStorage.
-      this.LOW_STOCK_KEY = 'mandir_sankirtan_low_stock_threshold'
-      this.lowStockThreshold = parseInt(localStorage.getItem(this.LOW_STOCK_KEY) || '5', 10)
-      if (isNaN(this.lowStockThreshold) || this.lowStockThreshold < 0) this.lowStockThreshold = 5
-      this.setLowStockThreshold = function(v) {
-        var n = Math.max(0, parseInt(v, 10) || 0)
-        this.lowStockThreshold = n
-        localStorage.setItem(this.LOW_STOCK_KEY, String(n))
-      }
-      this.isLowStock = function(b) { return (b.stock || 0) <= this.lowStockThreshold }
+      // Low stock is per-book now: each book carries its own low_stock_threshold (default 5).
+      this.isLowStock = function(b) { return (b.stock || 0) <= (b.low_stock_threshold ?? 5) }
       this.showModal = false
+      this._downOnBackdrop = false
       this.modalBook = null
-      this.form = { title:'', language:'', category:'S1', points_per_unit:0, cost_cents:0, boutique_price_cents:0, pages:null, stock:0, initial_stock:0, active:true }
+      this.form = { title:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, sold_at_boutique:false, low_stock_threshold:5, pages:null, stock:0, initial_stock:0, active:true, is_stack:false, items:[] }
+      this.componentSearch = ''
+      // Snapshot of the catalog taken when the modal opens — the `books` prop is
+      // not in scope inside the modal subtree, so the stack picker reads this instead.
+      this._catalog = []
       this.distributedOf = function(b) {
         return Math.max(0, (b.initial_stock || 0) - (b.stock || 0))
       }
       this.saving = false
       this.saveErr = null
       this.filterSearch = ''
-      this.filterCategory = ''
+      this.filterSize = ''
       this.filterBoutique = false
       this.filterLanguage = ''
       this.filterCover = ''
+      this.filterType = ''   // '' = all, 'book', 'stack'
       this.filteredBooks = function() {
         var self = this
         var q = (self.filterSearch || '').toLowerCase()
         return (self.books || []).filter(function(b) {
+          var stack = !!b.is_stack
+          if (self.filterType === 'book' && stack) return false
+          if (self.filterType === 'stack' && !stack) return false
           if (q && !(b.title || '').toLowerCase().includes(q)) return false
-          if (self.filterCategory && b.category !== self.filterCategory) return false
-          if (self.filterLanguage && b.language !== self.filterLanguage) return false
+          if (self.filterLanguage) {
+            // A stack matches a language if any of its component books is in it.
+            var langOK = stack ? self.stackLangs(b).indexOf(self.filterLanguage) >= 0 : b.language === self.filterLanguage
+            if (!langOK) return false
+          }
+          // Size / cover / boutique are book-only filters → exclude stacks when set.
+          if (self.filterSize && (stack || self.sizeLabel(b.category) !== self.filterSize)) return false
           if (self.filterCover) {
+            if (stack) return false
             var cover = (b.category && b.category[0] === 'H') ? 'Hard' : 'Soft'
             if (cover !== self.filterCover) return false
           }
-          if (self.filterBoutique && !((b.boutique_price_cents || 0) > 0)) return false
+          if (self.filterBoutique && (stack || !b.sold_at_boutique)) return false
           return true
         })
       }
@@ -321,19 +406,97 @@
       }
       this.coverLabel = function(cat) { return (cat && cat[0] === 'H') ? 'Hard cover' : 'Soft cover' }
       this.coverCls = function(cat) { return (cat && cat[0] === 'H') ? 'cat-purple' : 'cat-blue' }
-      this.autoPoints = function(cat) {
-        return ({ S1:0.25, H1:0.25, S2:0.5, H2:0.5, S3:1.0, H3:1.0, S4:2.0, H4:2.0 })[cat] || 0.25
+      // The category code is internal: cover + page count fully determine it.
+      // Page count → size tier (rubric ranges). Anything below 150 is Small (tier 1).
+      this.tierFromPages = function(p) {
+        p = parseInt(p, 10) || 0
+        if (p >= 500) return 4
+        if (p >= 300) return 3
+        if (p >= 150) return 2
+        return 1
+      }
+      this.coverLetter = function(cover) { return cover === 'Hard' ? 'H' : 'S' }
+      this.categoryFrom = function(cover, pages) { return this.coverLetter(cover) + this.tierFromPages(pages) }
+      this.autoPointsFromPages = function(pages) { return ({ 1:0.25, 2:0.5, 3:1.0, 4:2.0 })[this.tierFromPages(pages)] }
+      // Size label read from a STORED code's digit.
+      this.sizeLabel = function(cat) { return ({ '1':'Small', '2':'Medium', '3':'Big', '4':'Mahabig' })[cat && cat[1]] || '—' }
+      // ── Stacks ──────────────────────────────────────────────
+      this.isStack = function(b) { return !!(b && b.is_stack) }
+      this.setIsStack = function(on) {
+        this.form.is_stack = on
+        if (on) { this.form.items = []; this.form.points_per_unit = 0; this.form.cost_cents = 0 }
+        else { this.form.points_per_unit = this.autoPointsFromPages(this.form.pages) }
+      }
+      this.bookById = function(id) { var list = (this.books && this.books.length) ? this.books : (this._catalog || []); return list.find(function(x) { return x.id === id }) }
+      this.isComponent = function(id) { return this.form.items.indexOf(id) >= 0 }
+      this.toggleComponent = function(id) {
+        var items = this.form.items.slice()
+        var i = items.indexOf(id)
+        if (i >= 0) items.splice(i, 1)
+        else items.push(id)
+        this.form.items = items          // reassign → sprae reacts, checkbox ticks
+        // Auto-fill score & cost from the new component set (editable afterwards).
+        this.form.points_per_unit = this.stackPointsSum()
+        this.form.cost_cents = this.stackCostSum()
+      }
+      this.stackComponentBooks = function() {
+        var self = this
+        return this.form.items.map(function(id) { return self.bookById(id) }).filter(Boolean)
+      }
+      this.stackPointsSum = function() {
+        return Math.round(this.stackComponentBooks().reduce(function(s, b) { return s + (b.points_per_unit || 0) }, 0) * 100) / 100
+      }
+      this.stackCostSum = function() {
+        return this.stackComponentBooks().reduce(function(s, b) { return s + (b.cost_cents || 0) }, 0)
+      }
+      this.stackLanguages = function() {
+        var langs = []
+        this.stackComponentBooks().forEach(function(b) { if (b.language && langs.indexOf(b.language) < 0) langs.push(b.language) })
+        return langs
+      }
+      this.componentResults = function() {
+        var q = (this.componentSearch || '').toLowerCase()
+        return (this._catalog || []).filter(function(b) {
+          if (b.is_stack || b.active === false) return false
+          if (!q) return true
+          return (b.title || '').toLowerCase().includes(q) || (b.language || '').toLowerCase().includes(q)
+        }).slice(0, 40)
+      }
+      // Card helpers — operate on a stored stack row's items ([{ book_id }]).
+      this.stackItemIds = function(b) { return (b.items || []).map(function(it) { return it.book_id }) }
+      this.stackContents = function(b) {
+        var self = this
+        return this.stackItemIds(b).map(function(id) { return self.bookById(id) }).filter(Boolean)
+      }
+      this.stackAvailable = function(b) {
+        var comps = this.stackContents(b)
+        if (!comps.length) return 0
+        return Math.min.apply(null, comps.map(function(c) { return c.stock || 0 }))
+      }
+      this.stackLangs = function(b) {
+        var langs = []
+        this.stackContents(b).forEach(function(c) { if (c.language && langs.indexOf(c.language) < 0) langs.push(c.language) })
+        return langs
+      }
+      this.stackTitles = function(b) {
+        return this.stackContents(b).map(function(c) { return c.title }).join(', ')
       }
       this.openAdd = function() {
         this.form.title = ''
         this.form.language = ''
-        this.form.category = 'S1'
-        this.form.points_per_unit = this.autoPoints('S1')
-        this.form.cost_cents = 0
-        this.form.boutique_price_cents = 0
+        this.form.cover = 'Soft'
         this.form.pages = null
+        this.form.points_per_unit = this.autoPointsFromPages(null)
+        this.form.cost_cents = 0
+        this.form.retail_price_cents = 0
+        this.form.sold_at_boutique = false
+        this.form.low_stock_threshold = 5
         this.form.stock = 0
         this.form.initial_stock = 0
+        this.form.is_stack = false
+        this.form.items = []
+        this.componentSearch = ''
+        this._catalog = (this.books || []).slice()
         this.modalBook = null
         this.saveErr = null
         this.showModal = true
@@ -341,35 +504,58 @@
       this.openEdit = function(b) {
         this.form.title = b.title || ''
         this.form.language = b.language || ''
-        this.form.category = b.category || 'S1'
-        this.form.points_per_unit = b.points_per_unit || 0
-        this.form.cost_cents = b.cost_cents || 0
-        this.form.boutique_price_cents = b.boutique_price_cents || 0
+        this.form.cover = (b.category && b.category[0] === 'H') ? 'Hard' : 'Soft'
         this.form.pages = b.pages || null
+        // Preserve the stored score (a stack/custom score is not re-derived).
+        this.form.points_per_unit = b.points_per_unit ?? this.autoPointsFromPages(b.pages)
+        this.form.cost_cents = b.cost_cents || 0
+        this.form.retail_price_cents = b.retail_price_cents || 0
+        this.form.sold_at_boutique = !!b.sold_at_boutique
+        this.form.low_stock_threshold = b.low_stock_threshold ?? 5
         this.form.stock = b.stock ?? 0
         this.form.initial_stock = b.initial_stock ?? 0
         this.form.active = b.active !== false
+        this.form.is_stack = !!b.is_stack
+        this.form.items = b.is_stack ? this.stackItemIds(b) : []
+        this.componentSearch = ''
+        this._catalog = (this.books || []).slice()
         this.modalBook = b
         this.saveErr = null
         this.showModal = true
       }
-      this.closeModal = function() { this.showModal = false }
+      this.closeModal = function() {
+        this.form.is_stack = false
+        this.form.items = []
+        this.componentSearch = ''
+        this.showModal = false
+      }
       this.saveBook = function() {
         var self = this
         self.saving = true
         self.saveErr = null
-        var formChanges = {
-          title:                self.form.title,
-          language:             self.form.language || '',
-          category:             self.form.category,
-          points_per_unit:      self.form.points_per_unit,
-          cost_cents:           self.form.cost_cents || 0,
-          boutique_price_cents: self.form.boutique_price_cents || 0,
-          pages:                self.form.pages || null,
+        // Stacks: send is_stack + items + the (component-derived, editable) score/cost.
+        // The backend derives category/language/books_per_unit; no book-only fields.
+        var formChanges = self.form.is_stack ? {
+          title:              self.form.title,
+          is_stack:           true,
+          items:              self.form.items,
+          points_per_unit:    self.form.points_per_unit || 0,
+          cost_cents:         self.form.cost_cents || 0,
+          retail_price_cents: self.form.retail_price_cents || 0,
+        } : {
+          title:               self.form.title,
+          language:            self.form.language || '',
+          category:            self.categoryFrom(self.form.cover, self.form.pages),
+          points_per_unit:     self.form.points_per_unit || 0,
+          cost_cents:          self.form.cost_cents || 0,
+          retail_price_cents:  self.form.retail_price_cents || 0,
+          sold_at_boutique:    !!self.form.sold_at_boutique,
+          low_stock_threshold: self.form.low_stock_threshold ?? 5,
+          pages:               self.form.pages || null,
         }
         var payload, req
         if (self.modalBook) {
-          // PUT: preserve every existing server field (boutique_price_cents, etc.)
+          // PUT: preserve every existing server field (retail_price_cents, etc.)
           // by spreading modalBook first, then overlaying form values.
           payload = Object.assign({}, self.modalBook, formChanges, {
             stock:         self.form.stock || 0,
