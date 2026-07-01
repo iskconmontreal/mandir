@@ -97,16 +97,17 @@
             <option value="Soft">Soft</option>
             <option value="Hard">Hard</option>
           </select>
-          <label style="display:flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); color:var(--c-text-dim)">
-            <input type="checkbox"
-              :value="filterBoutique"
-              :change="v => filterBoutique = v">
-            Sold at boutique only
-          </label>
-          <button :if="filterSearch || filterType || filterSize || filterLanguage || filterCover || filterBoutique"
+          <button :if="filterSearch || filterType || filterSize || filterLanguage || filterCover"
             type="button" class="btn btn-outline"
-            :onclick="filterSearch=''; filterType=''; filterSize=''; filterLanguage=''; filterCover=''; filterBoutique=false">Clear</button>
-          <div class="filter-bar-actions" style="margin-left:auto">
+            :onclick="filterSearch=''; filterType=''; filterSize=''; filterLanguage=''; filterCover=''">Clear</button>
+          <div class="filter-bar-actions" style="margin-left:auto; display:flex; gap:var(--s-xs)">
+            <button :if="canmanage" type="button" class="btn btn-outline"
+              :class="{'btn-loading': importing}"
+              :onclick="(host || document).querySelector('#catalog-import-input')?.click()">Import</button>
+            <input type="file" id="catalog-import-input" accept=".xlsx" style="display:none"
+              :onchange="e => { importCatalog(e.target.files[0]); e.target.value = '' }">
+            <button :if="canmanage" type="button" class="btn btn-outline"
+              :onclick="exportCatalog()">Export</button>
             <button :if="canmanage" type="button" class="btn btn-primary"
               :onclick="openAdd()">+ Add Book</button>
           </div>
@@ -126,7 +127,6 @@
               <span :if="!b.is_stack" class="badge" :class="catCls(b.category)" :text="sizeLabel(b.category)"></span>
               <span :if="!b.is_stack && b.language" class="badge cat-gray" :text="b.language"></span>
               <span :each="lg in (b.is_stack ? stackLangs(b) : [])" class="badge cat-gray" :text="lg"></span>
-              <span :if="b.sold_at_boutique" class="badge cat-teal">At Boutique</span>
               <span><span class="meta-label">Points:</span><span class="meta-value" :text="b.points_per_unit"></span></span>
               <span><span class="meta-label">Cost:</span><span class="meta-value" :text="b.cost_cents ? '$' + fmtAmt(b.cost_cents) : '—'"></span></span>
               <span :if="!b.is_stack"><span class="meta-label">Pages:</span><span class="meta-value" :text="b.pages || '—'"></span></span>
@@ -154,13 +154,9 @@
             </div>
 
             <div class="book-stock" :if="!b.is_stack">
-              <span class="stock-item">Initial <span class="stock-value" :text="b.initial_stock || 0"></span></span>
               <span class="stock-item">
                 Stock <span class="stock-value" :text="b.stock ?? 0"></span>
                 <span :if="isLowStock(b)" class="badge badge-low" style="margin-left:var(--s-xs)">Need to order</span>
-              </span>
-              <span class="stock-item">
-                Distributed <span class="stock-value" :class="distributedOf(b) > 0 ? 'stat-ok' : ''" :text="distributedOf(b)"></span>
               </span>
             </div>
             <div class="book-stock" :if="b.is_stack">
@@ -202,11 +198,8 @@
                         :change="v => setIsStack(v)">
                       <span class="slider"></span>
                     </span>
-                    <span>This is a stack <span class="dim" style="font-weight:normal">(a bundle of distinct books)</span></span>
+                    <span>This is a stack</span>
                   </label>
-                </div>
-                <div class="field" :if="modalBook">
-                  <span class="badge" :class="form.is_stack ? 'cat-purple' : 'cat-gray'" :text="form.is_stack ? 'Stack' : 'Book'"></span>
                 </div>
               </div>
 
@@ -247,35 +240,8 @@
                 </div>
                 <div class="form-row">
                   <div class="field">
-                    <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
-                      <span class="toggle-switch">
-                        <input type="checkbox"
-                          :value="form.sold_at_boutique"
-                          :change="v => form.sold_at_boutique = v">
-                        <span class="slider"></span>
-                      </span>
-                      <span>Sold at boutique <span class="dim" style="font-weight:normal">(revenue not counted as sankirtan)</span></span>
-                    </label>
-                  </div>
-                </div>
-                <div :if="!modalBook" class="form-row">
-                  <div class="field">
-                    <label for="bk-stock">Initial stock</label>
+                    <label for="bk-stock">Stock</label>
                     <input id="bk-stock" type="text" inputmode="numeric" placeholder="0"
-                      :value="form.stock || ''"
-                      :oninput="e => form.stock = parseInt(e.target.value) || 0">
-                  </div>
-                </div>
-                <div :if="modalBook" class="form-row">
-                  <div class="field">
-                    <label for="bk-init-stock">Initial stock <span class="dim" style="font-weight:normal">(baseline)</span></label>
-                    <input id="bk-init-stock" type="text" inputmode="numeric"
-                      :value="form.initial_stock ?? ''"
-                      :oninput="e => form.initial_stock = parseInt(e.target.value) || 0">
-                  </div>
-                  <div class="field">
-                    <label for="bk-cur-stock">Current stock</label>
-                    <input id="bk-cur-stock" type="text" inputmode="numeric"
                       :value="form.stock ?? ''"
                       :oninput="e => form.stock = parseInt(e.target.value) || 0">
                   </div>
@@ -329,6 +295,20 @@
                 </div>
               </div>
 
+              <div :if="!form.is_stack" class="form-row">
+                <div class="field">
+                  <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
+                    <span class="toggle-switch">
+                      <input type="checkbox"
+                        :value="form.is_special"
+                        :change="v => form.is_special = v">
+                      <span class="slider"></span>
+                    </span>
+                    <span>Special book (BBT report)</span>
+                  </label>
+                </div>
+              </div>
+
               <div :if="modalBook" class="form-row">
                 <div class="field">
                   <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
@@ -354,25 +334,22 @@
     </template>
     <script>
       this.SIZES = ['Small','Medium','Big','Mahabig']
-      this.LANGUAGES = ['English','French','Arabic','Bengali','Hindi']
+      this.LANGUAGES = ['English','French','Spanish','Arabic','Bengali','Hindi','Gujarati','Chinese','Farsi','Russian','Urdu']
       // Low stock is per-book now: each book carries its own low_stock_threshold (default 5).
       this.isLowStock = function(b) { return (b.stock || 0) <= (b.low_stock_threshold ?? 5) }
       this.showModal = false
       this._downOnBackdrop = false
       this.modalBook = null
-      this.form = { title:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, sold_at_boutique:false, low_stock_threshold:5, pages:null, stock:0, initial_stock:0, active:true, is_stack:false, items:[] }
+      this.form = { title:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, is_special:false, low_stock_threshold:5, pages:null, stock:0, active:true, is_stack:false, items:[] }
       this.componentSearch = ''
       // Snapshot of the catalog taken when the modal opens — the `books` prop is
       // not in scope inside the modal subtree, so the stack picker reads this instead.
       this._catalog = []
-      this.distributedOf = function(b) {
-        return Math.max(0, (b.initial_stock || 0) - (b.stock || 0))
-      }
       this.saving = false
       this.saveErr = null
+      this.importing = false
       this.filterSearch = ''
       this.filterSize = ''
-      this.filterBoutique = false
       this.filterLanguage = ''
       this.filterCover = ''
       this.filterType = ''   // '' = all, 'book', 'stack'
@@ -389,14 +366,13 @@
             var langOK = stack ? self.stackLangs(b).indexOf(self.filterLanguage) >= 0 : b.language === self.filterLanguage
             if (!langOK) return false
           }
-          // Size / cover / boutique are book-only filters → exclude stacks when set.
+          // Size / cover are book-only filters → exclude stacks when set.
           if (self.filterSize && (stack || self.sizeLabel(b.category) !== self.filterSize)) return false
           if (self.filterCover) {
             if (stack) return false
             var cover = (b.category && b.category[0] === 'H') ? 'Hard' : 'Soft'
             if (cover !== self.filterCover) return false
           }
-          if (self.filterBoutique && (stack || !b.sold_at_boutique)) return false
           return true
         })
       }
@@ -489,10 +465,9 @@
         this.form.points_per_unit = this.autoPointsFromPages(null)
         this.form.cost_cents = 0
         this.form.retail_price_cents = 0
-        this.form.sold_at_boutique = false
+        this.form.is_special = false
         this.form.low_stock_threshold = 5
         this.form.stock = 0
-        this.form.initial_stock = 0
         this.form.is_stack = false
         this.form.items = []
         this.componentSearch = ''
@@ -510,10 +485,9 @@
         this.form.points_per_unit = b.points_per_unit ?? this.autoPointsFromPages(b.pages)
         this.form.cost_cents = b.cost_cents || 0
         this.form.retail_price_cents = b.retail_price_cents || 0
-        this.form.sold_at_boutique = !!b.sold_at_boutique
+        this.form.is_special = !!b.is_special
         this.form.low_stock_threshold = b.low_stock_threshold ?? 5
         this.form.stock = b.stock ?? 0
-        this.form.initial_stock = b.initial_stock ?? 0
         this.form.active = b.active !== false
         this.form.is_stack = !!b.is_stack
         this.form.items = b.is_stack ? this.stackItemIds(b) : []
@@ -549,7 +523,7 @@
           points_per_unit:     self.form.points_per_unit || 0,
           cost_cents:          self.form.cost_cents || 0,
           retail_price_cents:  self.form.retail_price_cents || 0,
-          sold_at_boutique:    !!self.form.sold_at_boutique,
+          is_special:          !!self.form.is_special,
           low_stock_threshold: self.form.low_stock_threshold ?? 5,
           pages:               self.form.pages || null,
         }
@@ -558,15 +532,15 @@
           // PUT: preserve every existing server field (retail_price_cents, etc.)
           // by spreading modalBook first, then overlaying form values.
           payload = Object.assign({}, self.modalBook, formChanges, {
-            stock:         self.form.stock || 0,
-            initial_stock: self.form.initial_stock || 0,
-            active:        !!self.form.active,
+            stock:  self.form.stock || 0,
+            active: !!self.form.active,
           })
           delete payload.id
           delete payload.created_at
           delete payload.updated_at
           req = self.api.updateSankirtanBook(self.modalBook.id, payload)
         } else {
+          // Add: the admin enters the current on-hand count.
           payload = Object.assign({ stock: self.form.stock || 0 }, formChanges)
           req = self.api.createSankirtanBook(payload)
         }
@@ -580,6 +554,29 @@
           .catch(function(e) {
             self.saving = false
             self.saveErr = e.message || 'Failed to save'
+          })
+      }
+      this.exportCatalog = function() {
+        var self = this
+        self.api.downloadSankirtanCatalogXLSX()
+          .catch(function(e) { self.toast && self.toast(e.message || 'Failed to export', 'error') })
+      }
+      this.importCatalog = function(file) {
+        if (!file) return
+        var self = this
+        self.importing = true
+        self.api.importSankirtanBooks(file)
+          .then(function(res) {
+            self.importing = false
+            var msg = 'Imported ' + (res.imported || 0) + ' book' + (res.imported === 1 ? '' : 's')
+            if (res.updated) msg += ', ' + res.updated + ' updated'
+            if (res.skipped) msg += ', ' + res.skipped + ' skipped'
+            self.toast && self.toast(msg, 'success')
+            self.emit('reload')
+          })
+          .catch(function(e) {
+            self.importing = false
+            self.toast && self.toast(e.message || 'Failed to import', 'error')
           })
       }
       this.doDelete = function(b) {

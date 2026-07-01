@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-sessions-tab active:boolean="false" sessions:array loading:boolean="false" error:string="">
+  <sankirtan-sessions-tab active:boolean="false" sessions:array loading:boolean="false" error:string="" canmanage:boolean="false">
     <style>:host { display: contents; }</style>
     <template>
       <section :if="active">
@@ -26,6 +26,10 @@
             :oninput="e => filterLocation = e.target.value">
           <button :if="filterFrom || filterTo || filterWho || filterLocation" type="button" class="btn btn-outline btn-sm"
             :onclick="filterFrom = ''; filterTo = ''; filterWho = ''; filterLocation = ''">Clear</button>
+          <button :if="canmanage" type="button" class="btn btn-outline btn-sm"
+            :onclick="exportReport()">Export Excel</button>
+          <button :if="canmanage" type="button" class="btn btn-primary btn-sm"
+            :onclick="openEmailModal()">Email BBT report</button>
         </div>
 
         <div :if="loading && !sessions.length" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
@@ -81,7 +85,7 @@
                 <tbody>
                   <tr :each="sb in sess.books">
                     <td :text="sb.title_snapshot"></td>
-                    <td><span class="badge" :class="catCls(sb.category_snapshot)" :text="sb.category_snapshot"></span></td>
+                    <td><span class="badge" :class="catCls(sb.category_snapshot)" :text="coverLabel(sb.category_snapshot)"></span></td>
                     <td :text="sb.qty"></td>
                     <td :text="sb.line_points"></td>
                   </tr>
@@ -95,6 +99,72 @@
           </div>
         </div>
 
+        <!-- BBT report email modal -->
+        <div :if="showEmailModal" class="modal-overlay"
+          :onpointerdown="e => { _downOnBackdrop = (e.target === e.currentTarget) }"
+          :onclick="e => { if (_downOnBackdrop && e.target === e.currentTarget) closeEmailModal() }"
+          :onkeydown.esc.document="closeEmailModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <h2>Email BBT report</h2>
+              <button class="modal-close" type="button" aria-label="Close"
+                :onclick="closeEmailModal" :html="icon('close')"></button>
+            </div>
+            <form class="modal-body" :onsubmit.prevent="sendEmail()">
+              <div class="field">
+                <label for="bbt-to">To</label>
+                <input id="bbt-to" type="email" required
+                  :value="emailTo" :change="v => emailTo = v">
+              </div>
+              <div class="field">
+                <label for="bbt-cc">Cc (comma-separated)</label>
+                <input id="bbt-cc" type="text"
+                  :value="emailCc" :change="v => emailCc = v">
+              </div>
+              <div class="field">
+                <label for="bbt-subject">Subject</label>
+                <input id="bbt-subject" type="text" required
+                  :value="emailSubject" :change="v => emailSubject = v">
+              </div>
+              <div class="field">
+                <label for="bbt-msg">Greeting</label>
+                <textarea id="bbt-msg" rows="4"
+                  :value="emailMessage" :change="v => emailMessage = v"></textarea>
+              </div>
+              <div class="field">
+                <label for="bbt-note">Special books (optional)</label>
+                <textarea id="bbt-note" rows="3" placeholder="e.g. 12 Srimad-Bhagavatam sets…"
+                  :value="emailSpecialNote" :change="v => emailSpecialNote = v"></textarea>
+              </div>
+
+              <!-- Score table preview -->
+              <div :if="reportLoading" class="dim" style="padding:var(--s-md); text-align:center">Loading…</div>
+              <table :if="report && !reportLoading" style="font-size:var(--f-sm); margin-top:var(--s-sm)">
+                <thead>
+                  <tr><th>Category</th><th>Books</th><th>Points</th></tr>
+                </thead>
+                <tbody>
+                  <tr :each="row in report.rows">
+                    <td :text="row.label"></td>
+                    <td :text="row.books"></td>
+                    <td :text="row.points"></td>
+                  </tr>
+                  <tr style="font-weight:var(--f-wt-b)">
+                    <td>Total</td>
+                    <td :text="report.total_books"></td>
+                    <td :text="report.total_points"></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div :if="emailErr" class="login-error" :text="emailErr"></div>
+              <button type="submit" class="btn btn-primary"
+                :class="{'btn-loading': sending}" :disabled="reportLoading || sending"
+                :text="sending ? 'Sending…' : 'Send'"></button>
+            </form>
+          </div>
+        </div>
+
       </section>
     </template>
     <script>
@@ -102,9 +172,26 @@
       this.filterTo = ''
       this.filterWho = ''
       this.filterLocation = ''
+
+      // BBT monthly score report — Excel export + emailed report (manager-only).
+      this.DEFAULT_TO = 'mayapur@aol.com'
+      this.DEFAULT_CC = ['Saksik.remy@gmail.com', 'gokul1008@yahoo.com', 'srchoudhury42@gmail.com', 'dfcreative@gmail.com', 'charith108@gmail.com']
+      this.showEmailModal = false
+      this.report = null
+      this.reportLoading = false
+      this.sending = false
+      this.emailErr = null
+      this.emailTo = ''
+      this.emailCc = ''
+      this.emailSubject = ''
+      this.emailMessage = ''
+      this.emailSpecialNote = ''
       this.catCls = function(cat) {
         return ({ S1:'cat-blue', S2:'cat-teal', S3:'cat-green', S4:'cat-purple',
                   H1:'cat-blue', H2:'cat-teal', H3:'cat-green', H4:'cat-purple' })[cat] || 'cat-gray'
+      }
+      this.coverLabel = function(cat) {
+        return cat === 'STK' ? 'Stack' : (cat && cat[0] === 'H') ? 'Hard cover' : 'Soft cover'
       }
       this.toggleSession = function(sess) {
         var self = this
@@ -152,6 +239,79 @@
           })
           return { label: label, sessions: map[k] }
         })
+      }
+
+      // reportRange resolves the active filter into {from, to}, defaulting to the
+      // current month (1st → today) when the filter is empty.
+      this.reportRange = function() {
+        var now = new Date()
+        var pad = function(n) { return String(n).padStart(2, '0') }
+        var firstOfMonth = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-01'
+        var today = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate())
+        return { from: this.filterFrom || firstOfMonth, to: this.filterTo || today }
+      }
+      this.monthLabel = function(from) {
+        return new Date(from + 'T00:00:00').toLocaleDateString(undefined, { month:'long', year:'numeric' })
+      }
+      this.exportReport = function() {
+        var self = this
+        var r = self.reportRange()
+        self.api.downloadSankirtanReportXLSX(r.from, r.to)
+          .catch(function(e) { self.toast && self.toast(e.message || 'Failed to export', 'error') })
+      }
+      this.openEmailModal = function() {
+        var self = this
+        var r = self.reportRange()
+        var label = self.monthLabel(r.from)
+        self.emailTo = self.DEFAULT_TO
+        self.emailCc = self.DEFAULT_CC.join(', ')
+        self.emailSubject = 'ISKCON Montreal — BBT Score ' + label
+        self.emailMessage = 'Hare Krisna,\n\nPlease accept our humble obeisances, all glories to Srila Prabhupada.\n\nPlease find here the score for the Month of ' + label + ' for ISKCON Montreal.'
+        self.emailSpecialNote = ''
+        self.emailErr = null
+        self.report = null
+        self.reportLoading = true
+        self.showEmailModal = true
+        self.api.getSankirtanReport(r.from, r.to)
+          .then(function(rep) {
+            self.report = rep
+            self.reportLoading = false
+            // Prefill the (still-editable) note with the per-title special-book counts.
+            if (rep.special_books && rep.special_books.length) {
+              self.emailSpecialNote = rep.special_books
+                .map(function(r) { return r.title + ': ' + r.count }).join('\n')
+            }
+          })
+          .catch(function(e) {
+            self.reportLoading = false
+            self.emailErr = e.message || 'Failed to load report'
+          })
+      }
+      this.closeEmailModal = function() { this.showEmailModal = false }
+      this.sendEmail = function() {
+        var self = this
+        if (self.reportLoading || self.sending) return
+        var cc = (self.emailCc || '').split(/[,\n]/).map(function(s) { return s.trim() }).filter(Boolean)
+        var r = self.reportRange()
+        self.sending = true
+        self.emailErr = null
+        self.api.sendSankirtanReportEmail({
+          from: r.from,
+          to_date: r.to,
+          subject: self.emailSubject,
+          message: self.emailMessage,
+          special_note: self.emailSpecialNote,
+          recipients: { to: self.emailTo, cc: cc },
+        })
+          .then(function() {
+            self.sending = false
+            self.showEmailModal = false
+            self.toast && self.toast('BBT report sent', 'success')
+          })
+          .catch(function(e) {
+            self.sending = false
+            self.emailErr = e.message || 'Failed to send'
+          })
       }
     </script>
   </sankirtan-sessions-tab>
