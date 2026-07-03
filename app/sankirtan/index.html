@@ -22,9 +22,11 @@ preloads:
 <sankirtan-sessions-tab
   :active="activeTab === 'sessions'"
   :sessions="sessions"
+  :books="books"
   :loading="sessionsLoading"
   :error="sessionsErr"
-  :canmanage="can('sankirtan:manage')">
+  :canmanage="can('sankirtan:manage')"
+  :onreload="loadSessions">
 </sankirtan-sessions-tab>
 
 <sankirtan-leaderboard-tab
