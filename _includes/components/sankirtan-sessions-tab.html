@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-sessions-tab active:boolean="false" sessions:array loading:boolean="false" error:string="" canmanage:boolean="false">
+  <sankirtan-sessions-tab active:boolean="false" sessions:array books:array loading:boolean="false" error:string="" canmanage:boolean="false">
     <style>:host { display: contents; }</style>
     <template>
       <section :if="active">
@@ -25,11 +25,23 @@
             :value="filterLocation"
             :oninput="e => filterLocation = e.target.value">
           <button :if="filterFrom || filterTo || filterWho || filterLocation" type="button" class="btn btn-outline btn-sm"
-            :onclick="filterFrom = ''; filterTo = ''; filterWho = ''; filterLocation = ''">Clear</button>
+            :onclick="filterFrom='', filterTo='', filterWho='', filterLocation=''">Clear</button>
           <button :if="canmanage" type="button" class="btn btn-outline btn-sm"
-            :onclick="exportReport()">Export Excel</button>
-          <button :if="canmanage" type="button" class="btn btn-primary btn-sm"
+            :onclick="backupSessions()" title="Download every session as a JSON backup">Export</button>
+          <button :if="canmanage" type="button" class="btn btn-outline btn-sm"
+            :class="{'btn-loading': restoring}"
+            :onclick="(host || document).querySelector('#sessions-import-input')?.click()"
+            title="Restore sessions from a JSON backup">Import</button>
+          <input type="file" id="sessions-import-input" accept=".json,application/json" style="display:none"
+            :onchange="e => { restoreSessions(e.target.files[0]); e.target.value = '' }">
+        </div>
+
+        <!-- BBT report actions, on their own line below the filter -->
+        <div :if="canmanage" style="display:flex; gap:var(--s-sm); flex-wrap:wrap; margin-bottom:var(--s-lg)">
+          <button type="button" class="btn btn-primary btn-sm"
             :onclick="openEmailModal()">Email BBT report</button>
+          <button type="button" class="btn btn-primary btn-sm"
+            :onclick="exportReport()">Export BBT report to Excel</button>
         </div>
 
         <div :if="loading && !sessions.length" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
@@ -82,12 +94,31 @@
                     <th>Points</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr :each="sb in sess.books">
-                    <td :text="sb.title_snapshot"></td>
+                <tbody :each="sb in sess.books">
+                  <tr :style="{cursor: sb.category_snapshot === 'STK' ? 'pointer' : ''}"
+                    :onclick.stop="sb.category_snapshot === 'STK' && toggleStackRow(sb)">
+                    <td>
+                      <span :if="sb.category_snapshot === 'STK'" :html="icon('chevron_right')"
+                        style="display:inline-flex; vertical-align:middle; margin-right:var(--s-xs); transition:transform .15s"
+                        :style="{transform: stackOpen[sb.id] ? 'rotate(90deg)' : 'none'}"></span>
+                      <span :text="sb.title_snapshot"></span>
+                      <span :if="sb.excluded" class="badge" style="margin-left:var(--s-xs); background:#ffedd5; color:#ea580c">Excluded from BBT</span>
+                    </td>
                     <td><span class="badge" :class="catCls(sb.category_snapshot)" :text="coverLabel(sb.category_snapshot)"></span></td>
                     <td :text="sb.qty"></td>
-                    <td :text="sb.line_points"></td>
+                    <td :text="pointsLabel(sb)"></td>
+                  </tr>
+                  <!-- Foldable stack breakdown: component books resolved from the current catalog -->
+                  <tr :if="sb.category_snapshot === 'STK' && stackOpen[sb.id]">
+                    <td colspan="4" style="padding-left:var(--s-xl)">
+                      <div :if="!stackComponents(sb).length" class="dim" style="font-size:var(--f-sm)">Breakdown unavailable (stack no longer in catalog).</div>
+                      <div :each="comp in stackComponents(sb)"
+                        style="display:flex; align-items:center; gap:var(--s-sm); padding:var(--s-xs) 0">
+                        <span style="flex:1" :text="comp.title + (comp.language ? ' (' + comp.language + ')' : '')"></span>
+                        <span class="badge" :class="catCls(comp.category)" :text="coverLabel(comp.category)"></span>
+                        <span class="dim" style="font-size:var(--f-sm)" :text="'×' + sb.qty"></span>
+                      </div>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -132,8 +163,8 @@
                   :value="emailMessage" :change="v => emailMessage = v"></textarea>
               </div>
               <div class="field">
-                <label for="bbt-note">Special books (optional)</label>
-                <textarea id="bbt-note" rows="3" placeholder="e.g. 12 Srimad-Bhagavatam sets…"
+                <label for="bbt-note">Books excluded from BBT (optional)</label>
+                <textarea id="bbt-note" rows="3" placeholder="e.g. Bhagavad-gita (Farsi): 12…"
                   :value="emailSpecialNote" :change="v => emailSpecialNote = v"></textarea>
               </div>
 
@@ -172,6 +203,7 @@
       this.filterTo = ''
       this.filterWho = ''
       this.filterLocation = ''
+      this.restoring = false
 
       // BBT monthly score report — Excel export + emailed report (manager-only).
       this.DEFAULT_TO = 'mayapur@aol.com'
@@ -192,6 +224,24 @@
       }
       this.coverLabel = function(cat) {
         return cat === 'STK' ? 'Stack' : (cat && cat[0] === 'H') ? 'Hard cover' : 'Soft cover'
+      }
+      // Excluded books are recorded but not scored — show a dash instead of 0 points.
+      this.pointsLabel = function(sb) { return sb && sb.excluded ? '—' : (sb ? sb.line_points : '') }
+      // Stack breakdown — recorded stack lines aren't snapshotted with their components, so we
+      // resolve them from the current catalog (mirrors the BBT report). Each stack contains one of
+      // each component book, so a component's qty in this line equals the stack line's qty.
+      this.bookById = function(id) { return (this.books || []).find(function(x) { return x.id === id }) }
+      this.stackComponents = function(sb) {
+        var self = this
+        var stack = this.bookById(sb.book_id)
+        if (!stack || !stack.is_stack || !stack.items) return []
+        return stack.items.map(function(it) { return self.bookById(it.book_id) }).filter(Boolean)
+      }
+      // Per-stack-line open state lives in a top-level reactive map keyed by the session_book id.
+      // (Mutating a fresh `_open` flag on a lazily-loaded sess.books item isn't tracked by sprae.)
+      this.stackOpen = {}
+      this.toggleStackRow = function(sb) {
+        this.stackOpen = Object.assign({}, this.stackOpen, { [sb.id]: !this.stackOpen[sb.id] })
       }
       this.toggleSession = function(sess) {
         var self = this
@@ -259,6 +309,28 @@
         self.api.downloadSankirtanReportXLSX(r.from, r.to)
           .catch(function(e) { self.toast && self.toast(e.message || 'Failed to export', 'error') })
       }
+      // Backup/restore of the full session history (manager-only). Backup downloads
+      // a JSON bundle of every session; Restore uploads one back, skipping sessions
+      // already present, then reloads the list.
+      this.backupSessions = function() {
+        var self = this
+        self.api.downloadSankirtanSessionsBackup()
+          .catch(function(e) { self.toast && self.toast(e.message || 'Failed to export backup', 'error') })
+      }
+      this.restoreSessions = function(file) {
+        if (!file) return
+        var self = this
+        self.restoring = true
+        self.api.importSankirtanSessions(file)
+          .then(function(res) {
+            var msg = 'Restored ' + (res.imported || 0) + ' session' + (res.imported === 1 ? '' : 's')
+            if (res.skipped) msg += ', ' + res.skipped + ' skipped (already present)'
+            self.toast && self.toast(msg, 'success')
+            self.emit('reload')
+          })
+          .catch(function(e) { self.toast && self.toast(e.message || 'Failed to restore', 'error') })
+          .finally(function() { self.restoring = false })
+      }
       this.openEmailModal = function() {
         var self = this
         var r = self.reportRange()
@@ -276,10 +348,11 @@
           .then(function(rep) {
             self.report = rep
             self.reportLoading = false
-            // Prefill the (still-editable) note with the per-title special-book counts.
-            if (rep.special_books && rep.special_books.length) {
-              self.emailSpecialNote = rep.special_books
-                .map(function(r) { return r.title + ': ' + r.count }).join('\n')
+            // Prefill the (still-editable) note with the per-title counts of the books
+            // excluded from the BBT score (Farsi/Arabic + any manually-excluded title).
+            if (rep.excluded_books && rep.excluded_books.length) {
+              self.emailSpecialNote = rep.excluded_books
+                .map(function(r) { return r.title + (r.language ? ' (' + r.language + ')' : '') + ': ' + r.count }).join('\n')
             }
           })
           .catch(function(e) {

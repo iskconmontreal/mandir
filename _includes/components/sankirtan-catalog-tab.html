@@ -127,10 +127,12 @@
               <span :if="!b.is_stack" class="badge" :class="catCls(b.category)" :text="sizeLabel(b.category)"></span>
               <span :if="!b.is_stack && b.language" class="badge cat-gray" :text="b.language"></span>
               <span :each="lg in (b.is_stack ? stackLangs(b) : [])" class="badge cat-gray" :text="lg"></span>
-              <span><span class="meta-label">Points:</span><span class="meta-value" :text="b.points_per_unit"></span></span>
+              <span :if="b.exclude_from_bbt" class="badge" style="background:#ffedd5; color:#ea580c">Excluded from BBT</span>
+              <span :if="!b.exclude_from_bbt"><span class="meta-label">Points:</span><span class="meta-value" :text="b.points_per_unit"></span></span>
               <span><span class="meta-label">Cost:</span><span class="meta-value" :text="b.cost_cents ? '$' + fmtAmt(b.cost_cents) : '—'"></span></span>
               <span :if="!b.is_stack"><span class="meta-label">Pages:</span><span class="meta-value" :text="b.pages || '—'"></span></span>
               <span :if="b.is_stack"><span class="meta-label">Contains:</span><span class="meta-value" :text="(b.books_per_unit || stackContents(b).length) + ' books'"></span></span>
+              <span :if="b.note"><span class="meta-label">Note:</span><span class="meta-value" :text="b.note"></span></span>
               <span :if="b.active" class="badge badge-paid">Active</span>
               <span :if="b.active === false" class="badge badge-rejected">Inactive</span>
 
@@ -152,6 +154,9 @@
                 </span>
               </span>
             </div>
+
+            <p :if="!b.is_stack && isTrackedSeparately(b.language)" class="dim" style="font-size:var(--f-sm); margin:var(--s-sm) 0 0"
+              :text="b.language + ' is tracked separately by the BBT — excluded from the BBT report.'"></p>
 
             <div class="book-stock" :if="!b.is_stack">
               <span class="stock-item">
@@ -208,10 +213,12 @@
                 <div class="form-row">
                   <div class="field">
                     <label for="bk-lang">Language</label>
-                    <select id="bk-lang" :disabled="form.is_stack" :change="v => form.language = v">
+                    <select id="bk-lang" :disabled="form.is_stack" :change="v => { form.language = v; setExcludeFromBBT(isTrackedSeparately(v)) }">
                       <option value="" :selected="!form.language">— Select —</option>
                       <option :each="l in LANGUAGES" :value="l" :text="l" :selected="l === form.language"></option>
                     </select>
+                    <p :if="isTrackedSeparately(form.language)" class="dim" style="font-size:var(--f-sm); margin:var(--s-xs) 0 0"
+                      :text="form.language + ' is tracked separately by the BBT — excluded from the BBT report.'"></p>
                   </div>
                 </div>
                 <div class="form-row">
@@ -248,6 +255,14 @@
                 </div>
               </div>
 
+              <!-- ── Note (applies to books and stacks) ── -->
+              <div class="field">
+                <label for="bk-note">Note</label>
+                <textarea id="bk-note" rows="2" placeholder="e.g. To order 2 boxes"
+                  :value="form.note"
+                  :oninput="e => form.note = e.target.value"></textarea>
+              </div>
+
               <!-- ── Stack-only fields: component picker ── -->
               <div :if="form.is_stack" class="field">
                 <label>Books in this stack
@@ -267,6 +282,7 @@
                   <label :each="rb in componentResults()" style="display:flex; align-items:center; gap:var(--s-sm); padding:var(--s-xs) var(--s-sm); cursor:pointer">
                     <input type="checkbox" :checked="isComponent(rb.id)" :onchange="toggleComponent(rb.id)">
                     <span :text="rb.title"></span>
+                    <span :if="!rb.is_stack" class="badge" :class="coverCls(rb.category)" :text="coverLabel(rb.category)"></span>
                     <span :if="rb.language" class="badge cat-gray" :text="rb.language"></span>
                     <span class="dim" style="margin-left:auto; font-size:var(--f-sm)" :text="rb.points_per_unit + ' pts · $' + ((rb.cost_cents || 0) / 100).toFixed(2)"></span>
                   </label>
@@ -276,7 +292,7 @@
               <!-- ── Shared: Cost / Retail / Score ── -->
               <div class="form-row" style="align-items:flex-end">
                 <div class="field">
-                  <label for="bk-cost">Cost ($ CAD) <span class="dim" style="font-weight:normal">(temple's cost)</span></label>
+                  <label for="bk-cost">Cost price (CAD)</label>
                   <input id="bk-cost" type="text" inputmode="decimal" placeholder="0.00"
                     :value="form.cost_cents ? (form.cost_cents / 100).toFixed(2) : ''"
                     :oninput="e => form.cost_cents = Math.round(parseFloat(e.target.value || 0) * 100)">
@@ -288,8 +304,9 @@
                     :oninput="e => form.retail_price_cents = Math.round(parseFloat(e.target.value || 0) * 100)">
                 </div>
                 <div class="field">
-                  <label for="bk-score">Score <span class="dim" style="font-weight:normal" :if="form.is_stack">(Σ components)</span></label>
+                  <label for="bk-score">Score <span class="dim" style="font-weight:normal" :if="form.is_stack">(sum of score)</span></label>
                   <input id="bk-score" type="number" step="0.25" min="0" placeholder="0"
+                    :disabled="form.exclude_from_bbt"
                     :value="form.points_per_unit || ''"
                     :oninput="e => form.points_per_unit = parseFloat(e.target.value) || 0">
                 </div>
@@ -300,11 +317,11 @@
                   <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
                     <span class="toggle-switch">
                       <input type="checkbox"
-                        :value="form.is_special"
-                        :change="v => form.is_special = v">
+                        :value="form.exclude_from_bbt"
+                        :change="v => setExcludeFromBBT(v)">
                       <span class="slider"></span>
                     </span>
-                    <span>Special book (BBT report)</span>
+                    <span>Exclude from BBT report</span>
                   </label>
                 </div>
               </div>
@@ -335,12 +352,22 @@
     <script>
       this.SIZES = ['Small','Medium','Big','Mahabig']
       this.LANGUAGES = ['English','French','Spanish','Arabic','Bengali','Hindi','Gujarati','Chinese','Farsi','Russian','Urdu']
+      // Languages the BBT tracks separately — Mandir defaults "Exclude from BBT" on
+      // for these and shows a reminder note (the flag is still editable per book).
+      this.TRACKED_SEPARATELY = ['Farsi','Arabic']
+      this.isTrackedSeparately = function(lang) { return this.TRACKED_SEPARATELY.indexOf(lang) >= 0 }
+      // Excluding a book from the BBT report zeroes its score (no points computed);
+      // un-excluding restores the page-derived score.
+      this.setExcludeFromBBT = function(on) {
+        this.form.exclude_from_bbt = on
+        this.form.points_per_unit = on ? 0 : this.autoPointsFromPages(this.form.pages)
+      }
       // Low stock is per-book now: each book carries its own low_stock_threshold (default 5).
       this.isLowStock = function(b) { return (b.stock || 0) <= (b.low_stock_threshold ?? 5) }
       this.showModal = false
       this._downOnBackdrop = false
       this.modalBook = null
-      this.form = { title:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, is_special:false, low_stock_threshold:5, pages:null, stock:0, active:true, is_stack:false, items:[] }
+      this.form = { title:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, exclude_from_bbt:false, low_stock_threshold:5, pages:null, stock:0, note:'', active:true, is_stack:false, items:[] }
       this.componentSearch = ''
       // Snapshot of the catalog taken when the modal opens — the `books` prop is
       // not in scope inside the modal subtree, so the stack picker reads this instead.
@@ -384,8 +411,10 @@
       this.coverCls = function(cat) { return (cat && cat[0] === 'H') ? 'cat-purple' : 'cat-blue' }
       // The category code is internal: cover + page count fully determine it.
       // Page count → size tier (rubric ranges). Anything below 150 is Small (tier 1).
+      // A blank/invalid page count → tier 0 = size pending (cover known, no score).
       this.tierFromPages = function(p) {
         p = parseInt(p, 10) || 0
+        if (p < 1) return 0
         if (p >= 500) return 4
         if (p >= 300) return 3
         if (p >= 150) return 2
@@ -393,9 +422,9 @@
       }
       this.coverLetter = function(cover) { return cover === 'Hard' ? 'H' : 'S' }
       this.categoryFrom = function(cover, pages) { return this.coverLetter(cover) + this.tierFromPages(pages) }
-      this.autoPointsFromPages = function(pages) { return ({ 1:0.25, 2:0.5, 3:1.0, 4:2.0 })[this.tierFromPages(pages)] }
-      // Size label read from a STORED code's digit.
-      this.sizeLabel = function(cat) { return ({ '1':'Small', '2':'Medium', '3':'Big', '4':'Mahabig' })[cat && cat[1]] || '—' }
+      this.autoPointsFromPages = function(pages) { return ({ 0:0, 1:0.25, 2:0.5, 3:1.0, 4:2.0 })[this.tierFromPages(pages)] }
+      // Size label read from a STORED code's digit (tier 0 = pending).
+      this.sizeLabel = function(cat) { return ({ '0':'Pending', '1':'Small', '2':'Medium', '3':'Big', '4':'Mahabig' })[cat && cat[1]] || '—' }
       // ── Stacks ──────────────────────────────────────────────
       this.isStack = function(b) { return !!(b && b.is_stack) }
       this.setIsStack = function(on) {
@@ -465,9 +494,10 @@
         this.form.points_per_unit = this.autoPointsFromPages(null)
         this.form.cost_cents = 0
         this.form.retail_price_cents = 0
-        this.form.is_special = false
+        this.form.exclude_from_bbt = false
         this.form.low_stock_threshold = 5
         this.form.stock = 0
+        this.form.note = ''
         this.form.is_stack = false
         this.form.items = []
         this.componentSearch = ''
@@ -485,9 +515,10 @@
         this.form.points_per_unit = b.points_per_unit ?? this.autoPointsFromPages(b.pages)
         this.form.cost_cents = b.cost_cents || 0
         this.form.retail_price_cents = b.retail_price_cents || 0
-        this.form.is_special = !!b.is_special
+        this.form.exclude_from_bbt = !!b.exclude_from_bbt
         this.form.low_stock_threshold = b.low_stock_threshold ?? 5
         this.form.stock = b.stock ?? 0
+        this.form.note = b.note || ''
         this.form.active = b.active !== false
         this.form.is_stack = !!b.is_stack
         this.form.items = b.is_stack ? this.stackItemIds(b) : []
@@ -516,6 +547,7 @@
           points_per_unit:    self.form.points_per_unit || 0,
           cost_cents:         self.form.cost_cents || 0,
           retail_price_cents: self.form.retail_price_cents || 0,
+          note:               self.form.note || '',
         } : {
           title:               self.form.title,
           language:            self.form.language || '',
@@ -523,9 +555,10 @@
           points_per_unit:     self.form.points_per_unit || 0,
           cost_cents:          self.form.cost_cents || 0,
           retail_price_cents:  self.form.retail_price_cents || 0,
-          is_special:          !!self.form.is_special,
+          exclude_from_bbt:    !!self.form.exclude_from_bbt,
           low_stock_threshold: self.form.low_stock_threshold ?? 5,
           pages:               self.form.pages || null,
+          note:                self.form.note || '',
         }
         var payload, req
         if (self.modalBook) {
@@ -571,6 +604,8 @@
             var msg = 'Imported ' + (res.imported || 0) + ' book' + (res.imported === 1 ? '' : 's')
             if (res.updated) msg += ', ' + res.updated + ' updated'
             if (res.skipped) msg += ', ' + res.skipped + ' skipped'
+            var stacks = (res.stacks_imported || 0) + (res.stacks_updated || 0)
+            if (stacks) msg += ', ' + stacks + ' stack' + (stacks === 1 ? '' : 's')
             self.toast && self.toast(msg, 'success')
             self.emit('reload')
           })
@@ -583,10 +618,14 @@
         var self = this
         b._deleting = true
         self.api.deleteSankirtanBook(b.id)
-          .then(function() {
+          .then(function(res) {
             b._deleting = false
             b._confirm = false
-            self.toast && self.toast('Book deleted', 'success')
+            if (res && res.archived) {
+              self.toast && self.toast('Book is in use — archived instead of deleted')
+            } else {
+              self.toast && self.toast('Book deleted', 'success')
+            }
             self.emit('reload')
           })
           .catch(function(e) {
