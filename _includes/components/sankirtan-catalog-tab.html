@@ -130,6 +130,7 @@
               <span :if="b.exclude_from_bbt" class="badge" style="background:#ffedd5; color:#ea580c">Excluded from BBT</span>
               <span :if="!b.exclude_from_bbt"><span class="meta-label">Points:</span><span class="meta-value" :text="b.points_per_unit"></span></span>
               <span><span class="meta-label">Cost:</span><span class="meta-value" :text="b.cost_cents ? '$' + fmtAmt(b.cost_cents) : '—'"></span></span>
+              <span><span class="meta-label">Retail:</span><span class="meta-value" :text="b.retail_price_cents ? '$' + fmtAmt(b.retail_price_cents) : '—'"></span></span>
               <span :if="!b.is_stack"><span class="meta-label">Pages:</span><span class="meta-value" :text="b.pages || '—'"></span></span>
               <span :if="b.is_stack"><span class="meta-label">Contains:</span><span class="meta-value" :text="(b.books_per_unit || stackContents(b).length) + ' books'"></span></span>
               <span :if="b.note"><span class="meta-label">Note:</span><span class="meta-value" :text="b.note"></span></span>
