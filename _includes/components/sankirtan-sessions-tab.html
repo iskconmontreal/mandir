@@ -33,7 +33,7 @@
             :onclick="(host || document).querySelector('#sessions-import-input')?.click()"
             title="Restore sessions from a JSON backup">Import</button>
           <input type="file" id="sessions-import-input" accept=".json,application/json" style="display:none"
-            :onchange="e => { restoreSessions(e.target.files[0]); e.target.value = '' }">
+            :onchange="e => { openRestoreModal(e.target.files[0]); e.target.value = '' }">
         </div>
 
         <!-- BBT report actions, on their own line below the filter -->
@@ -125,6 +125,23 @@
               <div :if="sess.note" class="dim"
                 style="font-size:var(--f-sm); margin-top:var(--s-sm)"
                 :text="sess.note"></div>
+
+              <div :if="canmanage" style="display:flex; align-items:center; gap:var(--s-sm); margin-top:var(--s-md)">
+                <button type="button" class="btn btn-outline btn-sm"
+                  :onclick.stop="openEditModal(sess)">Edit</button>
+                <span :if="!sess._confirm">
+                  <button type="button" class="btn btn-outline btn-sm" style="color:var(--c-err)"
+                    :onclick.stop="sess._confirm = true">Delete</button>
+                </span>
+                <span :if="sess._confirm" style="display:inline-flex; align-items:center; gap:var(--s-xs)">
+                  <span class="dim" style="font-size:var(--f-sm)">Delete session and restore stock?</span>
+                  <button type="button" class="btn btn-danger btn-sm"
+                    :class="{'btn-loading': sess._deleting}"
+                    :onclick.stop="doDeleteSession(sess)">Yes</button>
+                  <button type="button" class="btn-link" style="font-size:var(--f-sm)"
+                    :onclick.stop="sess._confirm = false">No</button>
+                </span>
+              </div>
             </div>
 
           </div>
@@ -196,6 +213,125 @@
           </div>
         </div>
 
+        <!-- Restore confirm — sessions only, or also decrement catalog stock -->
+        <div :if="showRestoreModal" class="modal-overlay"
+          :onpointerdown="e => { _downOnBackdrop = (e.target === e.currentTarget) }"
+          :onclick="e => { if (_downOnBackdrop && e.target === e.currentTarget) closeRestoreModal() }"
+          :onkeydown.esc.document="closeRestoreModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <h2>Restore sessions from backup</h2>
+              <button class="modal-close" type="button" aria-label="Close"
+                :onclick="closeRestoreModal" :html="icon('close')"></button>
+            </div>
+            <div class="modal-body">
+              <p :text="restoreFile ? restoreFile.name : ''" class="dim"></p>
+              <label style="display:flex; align-items:center; gap:var(--s-xs); cursor:pointer">
+                <input type="checkbox"
+                  :checked="restoreAdjustStock"
+                  :onchange="e => restoreAdjustStock = e.target.checked">
+                Update catalog stock
+              </label>
+              <p class="dim" style="margin:0 0 var(--s-sm)">Tick if the catalog holds the original stock (e.g. fresh reseed).</p>
+              <label style="display:flex; align-items:center; gap:var(--s-xs); margin-bottom:var(--s-md); cursor:pointer">
+                <input type="checkbox"
+                  :checked="restoreConsolidate"
+                  :onchange="e => restoreConsolidate = e.target.checked">
+                Consolidate into one session per distributor per day
+              </label>
+              <button type="button" class="btn btn-primary"
+                :onclick="confirmRestore()">Import</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Session edit modal (manager-only) -->
+        <div :if="showEditModal" class="modal-overlay"
+          :onpointerdown="e => { _downOnBackdrop = (e.target === e.currentTarget) }"
+          :onclick="e => { if (_downOnBackdrop && e.target === e.currentTarget) closeEditModal() }"
+          :onkeydown.esc.document="closeEditModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <h2>Edit session</h2>
+              <button class="modal-close" type="button" aria-label="Close"
+                :onclick="closeEditModal" :html="icon('close')"></button>
+            </div>
+            <form class="modal-body" :onsubmit.prevent="saveEdit()">
+              <div class="form-row">
+                <div class="field">
+                  <label for="se-who">Distributor</label>
+                  <input id="se-who" type="text" required
+                    :value="editForm.distributor_name" :change="v => editForm.distributor_name = v">
+                </div>
+                <div class="field">
+                  <label for="se-date">Date</label>
+                  <input id="se-date" type="date" required
+                    :value="editForm.occurred_at"
+                    :onchange="e => editForm.occurred_at = e.target.value">
+                </div>
+              </div>
+              <div class="field">
+                <label for="se-loc">Location</label>
+                <input id="se-loc" type="text"
+                  :value="editForm.location" :change="v => editForm.location = v">
+              </div>
+
+              <div class="field">
+                <label>Books</label>
+                <div :each="(row, i) in editForm.books"
+                  style="display:flex; gap:var(--s-sm); align-items:center; margin-bottom:var(--s-xs)">
+                  <select style="flex:1"
+                    :value="String(row.book_id || '')"
+                    :change="v => row.book_id = parseInt(v) || 0">
+                    <option value="">Select a book…</option>
+                    <option :each="b in editBookOptions(row)" :value="String(b.id)"
+                      :text="b.title + (b.language ? ' (' + b.language + ')' : '')"></option>
+                  </select>
+                  <input type="text" inputmode="numeric" style="width:4.5rem" placeholder="Qty"
+                    :value="row.qty || ''"
+                    :oninput="e => row.qty = parseInt(e.target.value) || 0">
+                  <button type="button" class="btn-link" style="color:var(--c-err)"
+                    :onclick="editForm.books.splice(i, 1)">✕</button>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm"
+                  :onclick="editForm.books.push({book_id: 0, qty: 1})">Add book</button>
+              </div>
+
+              <div class="field">
+                <label>Payments</label>
+                <div :each="(row, i) in editForm.payments"
+                  style="display:flex; gap:var(--s-sm); align-items:center; margin-bottom:var(--s-xs)">
+                  <select style="flex:1"
+                    :value="row.method" :change="v => row.method = v">
+                    <option :each="m in PAYMENT_METHODS" :value="m" :text="m"></option>
+                  </select>
+                  <input type="text" inputmode="decimal" style="width:6rem" placeholder="0.00"
+                    :value="row.amount"
+                    :oninput="e => row.amount = e.target.value">
+                  <button type="button" class="btn-link" style="color:var(--c-err)"
+                    :onclick="editForm.payments.splice(i, 1)">✕</button>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm"
+                  :onclick="editForm.payments.push({method: 'Cash', amount: ''})">Add payment</button>
+                <div class="dim" style="font-size:var(--f-sm); margin-top:var(--s-xs)"
+                  :text="'Total collected: $' + editTotal()"></div>
+              </div>
+
+              <div class="field">
+                <label for="se-note">Note</label>
+                <textarea id="se-note" rows="2"
+                  :value="editForm.note" :change="v => editForm.note = v"></textarea>
+              </div>
+
+              <div :if="editErr" class="login-error" :text="editErr"></div>
+              <button type="submit" class="btn btn-primary"
+                :class="{'btn-loading': savingEdit}" :disabled="savingEdit"
+                :text="savingEdit ? 'Saving…' : 'Save'"></button>
+              <p class="dim" style="font-size:var(--f-sm); margin-top:var(--s-xs)">Points and costs are recalculated from the current catalog; stock is adjusted by the difference.</p>
+            </form>
+          </div>
+        </div>
+
       </section>
     </template>
     <script>
@@ -204,6 +340,16 @@
       this.filterWho = ''
       this.filterLocation = ''
       this.restoring = false
+      this.showRestoreModal = false
+      this.restoreFile = null
+      this.restoreAdjustStock = false
+      this.restoreConsolidate = false
+      this.PAYMENT_METHODS = ['Cash', 'Card', 'Cheque', 'Interac', 'Bank Transfer']
+      this.showEditModal = false
+      this.editSession = null
+      this.editForm = { distributor_name:'', occurred_at:'', location:'', note:'', books:[], payments:[] }
+      this.savingEdit = false
+      this.editErr = null
 
       // BBT monthly score report — Excel export + emailed report (manager-only).
       this.DEFAULT_TO = 'mayapur@aol.com'
@@ -259,6 +405,79 @@
             })
         }
       }
+      // Session edit/delete (manager-only). Edit sends the full session back;
+      // the backend recomputes points/costs and adjusts stock by the difference.
+      this.openEditModal = function(sess) {
+        this.editSession = sess
+        this.editForm = {
+          distributor_name: sess.distributor_name || '',
+          occurred_at: (sess.occurred_at || '').slice(0, 10),
+          location: sess.location || '',
+          note: sess.note || '',
+          books: (sess.books || []).map(function(b) { return { book_id: b.book_id, qty: b.qty } }),
+          payments: (sess.payments || []).map(function(p) { return { method: p.method, amount: (p.amount_cents / 100).toFixed(2) } })
+        }
+        this.editErr = null
+        this.showEditModal = true
+      }
+      this.closeEditModal = function() {
+        this.showEditModal = false
+        this.editSession = null
+      }
+      this.editBookOptions = function(row) {
+        var all = this.books || []
+        var list = all.filter(function(b) { return b.active !== false })
+        if (row.book_id && !list.some(function(b) { return b.id === row.book_id })) {
+          var cur = all.find(function(b) { return b.id === row.book_id })
+          if (cur) list = [cur].concat(list)
+        }
+        return list
+      }
+      this.editTotal = function() {
+        var sum = (this.editForm.payments || []).reduce(function(acc, p) { return acc + (parseFloat(p.amount) || 0) }, 0)
+        return sum.toFixed(2)
+      }
+      this.saveEdit = function() {
+        var self = this
+        var f = self.editForm
+        var books = f.books
+          .filter(function(b) { return b.book_id && b.qty > 0 })
+          .map(function(b) { return { book_id: b.book_id, qty: b.qty } })
+        if (!books.length) { self.editErr = 'At least one book is required'; return }
+        var payments = f.payments
+          .filter(function(p) { return (parseFloat(p.amount) || 0) > 0 })
+          .map(function(p) { return { method: p.method, amount_cents: Math.round(parseFloat(p.amount) * 100) } })
+        self.savingEdit = true
+        self.editErr = null
+        self.api.updateSankirtanSession(self.editSession.id, {
+          distributor_name: f.distributor_name,
+          occurred_at: f.occurred_at,
+          location: f.location,
+          note: f.note,
+          books: books,
+          payments: payments
+        })
+          .then(function() {
+            self.toast && self.toast('Session updated', 'success')
+            self.closeEditModal()
+            self.emit('reload')
+          })
+          .catch(function(e) { self.editErr = e.message || 'Failed to update session' })
+          .finally(function() { self.savingEdit = false })
+      }
+      this.doDeleteSession = function(sess) {
+        var self = this
+        sess._deleting = true
+        self.api.deleteSankirtanSession(sess.id)
+          .then(function(res) {
+            var msg = 'Session deleted'
+            if (res.stock_restored) msg += ', stock restored for ' + res.stock_restored + ' book line' + (res.stock_restored === 1 ? '' : 's')
+            self.toast && self.toast(msg, 'success')
+            self.emit('reload')
+          })
+          .catch(function(e) { self.toast && self.toast(e.message || 'Failed to delete session', 'error') })
+          .finally(function() { sess._deleting = false; sess._confirm = false })
+      }
       this.fmtTime = function(iso) {
         if (!iso) return '—'
         return new Date(iso).toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' })
@@ -309,22 +528,43 @@
         self.api.downloadSankirtanReportXLSX(r.from, r.to)
           .catch(function(e) { self.toast && self.toast(e.message || 'Failed to export', 'error') })
       }
-      // Backup/restore of the full session history (manager-only). Backup downloads
-      // a JSON bundle of every session; Restore uploads one back, skipping sessions
-      // already present, then reloads the list.
+      // Backup/restore of the full session history (manager-only). Restore asks
+      // whether to also decrement catalog stock for the imported sessions.
       this.backupSessions = function() {
         var self = this
         self.api.downloadSankirtanSessionsBackup()
           .catch(function(e) { self.toast && self.toast(e.message || 'Failed to export backup', 'error') })
       }
-      this.restoreSessions = function(file) {
+      this.openRestoreModal = function(file) {
+        if (!file) return
+        this.restoreFile = file
+        this.restoreAdjustStock = false
+        this.restoreConsolidate = false
+        this.showRestoreModal = true
+      }
+      this.closeRestoreModal = function() {
+        this.showRestoreModal = false
+        this.restoreFile = null
+      }
+      this.confirmRestore = function() {
+        var file = this.restoreFile
+        var adjustStock = this.restoreAdjustStock
+        var consolidate = this.restoreConsolidate
+        this.closeRestoreModal()
+        this.restoreSessions(file, adjustStock, consolidate)
+      }
+      this.restoreSessions = function(file, adjustStock, consolidate) {
         if (!file) return
         var self = this
         self.restoring = true
-        self.api.importSankirtanSessions(file)
+        self.api.importSankirtanSessions(file, adjustStock, consolidate)
           .then(function(res) {
             var msg = 'Restored ' + (res.imported || 0) + ' session' + (res.imported === 1 ? '' : 's')
+            if (res.merged != null && res.merged < res.total) msg += ' (consolidated from ' + res.total + ' records)'
             if (res.skipped) msg += ', ' + res.skipped + ' skipped (already present)'
+            if (res.stock_adjusted) msg += ', stock updated for ' + res.stock_adjusted + ' book line' + (res.stock_adjusted === 1 ? '' : 's')
+            var missing = res.missing_books ? res.missing_books.length : 0
+            if (missing) msg += ', ' + missing + ' line' + (missing === 1 ? '' : 's') + ' had no matching catalog book (stock unchanged)'
             self.toast && self.toast(msg, 'success')
             self.emit('reload')
           })
