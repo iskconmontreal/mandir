@@ -133,6 +133,7 @@
               <span><span class="meta-label">Retail:</span><span class="meta-value" :text="b.retail_price_cents ? '$' + fmtAmt(b.retail_price_cents) : '—'"></span></span>
               <span :if="!b.is_stack"><span class="meta-label">Pages:</span><span class="meta-value" :text="b.pages || '—'"></span></span>
               <span :if="b.is_stack"><span class="meta-label">Contains:</span><span class="meta-value" :text="(b.books_per_unit || stackContents(b).length) + ' books'"></span></span>
+              <span :if="!b.is_stack && b.author"><span class="meta-label">Author:</span><span class="meta-value" :text="b.author"></span></span>
               <span :if="b.note"><span class="meta-label">Note:</span><span class="meta-value" :text="b.note"></span></span>
               <span :if="b.active" class="badge badge-paid">Active</span>
               <span :if="b.active === false" class="badge badge-rejected">Inactive</span>
@@ -211,6 +212,18 @@
 
               <!-- ── Book-only fields ── -->
               <div :if="!form.is_stack" style="display:flex; flex-direction:column; gap:var(--s-md)">
+                <div class="form-row">
+                  <div class="field">
+                    <label for="bk-author">Author</label>
+                    <input id="bk-author" type="text" list="bk-author-list"
+                      placeholder="e.g. His Divine Grace A. C. Bhaktivedanta Swami Prabhupada"
+                      :value="form.author"
+                      :oninput="e => form.author = e.target.value">
+                    <datalist id="bk-author-list">
+                      <option :each="a in authorOptions()" :value="a"></option>
+                    </datalist>
+                  </div>
+                </div>
                 <div class="form-row">
                   <div class="field">
                     <label for="bk-lang">Language</label>
@@ -352,6 +365,16 @@
     </template>
     <script>
       this.SIZES = ['Small','Medium','Big','Mahabig']
+      this.DEFAULT_AUTHOR = 'His Divine Grace A. C. Bhaktivedanta Swami Prabhupada'
+      // Suggestions for the Author input: distinct authors already in the catalog,
+      // so the metrics grouping stays consistent (exact-string match).
+      this.authorOptions = function() {
+        var authors = [this.DEFAULT_AUTHOR]
+        ;(this._catalog || []).forEach(function(b) {
+          if (b.author && !b.is_stack && authors.indexOf(b.author) < 0) authors.push(b.author)
+        })
+        return authors
+      }
       this.LANGUAGES = ['English','French','Spanish','Arabic','Bengali','Hindi','Gujarati','Chinese','Farsi','Russian','Urdu']
       // Languages the BBT tracks separately — Mandir defaults "Exclude from BBT" on
       // for these and shows a reminder note (the flag is still editable per book).
@@ -368,7 +391,7 @@
       this.showModal = false
       this._downOnBackdrop = false
       this.modalBook = null
-      this.form = { title:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, exclude_from_bbt:false, low_stock_threshold:5, pages:null, stock:0, note:'', active:true, is_stack:false, items:[] }
+      this.form = { title:'', author:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, exclude_from_bbt:false, low_stock_threshold:5, pages:null, stock:0, note:'', active:true, is_stack:false, items:[] }
       this.componentSearch = ''
       // Snapshot of the catalog taken when the modal opens — the `books` prop is
       // not in scope inside the modal subtree, so the stack picker reads this instead.
@@ -489,6 +512,7 @@
       }
       this.openAdd = function() {
         this.form.title = ''
+        this.form.author = this.DEFAULT_AUTHOR
         this.form.language = ''
         this.form.cover = 'Soft'
         this.form.pages = null
@@ -509,6 +533,7 @@
       }
       this.openEdit = function(b) {
         this.form.title = b.title || ''
+        this.form.author = b.author || (b.is_stack ? '' : this.DEFAULT_AUTHOR)
         this.form.language = b.language || ''
         this.form.cover = (b.category && b.category[0] === 'H') ? 'Hard' : 'Soft'
         this.form.pages = b.pages || null
@@ -551,6 +576,7 @@
           note:               self.form.note || '',
         } : {
           title:               self.form.title,
+          author:              (self.form.author || '').trim() || self.DEFAULT_AUTHOR,
           language:            self.form.language || '',
           category:            self.categoryFrom(self.form.cover, self.form.pages),
           points_per_unit:     self.form.points_per_unit || 0,

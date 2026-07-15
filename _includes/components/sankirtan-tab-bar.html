@@ -12,6 +12,9 @@
         <button type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'leaderboard'}"
           :onclick="emit('tabchange', 'leaderboard')">Leaderboard</button>
+        <button type="button" class="pill-tab" role="tab"
+          :class="{'pill-tab-active': active === 'metrics'}"
+          :onclick="emit('tabchange', 'metrics')">Metrics</button>
       </div>
     </template>
   </sankirtan-tab-bar>

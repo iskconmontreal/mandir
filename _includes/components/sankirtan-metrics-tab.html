@@ -1,0 +1,87 @@
+<define-element>
+  <sankirtan-metrics-tab active:boolean="false" books:array loading:boolean="false" error:string="">
+    <style>
+      :host { display: contents; }
+      .lang-row {
+        display: grid;
+        grid-template-columns: var(--name-w, 8rem) 1fr 14rem;
+        align-items: center;
+        gap: var(--s-md);
+        padding: var(--s-sm) 0;
+      }
+      .lang-name { font-weight: var(--f-wt-b); }
+      .lang-bar-track {
+        height: 0.6rem;
+        background: var(--c-border);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .lang-bar {
+        height: 100%;
+        background: var(--c-ok);
+        border-radius: 999px;
+      }
+      .lang-stats { font-size: var(--f-sm); text-align: right; white-space: nowrap; }
+      .lang-pct { font-weight: var(--f-wt-b); }
+    </style>
+    <template>
+      <section :if="active">
+
+        <div :if="error" class="login-error" :text="error"></div>
+
+        <div :if="loading && !books.length" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
+        <div :if="!loading && !books.length && !error" class="dim" style="padding:var(--s-lg); text-align:center">No books in catalog yet.</div>
+
+        <div :if="books.length" style="display:flex; flex-direction:column; gap:var(--s-md)">
+          <div :each="sec in SECTIONS" class="card" style="padding:var(--s-md) var(--s-lg)"
+            :style="{'--name-w': sec.nameWidth}" :scope="{bd: breakdown(sec.field)}">
+            <div style="display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--s-sm) var(--s-md); margin-bottom:var(--s-sm)">
+              <h3 style="margin:0; font-size:var(--f-lg)" :text="sec.title"></h3>
+              <span class="dim" style="font-size:var(--f-sm)"
+                :text="bd.totalUnits + ' units · ' + bd.totalTitles + ' titles'"></span>
+            </div>
+            <div :if="!bd.totalUnits" class="dim" style="padding:var(--s-md) 0">No stock on hand.</div>
+            <div :each="r in bd.rows" class="lang-row">
+              <span class="lang-name" :text="r.label"></span>
+              <div class="lang-bar-track"><div class="lang-bar" :style="{width: r.pct + '%'}"></div></div>
+              <span class="lang-stats">
+                <span class="lang-pct" :text="r.pct + '%'"></span>
+                <span class="dim" :text="' · ' + r.units + ' units · ' + r.titles + ' title' + (r.titles === 1 ? '' : 's')"></span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </template>
+    <script>
+      this.SECTIONS = [
+        { title: 'Inventory by language', field: 'language', nameWidth: '8rem' },
+        { title: 'Inventory by author', field: 'author', nameWidth: '18rem' },
+      ]
+      // Stock-weighted share grouped by a book field. Stacks are excluded: their
+      // availability derives from component-book stock, so counting them would
+      // double-count units.
+      this.breakdown = function(field) {
+        var groups = {}
+        var totalUnits = 0, totalTitles = 0
+        ;(this.books || []).forEach(function(b) {
+          if (b.is_stack || b.active === false) return
+          var key = b[field] || 'Unspecified'
+          var g = groups[key] || (groups[key] = { label: key, units: 0, titles: 0 })
+          g.units += b.stock || 0
+          g.titles += 1
+          totalUnits += b.stock || 0
+          totalTitles += 1
+        })
+        var rows = Object.values(groups)
+          .sort(function(a, b) { return b.units - a.units })
+          .map(function(g) {
+            g.pct = totalUnits ? Math.round(g.units / totalUnits * 1000) / 10 : 0
+            return g
+          })
+        return { rows: rows, totalUnits: totalUnits, totalTitles: totalTitles }
+      }
+    </script>
+  </sankirtan-metrics-tab>
+</define-element>

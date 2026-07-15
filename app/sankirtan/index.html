@@ -38,11 +38,19 @@ preloads:
   :onperiodchange="e => { lbPeriod = e.detail; loadLeaderboard() }">
 </sankirtan-leaderboard-tab>
 
+<sankirtan-metrics-tab
+  :active="activeTab === 'metrics'"
+  :books="books"
+  :loading="loading"
+  :error="loadErr">
+</sankirtan-metrics-tab>
+
 <script src="../../lib/define-element.js" defer></script>
 {% include components/sankirtan-tab-bar.html %}
 {% include components/sankirtan-catalog-tab.html %}
 {% include components/sankirtan-sessions-tab.html %}
 {% include components/sankirtan-leaderboard-tab.html %}
+{% include components/sankirtan-metrics-tab.html %}
 
 <script type="module">
   import sprae from 'sprae'
@@ -58,7 +66,7 @@ preloads:
     throw new Error('redirecting')
   }
 
-  const VALID_TABS = ['catalog', 'sessions', 'leaderboard']
+  const VALID_TABS = ['catalog', 'sessions', 'leaderboard', 'metrics']
   const urlTab = () => {
     const t = new URLSearchParams(location.search).get('tab')
     return VALID_TABS.includes(t) ? t : 'catalog'
