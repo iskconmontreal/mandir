@@ -103,11 +103,11 @@
       import { ICONS } from 'lib/icons.js'
 
 
-      // If already logged in, go to dashboard
-      if (auth.active) window.location.href = 'app/index.html'
-
-      // Capture token from OAuth redirect
+      // Capture token from OAuth redirect first, THEN forward logged-in users to
+      // the dashboard — otherwise a user arriving from the SSO redirect saves the
+      // token but is never sent onward on that same load.
       auth.capture()
+      if (auth.active) window.location.href = 'app/index.html'
 
       const notice = new URLSearchParams(location.search).get('msg')
       if (notice) {
