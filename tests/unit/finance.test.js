@@ -16,6 +16,9 @@ describe('displayLabel', () => {
   it('returns "Shop Counter Sale" for source=boutique-counter', () => {
     expect(displayLabel({ type: 'sale', details: { source: 'boutique-counter' } })).toBe('Shop Counter Sale')
   })
+  it('returns "Sankirtan" for a sankirtan book sold at the counter', () => {
+    expect(displayLabel({ type: 'sale', category: 'sankirtan', details: { source: 'boutique-counter' } })).toBe('Sankirtan')
+  })
   it('returns "Counter Donation" for source=boutique-counter-donation', () => {
     expect(displayLabel({ type: 'donation', category: 'general', details: { source: 'boutique-counter-donation' } })).toBe('Counter Donation')
   })
