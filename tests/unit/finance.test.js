@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   normTab, normIncomeType, normIncomeMethod, normIncomeMethods, normExpenseCats, normAmt,
-  bucketOf, labelOf, displayLabel, sourceOf,
+  bucketOf, labelOf, displayLabel, displayCls, displayName, displayNote, sourceOf,
   incomeTypeMatch, incomeMethodMatch, filterDonorRows,
   dateOnly, expenseMonthKey, incomeMonthKey, monthRange,
   monthOpenState, monthKeysWithData, monthItemMap,
@@ -35,6 +35,46 @@ describe('displayLabel', () => {
   it('falls back gracefully when details is missing or unparseable', () => {
     expect(displayLabel({ type: 'sale' })).toBe('Sale')
     expect(displayLabel({ type: 'sale', details: 'not-json' })).toBe('Sale')
+  })
+  it('badges a counter sankirtan session row as "Sankirtan"/saffron', () => {
+    const x = { type: 'donation', category: 'sankirtan', details: { source: 'boutique-counter-sankirtan' } }
+    expect(displayLabel(x)).toBe('Sankirtan')
+    expect(displayCls(x)).toBe('cat-saffron')
+    expect(bucketOf(x)).toBe('sankirtan')
+  })
+})
+
+describe('displayName', () => {
+  it('prefers the linked member name', () => {
+    expect(displayName({ member_id: 7 }, { 7: 'Radha' })).toBe('Radha')
+  })
+  it('uses source_name when set', () => {
+    expect(displayName({ source_name: 'Walk-in Donor' })).toBe('Walk-in Donor')
+  })
+  it('falls back to the distributor name in details (street + counter sessions)', () => {
+    expect(displayName({ details: { distributor_name: 'Gauranga Das' } })).toBe('Gauranga Das')
+  })
+  it('falls back to the cashier name for boutique merch rows', () => {
+    expect(displayName({ details: { source: 'boutique-counter', cashier_name: 'Remy' } })).toBe('Remy')
+  })
+  it('parses string details JSON', () => {
+    expect(displayName({ details: '{"distributor_name":"Nitai"}' })).toBe('Nitai')
+  })
+  it('returns Anonymous when nothing identifies the row', () => {
+    expect(displayName({})).toBe('Anonymous')
+    expect(displayName({ details: 'not-json' })).toBe('Anonymous')
+  })
+})
+
+describe('displayNote', () => {
+  it("returns 'boutique' for every boutique-counter source", () => {
+    for (const source of ['boutique-counter', 'boutique-counter-donation', 'boutique-counter-overpayment', 'boutique-counter-sankirtan']) {
+      expect(displayNote({ details: { source } })).toBe('boutique')
+    }
+  })
+  it("returns '' for street sankirtan and plain donations", () => {
+    expect(displayNote({ details: { source: 'sankirtan' } })).toBe('')
+    expect(displayNote({ type: 'donation', category: 'general' })).toBe('')
   })
 })
 

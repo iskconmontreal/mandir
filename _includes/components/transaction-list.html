@@ -71,13 +71,14 @@
                     <div class="recent-inc-info">
                       <div class="recent-inc-title-row">
                         <div style="display:flex;align-items:baseline;gap:var(--s-xs);flex-wrap:wrap">
-                          <div class="recent-inc-title" :html="hl(tx.source_name || tx.member_name || 'Anonymous', search || '')"></div>
+                          <div class="recent-inc-title" :html="hl(displayName(tx, membernames), search || '')"></div>
                           <span :if="tx.id" class="recent-inc-title-sub dim" :text="'#' + tx.id"></span>
                           <span :if="tx.tax_receipt_no" class="badge badge-ok" style="font-size:var(--f-xs)" :text="tx.tax_receipt_no"></span>
                         </div>
                       </div>
                       <div class="recent-inc-subtitle">
                         <span class="recent-inc-method" :class="'recent-inc-method-' + (tx.method || 'cash')" :text="tx.method || 'cash'"></span>
+                        <span :if="displayNote(tx)" class="dim" :text="displayNote(tx)"></span>
                         <time class="recent-inc-time" :datetime="tx.date_received || tx.created_at || ''" :title="(tx.date_received || tx.created_at) ? new Date(tx.date_received || tx.created_at).toLocaleString() : ''" :text="fmtDate(tx.date_received || tx.created_at)"></time>
                       </div>
                     </div>
