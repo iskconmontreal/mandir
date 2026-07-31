@@ -26,7 +26,7 @@ preloads:
   :loading="sessionsLoading"
   :error="sessionsErr"
   :canmanage="can('sankirtan:manage')"
-  :onreload="loadSessions">
+  :onreload="() => { loadSessions(); loadBooks() }">
 </sankirtan-sessions-tab>
 
 <sankirtan-leaderboard-tab
