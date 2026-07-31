@@ -124,7 +124,8 @@
             <div class="book-meta">
               <span :if="b.is_stack" class="badge cat-purple">Stack</span>
               <span :if="!b.is_stack" class="badge" :class="coverCls(b.category)" :text="coverLabel(b.category)"></span>
-              <span :if="!b.is_stack" class="badge" :class="catCls(b.category)" :text="sizeLabel(b.category)"></span>
+              <!-- Size badge hidden while the size tier is pending (S0/H0: no page count yet) -->
+              <span :if="!b.is_stack && (b.category || '')[1] !== '0'" class="badge" :class="catCls(b.category)" :text="sizeLabel(b.category)"></span>
               <span :if="!b.is_stack && b.language" class="badge cat-gray" :text="b.language"></span>
               <span :each="lg in (b.is_stack ? stackLangs(b) : [])" class="badge cat-gray" :text="lg"></span>
               <span :if="b.exclude_from_bbt" class="badge" style="background:#ffedd5; color:#ea580c">Excluded from BBT</span>

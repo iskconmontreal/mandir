@@ -90,6 +90,7 @@
                   <tr>
                     <th>Book</th>
                     <th>Category</th>
+                    <th>Language</th>
                     <th>Qty</th>
                     <th>Points</th>
                   </tr>
@@ -105,12 +106,16 @@
                       <span :if="sb.excluded" class="badge" style="margin-left:var(--s-xs); background:#ffedd5; color:#ea580c">Excluded from BBT</span>
                     </td>
                     <td><span class="badge" :class="catCls(sb.category_snapshot)" :text="coverLabel(sb.category_snapshot)"></span></td>
+                    <td>
+                      <span :if="sb.language_snapshot" class="badge cat-gray" :text="sb.language_snapshot"></span>
+                      <span :if="!sb.language_snapshot" class="dim">—</span>
+                    </td>
                     <td :text="sb.qty"></td>
                     <td :text="pointsLabel(sb)"></td>
                   </tr>
                   <!-- Foldable stack breakdown: component books resolved from the current catalog -->
                   <tr :if="sb.category_snapshot === 'STK' && stackOpen[sb.id]">
-                    <td colspan="4" style="padding-left:var(--s-xl)">
+                    <td colspan="5" style="padding-left:var(--s-xl)">
                       <div :if="!stackComponents(sb).length" class="dim" style="font-size:var(--f-sm)">Breakdown unavailable (stack no longer in catalog).</div>
                       <div :each="comp in stackComponents(sb)"
                         style="display:flex; align-items:center; gap:var(--s-sm); padding:var(--s-xs) 0">
