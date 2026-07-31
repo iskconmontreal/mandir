@@ -105,7 +105,7 @@
                       <span :text="sb.title_snapshot"></span>
                       <span :if="sb.excluded" class="badge" style="margin-left:var(--s-xs); background:#ffedd5; color:#ea580c">Excluded from BBT</span>
                     </td>
-                    <td><span class="badge" :class="catCls(sb.category_snapshot)" :text="coverLabel(sb.category_snapshot)"></span></td>
+                    <td><span class="badge" :class="coverCls(sb.category_snapshot)" :text="coverLabel(sb.category_snapshot)"></span></td>
                     <td>
                       <span :if="sb.language_snapshot" class="badge cat-gray" :text="sb.language_snapshot"></span>
                       <span :if="!sb.language_snapshot" class="dim">—</span>
@@ -120,7 +120,7 @@
                       <div :each="comp in stackComponents(sb)"
                         style="display:flex; align-items:center; gap:var(--s-sm); padding:var(--s-xs) 0">
                         <span style="flex:1" :text="comp.title + (comp.language ? ' (' + comp.language + ')' : '')"></span>
-                        <span class="badge" :class="catCls(comp.category)" :text="coverLabel(comp.category)"></span>
+                        <span class="badge" :class="coverCls(comp.category)" :text="coverLabel(comp.category)"></span>
                         <span class="dim" style="font-size:var(--f-sm)" :text="'×' + sb.qty"></span>
                       </div>
                     </td>
@@ -369,9 +369,10 @@
       this.emailSubject = ''
       this.emailMessage = ''
       this.emailSpecialNote = ''
-      this.catCls = function(cat) {
-        return ({ S1:'cat-blue', S2:'cat-teal', S3:'cat-green', S4:'cat-purple',
-                  H1:'cat-blue', H2:'cat-teal', H3:'cat-green', H4:'cat-purple' })[cat] || 'cat-gray'
+      // One color per cover, matching the catalog tab: soft = blue, hard = purple.
+      this.coverCls = function(cat) {
+        if (cat === 'STK') return 'cat-purple'
+        return (cat && cat[0] === 'H') ? 'cat-purple' : 'cat-blue'
       }
       this.coverLabel = function(cat) {
         return cat === 'STK' ? 'Stack' : (cat && cat[0] === 'H') ? 'Hard cover' : 'Soft cover'
