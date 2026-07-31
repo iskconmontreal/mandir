@@ -26,8 +26,15 @@
             :oninput="e => filterLocation = e.target.value">
           <button :if="filterFrom || filterTo || filterWho || filterLocation" type="button" class="btn btn-outline btn-sm"
             :onclick="filterFrom='', filterTo='', filterWho='', filterLocation=''">Clear</button>
+          <label :if="canmanage" style="display:inline-flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); cursor:pointer"
+            title="Select every session matching the current filters">
+            <input type="checkbox" :checked="allVisibleSelected()" :onchange="toggleSelectAll()">
+            <span>All</span>
+          </label>
           <button :if="canmanage" type="button" class="btn btn-outline btn-sm"
-            :onclick="backupSessions()" title="Download every session as a JSON backup">Export</button>
+            :onclick="backupSessions()"
+            :title="selectedCount() ? 'Download the selected sessions as a JSON backup' : 'Download every session as a JSON backup'"
+            :text="selectedCount() ? 'Export (' + selectedCount() + ')' : 'Export'"></button>
           <button :if="canmanage" type="button" class="btn btn-outline btn-sm"
             :class="{'btn-loading': restoring}"
             :onclick="(host || document).querySelector('#sessions-import-input')?.click()"
@@ -63,9 +70,14 @@
               <span :html="icon('chevron_right')"
                 style="flex-shrink:0; transition:transform .15s"
                 :style="{transform: sess._open ? 'rotate(90deg)' : 'none'}"></span>
+              <input :if="canmanage" type="checkbox" style="flex-shrink:0"
+                :checked="isSelected(sess.id)"
+                :onclick.stop="toggleSelect(sess)"
+                title="Include in export">
               <div style="flex:1; min-width:8rem; display:flex; flex-direction:column">
                 <span style="font-weight:var(--f-wt-b)" :text="sess.distributor_name || 'Unknown'"></span>
                 <span :if="sess.location" class="dim" style="font-size:var(--f-sm)" :text="sess.location"></span>
+                <span :if="sess.note" class="dim" style="font-size:var(--f-sm); font-style:italic" :text="sess.note"></span>
               </div>
               <span class="dim" style="font-size:var(--f-sm)"
                 :text="fmtTime(sess.created_at)"></span>
@@ -127,9 +139,6 @@
                   </tr>
                 </tbody>
               </table>
-              <div :if="sess.note" class="dim"
-                style="font-size:var(--f-sm); margin-top:var(--s-sm)"
-                :text="sess.note"></div>
 
               <div :if="canmanage" style="display:flex; align-items:center; gap:var(--s-sm); margin-top:var(--s-md)">
                 <button type="button" class="btn btn-outline btn-sm"
@@ -536,9 +545,33 @@
       }
       // Backup/restore of the full session history (manager-only). Restore asks
       // whether to also decrement catalog stock for the imported sessions.
+      // Export selection — a session id → true map; empty selection exports all.
+      this.selectedIds = {}
+      this.isSelected = function(id) { return !!this.selectedIds[id] }
+      this.toggleSelect = function(sess) {
+        var next = Object.assign({}, this.selectedIds)
+        if (next[sess.id]) delete next[sess.id]
+        else next[sess.id] = true
+        this.selectedIds = next
+      }
+      this.selectedCount = function() { return Object.keys(this.selectedIds).length }
+      this.allVisibleSelected = function() {
+        var visible = this.filteredSessions()
+        if (!visible.length) return false
+        var self = this
+        return visible.every(function(s) { return self.selectedIds[s.id] })
+      }
+      this.toggleSelectAll = function() {
+        if (this.allVisibleSelected()) { this.selectedIds = {}; return }
+        var next = {}
+        this.filteredSessions().forEach(function(s) { next[s.id] = true })
+        this.selectedIds = next
+      }
       this.backupSessions = function() {
         var self = this
-        self.api.downloadSankirtanSessionsBackup()
+        var ids = Object.keys(self.selectedIds)
+        self.api.downloadSankirtanSessionsBackup(ids)
+          .then(function() { self.selectedIds = {} })
           .catch(function(e) { self.toast && self.toast(e.message || 'Failed to export backup', 'error') })
       }
       this.openRestoreModal = function(file) {
