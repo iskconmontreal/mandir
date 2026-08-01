@@ -433,11 +433,13 @@
           payments: (sess.payments || []).map(function(p) { return { method: p.method, amount: (p.amount_cents / 100).toFixed(2) } })
         }
         this.editErr = null
+        this.savingEdit = false
         this.showEditModal = true
       }
       this.closeEditModal = function() {
         this.showEditModal = false
         this.editSession = null
+        this.savingEdit = false
       }
       this.editBookOptions = function(row) {
         var all = this.books || []
