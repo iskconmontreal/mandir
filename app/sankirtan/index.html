@@ -35,7 +35,10 @@ preloads:
   :period="lbPeriod"
   :loading="lbLoading"
   :error="lbErr"
-  :onperiodchange="e => { lbPeriod = e.detail; loadLeaderboard() }">
+  :monthlabel="lbMonthLabel()"
+  :monthoffset="lbMonthOffset"
+  :onperiodchange="e => { lbPeriod = e.detail; lbMonthOffset = 0; loadLeaderboard() }"
+  :onmonthstep="e => stepLbMonth(e.detail)">
 </sankirtan-leaderboard-tab>
 
 <sankirtan-metrics-tab
@@ -66,6 +69,43 @@ preloads:
     throw new Error('redirecting')
   }
 
+  // Calendar month `offset` months back. `to` is the FIRST day of the next month:
+  // goloka compares occurred_at (RFC3339) against the raw string, so a plain
+  // month-end date sorts before "…T00:00:00Z" and drops the last day.
+  const monthRange = (offset) => {
+    const now = new Date()
+    const start = new Date(now.getFullYear(), now.getMonth() - offset, 1)
+    const next = new Date(start.getFullYear(), start.getMonth() + 1, 1)
+    const key = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+    return {
+      from: key(start),
+      to: key(next),
+      label: start.toLocaleDateString(undefined, start.getFullYear() === now.getFullYear()
+        ? { month: 'long' } : { month: 'long', year: 'numeric' }),
+    }
+  }
+
+  // Sessions → leaderboard rows, matching GET /leaderboard so sorting and the
+  // table work unchanged for a past month.
+  const aggregateSessions = (sessions) => {
+    const by = new Map()
+    for (const x of sessions) {
+      const name = x.distributor_name || '—'
+      const r = by.get(name) || { distributor_name: name, books: 0, points: 0, collected_cents: 0, cost_cents: 0, session_count: 0, bbt_pct: null }
+      r.books += x.total_books || 0
+      r.points += x.total_points || 0
+      r.collected_cents += x.collected_cents || 0
+      r.cost_cents += x.total_cost_cents || 0
+      r.session_count += 1
+      by.set(name, r)
+    }
+    return [...by.values()].map(r => ({
+      ...r,
+      points: Math.round(r.points * 100) / 100,
+      bbt_pct: r.collected_cents > 0 ? (r.cost_cents / r.collected_cents) * 100 : null,
+    }))
+  }
+
   const VALID_TABS = ['catalog', 'sessions', 'leaderboard', 'metrics']
   const urlTab = () => {
     const t = new URLSearchParams(location.search).get('tab')
@@ -85,6 +125,7 @@ preloads:
     leaderboard: [],
     lbLoaded: false,
     lbPeriod: 'month',
+    lbMonthOffset: 0,        // 0 = current month, 1 = last month, …
     lbLoading: false,
     lbErr: null,
 
@@ -125,12 +166,32 @@ preloads:
       }
     },
 
+    lbMonthLabel() {
+      return monthRange(s.lbMonthOffset).label
+    },
+
+    stepLbMonth(delta) {
+      const next = s.lbMonthOffset + delta
+      if (next < 0) return                 // never step past the current month
+      s.lbMonthOffset = next
+      s.lbPeriod = 'month'
+      s.loadLeaderboard()
+    },
+
     async loadLeaderboard() {
       s.lbLoading = true
       s.lbErr = null
       try {
-        const res = await api.getSankirtanLeaderboard(s.lbPeriod)
-        s.leaderboard = res.results || []
+        let rows
+        if (s.lbPeriod === 'month' && s.lbMonthOffset > 0) {
+          // No endpoint for a past month — aggregate its sessions into the same
+          // row shape the leaderboard returns.
+          const { from, to } = monthRange(s.lbMonthOffset)
+          rows = aggregateSessions(await api.getSankirtanSessions({ from, to }) || [])
+        } else {
+          rows = (await api.getSankirtanLeaderboard(s.lbPeriod)).results || []
+        }
+        s.leaderboard = rows
         s.lbLoaded = true
       } catch (e) {
         s.lbErr = e.message || 'Failed to load leaderboard'

@@ -1,14 +1,20 @@
 <define-element>
-  <sankirtan-leaderboard-tab active:boolean="false" results:array period:string="month" loading:boolean="false" error:string="">
+  <sankirtan-leaderboard-tab active:boolean="false" results:array period:string="month" loading:boolean="false" error:string="" monthlabel:string="" monthoffset:number="0">
     <style>:host { display: contents; }</style>
     <template>
       <section :if="active">
 
-        <!-- Period selector -->
+        <!-- Period selector — the month pill steps back through past months -->
         <div class="pill-tabs" style="margin-bottom:var(--s-lg)" role="tablist">
-          <button type="button" class="pill-tab" role="tab"
-            :class="{'pill-tab-active': period === 'month'}"
-            :onclick="emit('periodchange', 'month')">This Month</button>
+          <span class="pill-tab pill-month" :class="{'pill-tab-active': period === 'month'}">
+            <button type="button" class="pill-step" aria-label="Previous month"
+              :onclick="emit('monthstep', 1)" :html="icon('chevron_left')"></button>
+            <button type="button" class="pill-month-label" role="tab"
+              :onclick="emit('periodchange', 'month')" :text="monthlabel"></button>
+            <button type="button" class="pill-step" aria-label="Next month"
+              :class="{dim: monthoffset === 0}"
+              :onclick="emit('monthstep', -1)" :html="icon('chevron_right')"></button>
+          </span>
           <button type="button" class="pill-tab" role="tab"
             :class="{'pill-tab-active': period === 'year'}"
             :onclick="emit('periodchange', 'year')">This Year</button>

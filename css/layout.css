@@ -396,6 +396,33 @@
   box-shadow: var(--sh-sm);
 }
 
+/* Month pill that steps: ‹ July › inside one pill */
+.pill-month {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--s-xs);
+}
+.pill-month-label,
+.pill-step {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--f-sm);
+  font-weight: var(--f-wt-b);
+  color: inherit;
+  cursor: pointer;
+  padding: var(--s-sm) var(--s-xs);
+}
+.pill-month-label { min-width: 6.5rem; }
+.pill-step {
+  display: inline-flex;
+  align-items: center;
+  color: var(--c-text-dim);
+}
+.pill-step svg { width: 1rem; height: 1rem; }
+.pill-step:hover { color: var(--c-text); }
+
 
 /* Year selector */
 .year-select {
