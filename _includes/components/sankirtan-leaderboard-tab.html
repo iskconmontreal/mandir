@@ -23,6 +23,15 @@
             :onclick="emit('periodchange', 'all')">All Time</button>
         </div>
 
+        <div :if="hasGroups()" class="pill-tabs" style="margin-left:var(--s-md); margin-bottom:var(--s-lg)" role="tablist">
+          <button type="button" class="pill-tab" role="tab"
+            :class="{'pill-tab-active': view === 'individual'}"
+            :onclick="setView('individual')">Devotees</button>
+          <button type="button" class="pill-tab" role="tab"
+            :class="{'pill-tab-active': view === 'group'}"
+            :onclick="setView('group')">Groups</button>
+        </div>
+
         <div :if="error" class="login-error" :text="error"></div>
         <div :if="loading" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
         <div :if="!loading && !results.length && !error" class="dim" style="padding:var(--s-lg); text-align:center">No data for this period.</div>
@@ -39,10 +48,17 @@
                 <th class="th-sort" style="text-align:right" :class="sortCls('bbt_pct')" :onclick="sort('bbt_pct')" title="Temple cost ÷ donation — lower means more goes to the temple">BBT %</th>
               </tr>
             </thead>
-            <tbody>
-              <tr :each="(row, i) in sortedResults()">
+            <tbody :each="(row, i) in sortedResults()">
+              <tr :style="{cursor: row.is_group ? 'pointer' : ''}"
+                :onclick.stop="row.is_group && toggleGroup(row)">
                 <td class="dim" :text="i + 1"></td>
-                <td style="font-weight:var(--f-wt-b)" :text="row.distributor_name"></td>
+                <td style="font-weight:var(--f-wt-b)">
+                  <span :if="row.is_group" :html="icon('chevron_right')"
+                    style="display:inline-flex; vertical-align:middle; margin-right:var(--s-xs); transition:transform .15s"
+                    :style="{transform: groupOpen[row.distributor_name] ? 'rotate(90deg)' : 'none'}"></span>
+                  <span :text="row.distributor_name"></span>
+                  <span :if="row.is_group" class="dim" :text="' · ' + row.members.length + ' devotees'"></span>
+                </td>
                 <td style="text-align:right"
                   :class="(sortBy === 'points' && i === 0) ? 'stat-ok' : ''"
                   :text="row.points"></td>
@@ -51,6 +67,17 @@
                 <td style="text-align:right"
                   :class="row.bbt_pct != null && row.bbt_pct <= 50 ? 'stat-ok' : ''"
                   :text="row.bbt_pct == null ? '—' : Math.round(row.bbt_pct) + '%'"></td>
+              </tr>
+              <tr :if="row.is_group && groupOpen[row.distributor_name]">
+                <td colspan="6" style="padding-left:var(--s-xl)">
+                  <div :each="m in sortedMembers(row)"
+                    style="display:flex; align-items:center; gap:var(--s-sm); padding:var(--s-xs) 0; font-size:var(--f-sm)">
+                    <span style="flex:1" :text="m.distributor_name"></span>
+                    <span :text="m.points + ' pts'"></span>
+                    <span class="dim" :text="m.books + ' books'"></span>
+                    <span class="dim" :text="'$' + fmtAmt(m.collected_cents)"></span>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -70,9 +97,9 @@
         else { this.sortBy = col; this.sortDir = this.defaultDir(col) }
       }
       this.sortCls = function(col) { return this.sortBy === col ? (this.sortDir === 'asc' ? 'th-sort-asc' : 'th-sort-desc') : '' }
-      this.sortedResults = function() {
+      this.sortRows = function(rows) {
         var col = this.sortBy, dir = this.sortDir === 'asc' ? 1 : -1
-        return [...(this.results || [])].sort(function(a, b) {
+        return [...rows].sort(function(a, b) {
           var av = a[col], bv = b[col]
           if (av == null && bv == null) return 0
           if (av == null) return 1          // nulls (e.g. bbt_pct "—") always last, both directions
@@ -81,6 +108,22 @@
           return (av - bv) * dir
         })
       }
+
+      // Devotees sharing a meta.group arrive merged into one row carrying its members.
+      this.view = 'individual'
+      this.groupOpen = {}
+      this.hasGroups = function() { return (this.results || []).some(function(r) { return r.is_group }) }
+      this.setView = function(v) { this.view = v; this.groupOpen = {} }
+      // Replaced rather than mutated — sprae doesn't track an in-place edit here.
+      this.toggleGroup = function(row) {
+        this.groupOpen = Object.assign({}, this.groupOpen, { [row.distributor_name]: !this.groupOpen[row.distributor_name] })
+      }
+      this.sortedResults = function() {
+        var rows = this.results || []
+        if (this.view === 'individual') rows = rows.flatMap(function(r) { return r.is_group && r.members?.length ? r.members : [r] })
+        return this.sortRows(rows)
+      }
+      this.sortedMembers = function(row) { return this.sortRows(row.members || []) }
     </script>
   </sankirtan-leaderboard-tab>
 </define-element>
