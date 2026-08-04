@@ -35,9 +35,9 @@ preloads:
   :period="lbPeriod"
   :loading="lbLoading"
   :error="lbErr"
-  :monthlabel="lbMonthLabel()"
+  :monthlabel="lbMonthLabel"
   :monthoffset="lbMonthOffset"
-  :onperiodchange="e => { lbPeriod = e.detail; lbMonthOffset = 0; loadLeaderboard() }"
+  :onperiodchange="e => setLbPeriod(e.detail)"
   :onmonthstep="e => stepLbMonth(e.detail)">
 </sankirtan-leaderboard-tab>
 
@@ -126,6 +126,7 @@ preloads:
     lbLoaded: false,
     lbPeriod: 'month',
     lbMonthOffset: 0,        // 0 = current month, 1 = last month, …
+    lbMonthLabel: monthRange(0).label,
     lbLoading: false,
     lbErr: null,
 
@@ -166,14 +167,18 @@ preloads:
       }
     },
 
-    lbMonthLabel() {
-      return monthRange(s.lbMonthOffset).label
+    setLbPeriod(p) {
+      s.lbPeriod = p
+      s.lbMonthOffset = 0
+      s.lbMonthLabel = monthRange(0).label
+      s.loadLeaderboard()
     },
 
     stepLbMonth(delta) {
       const next = s.lbMonthOffset + delta
       if (next < 0) return                 // never step past the current month
       s.lbMonthOffset = next
+      s.lbMonthLabel = monthRange(next).label
       s.lbPeriod = 'month'
       s.loadLeaderboard()
     },
