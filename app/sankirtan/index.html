@@ -7,14 +7,14 @@ preloads:
   <h1>Sankirtan</h1>
 </div>
 
-<sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="orderItems.length"
+<sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="draftBookIds.length"
   :ontabchange="e => switchTab(e.detail)">
 </sankirtan-tab-bar>
 
 <sankirtan-catalog-tab
   :active="activeTab === 'catalog'"
   :books="books"
-  :orderitems="orderItems"
+  :orderbookids="draftBookIds"
   :loading="loading"
   :error="loadErr"
   :canmanage="can('sankirtan:manage')"
@@ -54,9 +54,8 @@ preloads:
 <sankirtan-order-tab
   :active="activeTab === 'order'"
   :books="books"
-  :orderitems="orderItems"
-  :onorderremove="e => removeOrder(e.detail)"
-  :onorderclear="clearOrder">
+  :orders="orders"
+  :onreload="loadOrders">
 </sankirtan-order-tab>
 
 <script src="../../lib/define-element.js" defer></script>
@@ -141,20 +140,41 @@ preloads:
     lbMonthLabel: monthRange(0).label,
     lbLoading: false,
     lbErr: null,
-    orderItems: [],
+    orders: [],
+    draftBookIds: [],
 
-    toggleOrder(id) {
-      const items = s.orderItems.filter(it => it.id !== id)
-      if (items.length === s.orderItems.length) items.push({ id, qty: '' })
-      s.orderItems = items
+    setOrders(list) {
+      s.orders = list || []
+      const draft = s.orders.find(o => o.status === 'draft')
+      s.draftBookIds = draft ? draft.items.map(it => it.book_id) : []
     },
 
-    removeOrder(id) {
-      s.orderItems = s.orderItems.filter(it => it.id !== id)
+    async loadOrders() {
+      if (!auth.can('sankirtan:manage')) return
+      try {
+        s.setOrders(await api.getSankirtanOrders())
+      } catch (e) {
+        toast(e.message || 'Failed to load orders', 'error')
+      }
     },
 
-    clearOrder() {
-      s.orderItems = []
+    // Catalog "Add to order" checkbox: add/remove the book on the draft,
+    // creating the draft on first use. New lines default to 1 box.
+    async toggleOrder(bookId) {
+      const draft = s.orders.find(o => o.status === 'draft')
+      try {
+        if (!draft) {
+          await api.createSankirtanOrder([{ book_id: bookId, boxes: 1 }])
+        } else {
+          let items = draft.items.map(it => ({ book_id: it.book_id, boxes: it.boxes_ordered }))
+          const without = items.filter(it => it.book_id !== bookId)
+          items = without.length === items.length ? [...items, { book_id: bookId, boxes: 1 }] : without
+          await api.updateSankirtanOrder(draft.id, items)
+        }
+        await s.loadOrders()
+      } catch (e) {
+        toast(e.message || 'Failed to update order', 'error')
+      }
     },
 
     switchTab(tab) {
@@ -240,4 +260,5 @@ preloads:
   })
 
   s.loadBooks()
+  s.loadOrders()
 </script>

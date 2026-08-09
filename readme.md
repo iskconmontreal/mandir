@@ -47,13 +47,14 @@ npm run test:ui # interactive UI
 
 ## Deploy
 
-GitHub Pages builds and serves the site automatically on push to `main`.
+Cloudflare Pages direct upload from the local working tree (no git connection):
 
 ```sh
-git push origin main
+bundle exec jekyll build
+npx wrangler pages deploy _site --project-name admin
 ```
 
-Live at `https://iskconmontreal.github.io/mandir`. Backend API at `https://api.iskconmontreal.ca` (CORS + Bearer token).
+Live at `https://admin.iskconmontrealsankirtan.com`.
 
 ## HTTPS mode (optional)
 

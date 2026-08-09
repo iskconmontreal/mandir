@@ -1,65 +1,209 @@
 <define-element>
-  <sankirtan-order-tab active:boolean="false" books:array orderitems:array>
+  <sankirtan-order-tab active:boolean="false" books:array orders:array>
     <style>
       :host { display: contents; }
-      .order-table { width: 100%; border-collapse: collapse; font-size: var(--f-sm); }
+      .order-list { display: flex; flex-direction: column; gap: var(--s-md); }
+      .order-head { display: flex; align-items: center; gap: var(--s-sm); flex-wrap: wrap; }
+      .order-head .order-actions { margin-left: auto; display: flex; gap: var(--s-xs); }
+      .order-table { width: 100%; border-collapse: collapse; font-size: var(--f-sm); margin-top: var(--s-sm); }
       .order-table th { color: var(--c-text-dim); font-weight: normal; }
       .order-table th, .order-table td { text-align: left; padding: var(--s-xs) var(--s-sm); border-bottom: 1px solid var(--c-border); }
+      .order-table input { width: 5.5rem; }
+      .badge.badge-draft { background: #e5e7eb; color: #374151; }
+      .badge.badge-active { background: #dbeafe; color: #1d4ed8; }
     </style>
     <template>
       <section :if="active">
 
-        <div :if="!orderitems.length" class="dim" style="padding:var(--s-lg); text-align:center">
-          No books selected yet — tick “Add to order” on books in the Catalog tab.
+        <div :if="!orders.length" class="dim" style="padding:var(--s-lg); text-align:center">
+          No orders yet — tick “Add to order” on books in the Catalog tab to start a draft.
         </div>
 
-        <div :if="orderitems.length" class="card">
-          <div style="display:flex; align-items:center; gap:var(--s-sm); margin-bottom:var(--s-sm)">
-            <h3 style="margin:0" :text="'Order to prepare (' + orderitems.length + ')'"></h3>
-            <div style="margin-left:auto; display:flex; gap:var(--s-xs)">
-              <button type="button" class="btn btn-outline btn-sm" :onclick="exportOrder()">Export CSV</button>
-              <button type="button" class="btn btn-outline btn-sm" :onclick="emit('orderclear')">Clear</button>
+        <div class="order-list">
+          <div :each="o in orders" class="card">
+
+            <!-- Draft / active: full editable card -->
+            <div :if="o.status === 'draft' || o.status === 'active'">
+              <div class="order-head">
+                <h3 style="margin:0" :text="'Order #' + o.id"></h3>
+                <span class="badge" :class="statusCls(o.status)" :text="o.status"></span>
+                <span class="dim" style="font-size:var(--f-sm)" :text="fmtDate(o.created_at)"></span>
+                <span class="order-actions">
+                  <button :if="o.items.length" type="button" class="btn btn-outline btn-sm" :onclick="exportOrder(o)">Export Excel</button>
+                  <button :if="o.status === 'draft' && o.items.length" type="button" class="btn btn-primary btn-sm"
+                    :class="{'btn-loading': o._saving}" :onclick="setStatus(o, 'active')">Activate</button>
+                  <button :if="o.status === 'active' && !o._receiving" type="button" class="btn btn-primary btn-sm"
+                    :onclick="startReceive(o)">Complete</button>
+                  <span :if="!o._confirm">
+                    <button type="button" class="btn btn-outline btn-sm" style="color:var(--c-err)"
+                      :onclick="o._confirm = true">Cancel</button>
+                  </span>
+                  <span :if="o._confirm" style="display:inline-flex; align-items:center; gap:var(--s-xs)">
+                    <span class="dim" style="font-size:var(--f-sm)">Cancel order?</span>
+                    <button type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': o._saving}"
+                      :onclick="setStatus(o, 'cancelled')">Yes</button>
+                    <button type="button" class="btn-link" style="font-size:var(--f-sm)" :onclick="o._confirm = false">No</button>
+                  </span>
+                </span>
+              </div>
+
+              <p :if="!o.items.length" class="dim" style="font-size:var(--f-sm); margin:var(--s-sm) 0 0">
+                Empty draft — tick books in the Catalog tab.
+              </p>
+
+              <table :if="o.items.length && !o._receiving" class="order-table">
+                <thead><tr><th>Title</th><th>Language</th><th>Stock</th><th>Boxes</th><th :if="o.status === 'draft'"></th></tr></thead>
+                <tbody>
+                  <tr :each="it in o.items">
+                    <td :text="bookFor(it.book_id).title"></td>
+                    <td :text="bookFor(it.book_id).language || '—'"></td>
+                    <td :text="bookFor(it.book_id).stock ?? 0"></td>
+                    <td>
+                      <input :if="o.status === 'draft'" type="number" min="1" inputmode="numeric"
+                        :value="it.boxes_ordered" :onchange="e => setBoxes(o, it, e.target.value)">
+                      <span :if="o.status !== 'draft'" :text="it.boxes_ordered"></span>
+                    </td>
+                    <td :if="o.status === 'draft'">
+                      <button type="button" class="btn-link" :onclick="removeItem(o, it)">×</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <!-- Receive mode: count what actually arrived, key books per box -->
+              <div :if="o._receiving">
+                <table class="order-table">
+                  <thead><tr><th>Title</th><th>Ordered</th><th>Boxes received</th><th>Books / box</th><th>Books</th></tr></thead>
+                  <tbody>
+                    <tr :each="it in o.items">
+                      <td :text="bookFor(it.book_id).title"></td>
+                      <td :text="it.boxes_ordered"></td>
+                      <td><input type="number" min="0" inputmode="numeric"
+                        :value="(recv[it.book_id] || {}).boxes" :oninput="e => setRecv(it.book_id, 'boxes', e.target.value)"></td>
+                      <td><input type="number" min="1" inputmode="numeric" placeholder="?"
+                        :value="(recv[it.book_id] || {}).perbox" :oninput="e => setRecv(it.book_id, 'perbox', e.target.value)"></td>
+                      <td :text="lineBooks(it.book_id)"></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div style="display:flex; align-items:center; gap:var(--s-sm); margin-top:var(--s-sm)">
+                  <strong :text="'Total: ' + receiveTotal(o) + ' books to add to stock'"></strong>
+                  <span style="margin-left:auto; display:inline-flex; gap:var(--s-xs)">
+                    <button type="button" class="btn btn-primary btn-sm" :class="{'btn-loading': o._saving}"
+                      :onclick="completeOrder(o)">Complete & update stock</button>
+                    <button type="button" class="btn btn-outline btn-sm" :onclick="o._receiving = false">Back</button>
+                  </span>
+                </div>
+              </div>
             </div>
+
+            <!-- Completed / cancelled: compact history row -->
+            <div :if="o.status === 'completed' || o.status === 'cancelled'" class="order-head">
+              <strong :text="'Order #' + o.id"></strong>
+              <span class="badge" :class="statusCls(o.status)" :text="o.status"></span>
+              <span class="dim" style="font-size:var(--f-sm)" :text="fmtDate(o.updated_at)"></span>
+              <span class="dim" style="font-size:var(--f-sm)"
+                :text="o.items.length + ' title' + (o.items.length === 1 ? '' : 's') + ' · ' + orderBoxes(o) + ' boxes' + (o.status === 'completed' ? ' · ' + orderBooks(o) + ' books added' : '')"></span>
+              <span class="order-actions">
+                <button type="button" class="btn btn-outline btn-sm" :onclick="exportOrder(o)">Export Excel</button>
+              </span>
+            </div>
+
           </div>
-          <table class="order-table">
-            <thead>
-              <tr><th>Title</th><th>Language</th><th>Stock</th><th>Qty to order</th><th></th></tr>
-            </thead>
-            <tbody>
-              <tr :each="it in orderitems">
-                <td :text="orderBook(it.id).title"></td>
-                <td :text="orderBook(it.id).language || '—'"></td>
-                <td :text="orderBook(it.id).stock ?? 0"></td>
-                <td><input type="number" min="0" inputmode="numeric" style="width:6rem"
-                  :value="it.qty" :oninput="e => it.qty = e.target.value"></td>
-                <td><button type="button" class="btn-link" :onclick="emit('orderremove', it.id)">×</button></td>
-              </tr>
-            </tbody>
-          </table>
         </div>
 
       </section>
     </template>
     <script>
-      this.orderBook = function(id) {
+      this.bookFor = function(id) {
         return (this.books || []).find(function(b) { return b.id === id }) || {}
       }
-      this.exportOrder = function() {
+      this.statusCls = function(s) {
+        return ({ draft: 'badge-draft', active: 'badge-active', completed: 'badge-paid', cancelled: 'badge-rejected' })[s] || ''
+      }
+      this.fmtDate = function(d) { return d ? new Date(d).toLocaleDateString() : '' }
+      this.itemsPayload = function(o) {
+        return o.items.map(function(it) { return { book_id: it.book_id, boxes: parseInt(it.boxes_ordered) || 1 } })
+      }
+      this.saveItems = function(o, items) {
         var self = this
-        var rows = [['Title', 'Author', 'Language', 'Category', 'Current Stock', 'Qty to Order']]
-        this.orderitems.forEach(function(it) {
-          var b = self.orderBook(it.id)
-          rows.push([b.title || '', b.author || '', b.language || '', b.category || '', b.stock ?? 0, it.qty || ''])
+        o._saving = true
+        self.api.updateSankirtanOrder(o.id, items)
+          .then(function() { o._saving = false; self.emit('reload') })
+          .catch(function(e) { o._saving = false; self.toast(e.message || 'Failed to save', 'error'); self.emit('reload') })
+      }
+      this.setBoxes = function(o, it, v) {
+        it.boxes_ordered = parseInt(v) || 1
+        this.saveItems(o, this.itemsPayload(o))
+      }
+      this.removeItem = function(o, it) {
+        this.saveItems(o, this.itemsPayload(o).filter(function(x) { return x.book_id !== it.book_id }))
+      }
+      this.setStatus = function(o, status) {
+        var self = this
+        o._saving = true
+        self.api.setSankirtanOrderStatus(o.id, status)
+          .then(function() {
+            o._saving = false
+            self.toast(status === 'active' ? 'Order activated' : 'Order cancelled', 'success')
+            self.emit('reload')
+          })
+          .catch(function(e) { o._saving = false; self.toast(e.message || 'Failed to update order', 'error') })
+      }
+      // Receive-mode inputs live in component state, reassigned on every edit —
+      // mutating the server order objects directly wouldn't re-render.
+      this.recv = {}
+      this.startReceive = function(o) {
+        var m = {}
+        o.items.forEach(function(it) { m[it.book_id] = { boxes: it.boxes_ordered, perbox: '' } })
+        this.orders.forEach(function(o2) { if (o2.id !== o.id) o2._receiving = false })
+        this.recv = m
+        o._receiving = true
+      }
+      this.setRecv = function(bookId, field, v) {
+        var m = Object.assign({}, this.recv)
+        m[bookId] = Object.assign({}, m[bookId])
+        m[bookId][field] = v
+        this.recv = m
+      }
+      this.lineBooks = function(bookId) {
+        var r = this.recv[bookId] || {}
+        return (parseInt(r.boxes) || 0) * (parseInt(r.perbox) || 0)
+      }
+      this.receiveTotal = function(o) {
+        var self = this
+        return o.items.reduce(function(sum, it) { return sum + self.lineBooks(it.book_id) }, 0)
+      }
+      this.completeOrder = function(o) {
+        var self = this
+        var missing = o.items.some(function(it) {
+          var r = self.recv[it.book_id] || {}
+          return (parseInt(r.boxes) || 0) > 0 && !(parseInt(r.perbox) > 0)
         })
-        var csv = rows.map(function(r) {
-          return r.map(function(c) { return '"' + String(c).replace(/"/g, '""') + '"' }).join(',')
-        }).join('\n')
-        var blob = new Blob([csv], { type: 'text/csv' })
-        var a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = 'book-order-' + new Date().toISOString().slice(0, 10) + '.csv'
-        a.click()
-        URL.revokeObjectURL(a.href)
+        if (missing) { self.toast('Enter books per box for every received line', 'error'); return }
+        var items = o.items.map(function(it) {
+          var r = self.recv[it.book_id] || {}
+          return { book_id: it.book_id, boxes_received: parseInt(r.boxes) || 0, books_per_box: parseInt(r.perbox) || 0 }
+        })
+        o._saving = true
+        self.api.receiveSankirtanOrder(o.id, items)
+          .then(function() {
+            o._saving = false
+            self.toast('Order completed — stock updated', 'success')
+            self.emit('reload')
+          })
+          .catch(function(e) { o._saving = false; self.toast(e.message || 'Failed to complete order', 'error') })
+      }
+      this.orderBoxes = function(o) {
+        return o.items.reduce(function(sum, it) { return sum + (o.status === 'completed' ? it.boxes_received : it.boxes_ordered) }, 0)
+      }
+      this.orderBooks = function(o) {
+        return o.items.reduce(function(sum, it) { return sum + it.boxes_received * it.books_per_box }, 0)
+      }
+      this.exportOrder = function(o) {
+        var self = this
+        self.api.downloadSankirtanOrderXLSX(o.id)
+          .catch(function(e) { self.toast(e.message || 'Failed to export', 'error') })
       }
     </script>
   </sankirtan-order-tab>
