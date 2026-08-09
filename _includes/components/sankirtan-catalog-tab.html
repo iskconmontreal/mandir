@@ -101,9 +101,8 @@
             <input type="checkbox" :value="filterNeedOrder" :change="v => filterNeedOrder = v">
             Need to order
           </label>
-          <button :if="filterSearch || filterType || filterSize || filterLanguage || filterCover || filterNeedOrder"
-            type="button" class="btn btn-outline"
-            :onclick="filterSearch=''; filterType=''; filterSize=''; filterLanguage=''; filterCover=''; filterNeedOrder=false">Clear</button>
+          <button :if="hasFilters()" type="button" class="btn btn-outline"
+            :onclick="clearFilters()">Clear</button>
           <div class="filter-bar-actions" style="margin-left:auto; display:flex; gap:var(--s-xs)">
             <button :if="canmanage" type="button" class="btn btn-outline"
               :class="{'btn-loading': importing}"
@@ -414,6 +413,17 @@
       this.filterCover = ''
       this.filterType = ''   // '' = all, 'book', 'stack'
       this.filterNeedOrder = false
+      this.hasFilters = function() {
+        return !!(this.filterSearch || this.filterType || this.filterSize || this.filterLanguage || this.filterCover || this.filterNeedOrder)
+      }
+      this.clearFilters = function() {
+        this.filterSearch = ''
+        this.filterType = ''
+        this.filterSize = ''
+        this.filterLanguage = ''
+        this.filterCover = ''
+        this.filterNeedOrder = false
+      }
       this.filteredBooks = function() {
         var self = this
         var q = (self.filterSearch || '').toLowerCase()
