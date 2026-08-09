@@ -9,6 +9,7 @@
       .order-table th { color: var(--c-text-dim); font-weight: normal; }
       .order-table th, .order-table td { text-align: left; padding: var(--s-xs) var(--s-sm); border-bottom: 1px solid var(--c-border); }
       .order-table input { width: 5.5rem; }
+      .order-table .lang-row td { background: rgba(0,0,0,.03); font-weight: var(--f-wt-b); color: var(--c-text-dim); }
       .badge.badge-draft { background: #e5e7eb; color: #374151; }
       .badge.badge-active { background: #dbeafe; color: #1d4ed8; }
     </style>
@@ -52,11 +53,14 @@
               </p>
 
               <table :if="o.items.length && !o._receiving" class="order-table">
-                <thead><tr><th>Title</th><th>Language</th><th>Stock</th><th>Boxes</th><th :if="o.status === 'draft'"></th></tr></thead>
-                <tbody>
-                  <tr :each="it in o.items">
-                    <td :text="bookFor(it.book_id).title"></td>
-                    <td :text="bookFor(it.book_id).language || '—'"></td>
+                <thead><tr><th>Title</th><th>Stock</th><th>Boxes</th><th :if="o.status === 'draft'"></th></tr></thead>
+                <tbody :each="g in langGroups(o)">
+                  <tr class="lang-row"><td colspan="4" :text="g.lang"></td></tr>
+                  <tr :each="it in g.items">
+                    <td>
+                      <div :text="bookFor(it.book_id).title"></div>
+                      <div class="dim" style="font-size:0.85em" :text="bookFor(it.book_id).author"></div>
+                    </td>
                     <td :text="bookFor(it.book_id).stock ?? 0"></td>
                     <td>
                       <input :if="o.status === 'draft'" type="number" min="1" inputmode="numeric"
@@ -74,9 +78,13 @@
               <div :if="o._receiving">
                 <table class="order-table">
                   <thead><tr><th>Title</th><th>Ordered</th><th>Boxes received</th><th>Books / box</th><th>Books</th></tr></thead>
-                  <tbody>
-                    <tr :each="it in o.items">
-                      <td :text="bookFor(it.book_id).title"></td>
+                  <tbody :each="g in langGroups(o)">
+                    <tr class="lang-row"><td colspan="5" :text="g.lang"></td></tr>
+                    <tr :each="it in g.items">
+                      <td>
+                        <div :text="bookFor(it.book_id).title"></div>
+                        <div class="dim" style="font-size:0.85em" :text="bookFor(it.book_id).author"></div>
+                      </td>
                       <td :text="it.boxes_ordered"></td>
                       <td><input type="number" min="0" inputmode="numeric"
                         :value="(recv[it.book_id] || {}).boxes" :oninput="e => setRecv(it.book_id, 'boxes', e.target.value)"></td>
@@ -122,6 +130,24 @@
         return ({ draft: 'badge-draft', active: 'badge-active', completed: 'badge-paid', cancelled: 'badge-rejected' })[s] || ''
       }
       this.fmtDate = function(d) { return d ? new Date(d).toLocaleDateString() : '' }
+      // Items grouped by language (A→Z), titles A→Z within each group.
+      this.langGroups = function(o) {
+        var self = this
+        var groups = []
+        ;(o.items || []).forEach(function(it) {
+          var lang = self.bookFor(it.book_id).language || 'Other'
+          var g = groups.find(function(x) { return x.lang === lang })
+          if (!g) { g = { lang: lang, items: [] }; groups.push(g) }
+          g.items.push(it)
+        })
+        groups.forEach(function(g) {
+          g.items.sort(function(a, b) {
+            return (self.bookFor(a.book_id).title || '').localeCompare(self.bookFor(b.book_id).title || '')
+          })
+        })
+        groups.sort(function(a, b) { return a.lang.localeCompare(b.lang) })
+        return groups
+      }
       this.itemsPayload = function(o) {
         return o.items.map(function(it) { return { book_id: it.book_id, boxes: parseInt(it.boxes_ordered) || 1 } })
       }
