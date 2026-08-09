@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-tab-bar active:string="catalog">
+  <sankirtan-tab-bar active:string="catalog" canmanage:boolean="false" ordercount:number="0">
     <style>:host { display: contents; }</style>
     <template>
       <div class="pill-tabs" style="margin-bottom:var(--s-xl)" role="tablist">
@@ -15,6 +15,10 @@
         <button type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'metrics'}"
           :onclick="emit('tabchange', 'metrics')">Metrics</button>
+        <button :if="canmanage" type="button" class="pill-tab" role="tab"
+          :class="{'pill-tab-active': active === 'order'}"
+          :onclick="emit('tabchange', 'order')"
+          :text="ordercount ? 'Order (' + ordercount + ')' : 'Order'"></button>
       </div>
     </template>
   </sankirtan-tab-bar>

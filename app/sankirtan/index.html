@@ -7,16 +7,19 @@ preloads:
   <h1>Sankirtan</h1>
 </div>
 
-<sankirtan-tab-bar :active="activeTab" :ontabchange="e => switchTab(e.detail)">
+<sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="orderItems.length"
+  :ontabchange="e => switchTab(e.detail)">
 </sankirtan-tab-bar>
 
 <sankirtan-catalog-tab
   :active="activeTab === 'catalog'"
   :books="books"
+  :orderitems="orderItems"
   :loading="loading"
   :error="loadErr"
   :canmanage="can('sankirtan:manage')"
-  :onreload="loadBooks">
+  :onreload="loadBooks"
+  :onordertoggle="e => toggleOrder(e.detail)">
 </sankirtan-catalog-tab>
 
 <sankirtan-sessions-tab
@@ -48,12 +51,21 @@ preloads:
   :error="loadErr">
 </sankirtan-metrics-tab>
 
+<sankirtan-order-tab
+  :active="activeTab === 'order'"
+  :books="books"
+  :orderitems="orderItems"
+  :onorderremove="e => removeOrder(e.detail)"
+  :onorderclear="clearOrder">
+</sankirtan-order-tab>
+
 <script src="../../lib/define-element.js" defer></script>
 {% include components/sankirtan-tab-bar.html %}
 {% include components/sankirtan-catalog-tab.html %}
 {% include components/sankirtan-sessions-tab.html %}
 {% include components/sankirtan-leaderboard-tab.html %}
 {% include components/sankirtan-metrics-tab.html %}
+{% include components/sankirtan-order-tab.html %}
 
 <script type="module">
   import sprae from 'sprae'
@@ -106,7 +118,7 @@ preloads:
     }))
   }
 
-  const VALID_TABS = ['catalog', 'sessions', 'leaderboard', 'metrics']
+  const VALID_TABS = ['catalog', 'sessions', 'leaderboard', 'metrics', 'order']
   const urlTab = () => {
     const t = new URLSearchParams(location.search).get('tab')
     return VALID_TABS.includes(t) ? t : 'catalog'
@@ -129,6 +141,21 @@ preloads:
     lbMonthLabel: monthRange(0).label,
     lbLoading: false,
     lbErr: null,
+    orderItems: [],
+
+    toggleOrder(id) {
+      const items = s.orderItems.filter(it => it.id !== id)
+      if (items.length === s.orderItems.length) items.push({ id, qty: '' })
+      s.orderItems = items
+    },
+
+    removeOrder(id) {
+      s.orderItems = s.orderItems.filter(it => it.id !== id)
+    },
+
+    clearOrder() {
+      s.orderItems = []
+    },
 
     switchTab(tab) {
       s.activeTab = tab

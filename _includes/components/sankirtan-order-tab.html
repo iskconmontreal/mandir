@@ -1,0 +1,66 @@
+<define-element>
+  <sankirtan-order-tab active:boolean="false" books:array orderitems:array>
+    <style>
+      :host { display: contents; }
+      .order-table { width: 100%; border-collapse: collapse; font-size: var(--f-sm); }
+      .order-table th { color: var(--c-text-dim); font-weight: normal; }
+      .order-table th, .order-table td { text-align: left; padding: var(--s-xs) var(--s-sm); border-bottom: 1px solid var(--c-border); }
+    </style>
+    <template>
+      <section :if="active">
+
+        <div :if="!orderitems.length" class="dim" style="padding:var(--s-lg); text-align:center">
+          No books selected yet — tick “Add to order” on books in the Catalog tab.
+        </div>
+
+        <div :if="orderitems.length" class="card">
+          <div style="display:flex; align-items:center; gap:var(--s-sm); margin-bottom:var(--s-sm)">
+            <h3 style="margin:0" :text="'Order to prepare (' + orderitems.length + ')'"></h3>
+            <div style="margin-left:auto; display:flex; gap:var(--s-xs)">
+              <button type="button" class="btn btn-outline btn-sm" :onclick="exportOrder()">Export CSV</button>
+              <button type="button" class="btn btn-outline btn-sm" :onclick="emit('orderclear')">Clear</button>
+            </div>
+          </div>
+          <table class="order-table">
+            <thead>
+              <tr><th>Title</th><th>Language</th><th>Stock</th><th>Qty to order</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr :each="it in orderitems">
+                <td :text="orderBook(it.id).title"></td>
+                <td :text="orderBook(it.id).language || '—'"></td>
+                <td :text="orderBook(it.id).stock ?? 0"></td>
+                <td><input type="number" min="0" inputmode="numeric" style="width:6rem"
+                  :value="it.qty" :oninput="e => it.qty = e.target.value"></td>
+                <td><button type="button" class="btn-link" :onclick="emit('orderremove', it.id)">×</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </section>
+    </template>
+    <script>
+      this.orderBook = function(id) {
+        return (this.books || []).find(function(b) { return b.id === id }) || {}
+      }
+      this.exportOrder = function() {
+        var self = this
+        var rows = [['Title', 'Author', 'Language', 'Category', 'Current Stock', 'Qty to Order']]
+        this.orderitems.forEach(function(it) {
+          var b = self.orderBook(it.id)
+          rows.push([b.title || '', b.author || '', b.language || '', b.category || '', b.stock ?? 0, it.qty || ''])
+        })
+        var csv = rows.map(function(r) {
+          return r.map(function(c) { return '"' + String(c).replace(/"/g, '""') + '"' }).join(',')
+        }).join('\n')
+        var blob = new Blob([csv], { type: 'text/csv' })
+        var a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = 'book-order-' + new Date().toISOString().slice(0, 10) + '.csv'
+        a.click()
+        URL.revokeObjectURL(a.href)
+      }
+    </script>
+  </sankirtan-order-tab>
+</define-element>
