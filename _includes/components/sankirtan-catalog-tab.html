@@ -67,6 +67,9 @@
         background: #ffe5d0;
         color: #c2410c;
       }
+      .order-table { width: 100%; border-collapse: collapse; font-size: var(--f-sm); }
+      .order-table th { color: var(--c-text-dim); font-weight: normal; }
+      .order-table th, .order-table td { text-align: left; padding: var(--s-xs) var(--s-sm); border-bottom: 1px solid var(--c-border); }
     </style>
     <template>
       <section :if="active">
@@ -97,9 +100,13 @@
             <option value="Soft">Soft</option>
             <option value="Hard">Hard</option>
           </select>
-          <button :if="filterSearch || filterType || filterSize || filterLanguage || filterCover"
+          <label style="display:flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); cursor:pointer; white-space:nowrap">
+            <input type="checkbox" :value="filterNeedOrder" :change="v => filterNeedOrder = v">
+            Need to order
+          </label>
+          <button :if="filterSearch || filterType || filterSize || filterLanguage || filterCover || filterNeedOrder"
             type="button" class="btn btn-outline"
-            :onclick="filterSearch=''; filterType=''; filterSize=''; filterLanguage=''; filterCover=''">Clear</button>
+            :onclick="filterSearch=''; filterType=''; filterSize=''; filterLanguage=''; filterCover=''; filterNeedOrder=false">Clear</button>
           <div class="filter-bar-actions" style="margin-left:auto; display:flex; gap:var(--s-xs)">
             <button :if="canmanage" type="button" class="btn btn-outline"
               :class="{'btn-loading': importing}"
@@ -111,6 +118,32 @@
             <button :if="canmanage" type="button" class="btn btn-primary"
               :onclick="openAdd()">+ Add Book</button>
           </div>
+        </div>
+
+        <!-- Order preparation -->
+        <div :if="canmanage && orderItems.length" class="card" style="margin-bottom:var(--s-md)">
+          <div style="display:flex; align-items:center; gap:var(--s-sm); margin-bottom:var(--s-sm)">
+            <h3 style="margin:0" :text="'Order to prepare (' + orderItems.length + ')'"></h3>
+            <div style="margin-left:auto; display:flex; gap:var(--s-xs)">
+              <button type="button" class="btn btn-outline btn-sm" :onclick="exportOrder()">Export CSV</button>
+              <button type="button" class="btn btn-outline btn-sm" :onclick="orderItems = []">Clear</button>
+            </div>
+          </div>
+          <table class="order-table">
+            <thead>
+              <tr><th>Title</th><th>Language</th><th>Stock</th><th>Qty to order</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr :each="it in orderItems">
+                <td :text="orderBook(it.id).title"></td>
+                <td :text="orderBook(it.id).language || '—'"></td>
+                <td :text="orderBook(it.id).stock ?? 0"></td>
+                <td><input type="number" min="0" inputmode="numeric" style="width:6rem"
+                  :value="it.qty" :oninput="e => it.qty = e.target.value"></td>
+                <td><button type="button" class="btn-link" :onclick="removeOrder(it.id)">×</button></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <div :if="loading && !books.length" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
@@ -166,6 +199,10 @@
                 Stock <span class="stock-value" :text="b.stock ?? 0"></span>
                 <span :if="isLowStock(b)" class="badge badge-low" style="margin-left:var(--s-xs)">Need to order</span>
               </span>
+              <label :if="canmanage" style="margin-left:auto; display:flex; align-items:center; gap:var(--s-xs); cursor:pointer">
+                <input type="checkbox" :checked="inOrder(b.id)" :onchange="toggleOrder(b)">
+                Add to order
+              </label>
             </div>
             <div class="book-stock" :if="b.is_stack">
               <span class="stock-item">Available <span class="stock-value" :text="stackAvailable(b)"></span> <span class="dim">(min of components)</span></span>
@@ -405,6 +442,7 @@
       this.filterLanguage = ''
       this.filterCover = ''
       this.filterType = ''   // '' = all, 'book', 'stack'
+      this.filterNeedOrder = false
       this.filteredBooks = function() {
         var self = this
         var q = (self.filterSearch || '').toLowerCase()
@@ -418,6 +456,7 @@
             var langOK = stack ? self.stackLangs(b).indexOf(self.filterLanguage) >= 0 : b.language === self.filterLanguage
             if (!langOK) return false
           }
+          if (self.filterNeedOrder && (stack || !self.isLowStock(b))) return false
           // Size / cover are book-only filters → exclude stacks when set.
           if (self.filterSize && (stack || self.sizeLabel(b.category) !== self.filterSize)) return false
           if (self.filterCover) {
@@ -616,6 +655,37 @@
             self.saving = false
             self.saveErr = e.message || 'Failed to save'
           })
+      }
+      // ── Order preparation ───────────────────────────────────
+      this.orderItems = []
+      this.orderBook = function(id) { return this.bookById(id) || {} }
+      this.inOrder = function(id) { return this.orderItems.some(function(it) { return it.id === id }) }
+      this.toggleOrder = function(b) {
+        var items = this.orderItems.slice()
+        var i = items.findIndex(function(it) { return it.id === b.id })
+        if (i >= 0) items.splice(i, 1)
+        else items.push({ id: b.id, qty: '' })
+        this.orderItems = items
+      }
+      this.removeOrder = function(id) {
+        this.orderItems = this.orderItems.filter(function(it) { return it.id !== id })
+      }
+      this.exportOrder = function() {
+        var self = this
+        var rows = [['Title', 'Author', 'Language', 'Category', 'Current Stock', 'Qty to Order']]
+        this.orderItems.forEach(function(it) {
+          var b = self.orderBook(it.id)
+          rows.push([b.title || '', b.author || '', b.language || '', b.category || '', b.stock ?? 0, it.qty || ''])
+        })
+        var csv = rows.map(function(r) {
+          return r.map(function(c) { return '"' + String(c).replace(/"/g, '""') + '"' }).join(',')
+        }).join('\n')
+        var blob = new Blob([csv], { type: 'text/csv' })
+        var a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = 'book-order-' + new Date().toISOString().slice(0, 10) + '.csv'
+        a.click()
+        URL.revokeObjectURL(a.href)
       }
       this.exportCatalog = function() {
         var self = this
