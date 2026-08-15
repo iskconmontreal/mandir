@@ -53,14 +53,15 @@
               </p>
 
               <table :if="o.items.length && !o._receiving" class="order-table">
-                <thead><tr><th>Title</th><th>Stock</th><th>Boxes</th><th :if="o.status === 'draft'"></th></tr></thead>
+                <thead><tr><th>Title</th><th>Cover</th><th>Stock</th><th>Boxes</th><th :if="o.status === 'draft'"></th></tr></thead>
                 <tbody :each="g in langGroups(o)">
-                  <tr class="lang-row"><td colspan="4" :text="g.lang"></td></tr>
+                  <tr class="lang-row"><td colspan="5" :text="g.lang"></td></tr>
                   <tr :each="it in g.items">
                     <td>
                       <div :text="bookFor(it.book_id).title"></div>
                       <div class="dim" style="font-size:0.85em" :text="bookFor(it.book_id).author"></div>
                     </td>
+                    <td :text="coverFor(it.book_id)"></td>
                     <td :text="bookFor(it.book_id).stock ?? 0"></td>
                     <td>
                       <input :if="o.status === 'draft'" type="number" min="1" inputmode="numeric"
@@ -130,6 +131,10 @@
         return ({ draft: 'badge-draft', active: 'badge-active', completed: 'badge-paid', cancelled: 'badge-rejected' })[s] || ''
       }
       this.fmtDate = function(d) { return d ? new Date(d).toLocaleDateString() : '' }
+      this.coverFor = function(id) {
+        var cat = this.bookFor(id).category || ''
+        return cat[0] === 'H' ? 'Hard' : 'Soft'
+      }
       // Items grouped by language (A→Z), titles A→Z within each group.
       this.langGroups = function(o) {
         var self = this
