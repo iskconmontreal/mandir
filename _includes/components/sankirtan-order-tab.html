@@ -133,7 +133,7 @@
       this.fmtDate = function(d) { return d ? new Date(d).toLocaleDateString() : '' }
       this.coverFor = function(id) {
         var cat = this.bookFor(id).category || ''
-        return cat[0] === 'H' ? 'Hard' : 'Soft'
+        return ({ H:'Hard', A:'Audiobook', E:'Audiobook + Ebook' })[cat[0]] || 'Soft'
       }
       // Items grouped by language (A→Z), titles A→Z within each group.
       this.langGroups = function(o) {

@@ -218,6 +218,10 @@
                   </tr>
                 </tbody>
               </table>
+              <!-- Informational only: scored digital sales are already inside the tier rows above. -->
+              <p :if="report && !reportLoading && report.digital_books" class="dim"
+                style="font-size:var(--f-sm); margin:var(--s-xs) 0 0"
+                :text="'Digital books: ' + report.digital_books"></p>
 
               <div :if="emailErr" class="login-error" :text="emailErr"></div>
               <button type="submit" class="btn btn-primary"
@@ -378,13 +382,14 @@
       this.emailSubject = ''
       this.emailMessage = ''
       this.emailSpecialNote = ''
-      // One color per cover, matching the catalog tab: soft = blue, hard = purple.
+      // One color per cover, matching the catalog tab.
       this.coverCls = function(cat) {
         if (cat === 'STK') return 'cat-purple'
-        return (cat && cat[0] === 'H') ? 'cat-purple' : 'cat-blue'
+        return ({ H:'cat-purple', A:'cat-teal', E:'cat-green' })[cat && cat[0]] || 'cat-blue'
       }
       this.coverLabel = function(cat) {
-        return cat === 'STK' ? 'Stack' : (cat && cat[0] === 'H') ? 'Hard cover' : 'Soft cover'
+        if (cat === 'STK') return 'Stack'
+        return ({ H:'Hard cover', A:'Audiobook', E:'Audiobook + Ebook' })[cat && cat[0]] || 'Soft cover'
       }
       // Excluded books are recorded but not scored — show a dash instead of 0 points.
       this.pointsLabel = function(sb) { return sb && sb.excluded ? '—' : (sb ? sb.line_points : '') }

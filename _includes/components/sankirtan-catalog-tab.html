@@ -96,6 +96,8 @@
             <option value="">All covers</option>
             <option value="Soft">Soft</option>
             <option value="Hard">Hard</option>
+            <option value="Audio">Audiobook</option>
+            <option value="Ebook">Audiobook + Ebook</option>
           </select>
           <label style="display:flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); cursor:pointer; white-space:nowrap">
             <input type="checkbox" :value="filterNeedOrder" :change="v => filterNeedOrder = v">
@@ -248,18 +250,20 @@
                   <div class="field">
                     <label for="bk-cover">Cover</label>
                     <select id="bk-cover"
-                      :change="v => { form.cover = v; form.points_per_unit = autoPointsFromPages(form.pages) }">
+                      :change="v => { form.cover = v; form.points_per_unit = autoPointsFromPages(form.pages, v) }">
                       <option value="Soft" :selected="form.cover === 'Soft'">Soft cover</option>
                       <option value="Hard" :selected="form.cover === 'Hard'">Hard cover</option>
+                      <option value="Audio" :selected="form.cover === 'Audio'">Audiobook</option>
+                      <option value="Ebook" :selected="form.cover === 'Ebook'">Audiobook + Ebook</option>
                     </select>
                     <p class="dim" style="font-size:var(--f-sm); margin:var(--s-xs) 0 0" :if="form.pages"
-                      :text="coverLabel(form.cover === 'Hard' ? 'H' : 'S') + ' · ' + sizeLabel(categoryFrom(form.cover, form.pages)) + ' book'"></p>
+                      :text="coverLabel(coverLetter(form.cover)) + ' · ' + sizeLabel(categoryFrom(form.cover, form.pages)) + ' book'"></p>
                   </div>
                   <div class="field">
                     <label for="bk-pages">Pages</label>
                     <input id="bk-pages" type="number" min="1" placeholder="e.g. 320"
                       :value="form.pages || ''"
-                      :oninput="e => { form.pages = parseInt(e.target.value) || null; form.points_per_unit = autoPointsFromPages(form.pages) }">
+                      :oninput="e => { form.pages = parseInt(e.target.value) || null; form.points_per_unit = autoPointsFromPages(form.pages, form.cover) }">
                   </div>
                   <div class="field">
                     <label for="bk-low-stock">Low-stock threshold</label>
@@ -393,7 +397,7 @@
       // un-excluding restores the page-derived score.
       this.setExcludeFromBBT = function(on) {
         this.form.exclude_from_bbt = on
-        this.form.points_per_unit = on ? 0 : this.autoPointsFromPages(this.form.pages)
+        this.form.points_per_unit = on ? 0 : this.autoPointsFromPages(this.form.pages, this.form.cover)
       }
       // Low stock is per-book now: each book carries its own low_stock_threshold (default 5).
       this.isLowStock = function(b) { return (b.stock || 0) <= (b.low_stock_threshold ?? 5) }
@@ -432,18 +436,21 @@
           if (self.filterSize && (stack || self.sizeLabel(b.category) !== self.filterSize)) return false
           if (self.filterCover) {
             if (stack) return false
-            var cover = (b.category && b.category[0] === 'H') ? 'Hard' : 'Soft'
+            var cover = self.coverFromLetter(b.category && b.category[0])
             if (cover !== self.filterCover) return false
           }
           return true
         })
       }
       this.catCls = function(cat) {
-        return ({ S1:'cat-blue', S2:'cat-teal', S3:'cat-green', S4:'cat-purple',
-                  H1:'cat-blue', H2:'cat-teal', H3:'cat-green', H4:'cat-purple' })[cat] || 'cat-gray'
+        return ({ '1':'cat-blue', '2':'cat-teal', '3':'cat-green', '4':'cat-purple' })[cat && cat[1]] || 'cat-gray'
       }
-      this.coverLabel = function(cat) { return (cat && cat[0] === 'H') ? 'Hard cover' : 'Soft cover' }
-      this.coverCls = function(cat) { return (cat && cat[0] === 'H') ? 'cat-purple' : 'cat-blue' }
+      this.coverLabel = function(cat) {
+        return ({ H:'Hard cover', A:'Audiobook', E:'Audiobook + Ebook' })[cat && cat[0]] || 'Soft cover'
+      }
+      this.coverCls = function(cat) {
+        return ({ H:'cat-purple', A:'cat-teal', E:'cat-green' })[cat && cat[0]] || 'cat-blue'
+      }
       // The category code is internal: cover + page count fully determine it.
       // Page count → size tier (rubric ranges). Anything below 150 is Small (tier 1).
       // A blank/invalid page count → tier 0 = size pending (cover known, no score).
@@ -455,9 +462,14 @@
         if (p >= 150) return 2
         return 1
       }
-      this.coverLetter = function(cover) { return cover === 'Hard' ? 'H' : 'S' }
+      this.coverLetter = function(cover) { return ({ Hard:'H', Audio:'A', Ebook:'E' })[cover] || 'S' }
+      this.coverFromLetter = function(letter) { return ({ H:'Hard', A:'Audio', E:'Ebook' })[letter] || 'Soft' }
       this.categoryFrom = function(cover, pages) { return this.coverLetter(cover) + this.tierFromPages(pages) }
-      this.autoPointsFromPages = function(pages) { return ({ 0:0, 1:0.25, 2:0.5, 3:1.0, 4:2.0 })[this.tierFromPages(pages)] }
+      this.autoPointsFromPages = function(pages, cover) {
+        var pts = ({ 0:0, 1:0.25, 2:0.5, 3:1.0, 4:2.0 })[this.tierFromPages(pages)]
+        // E* bundle counts as ebook + audiobook: the server doubles books and default points.
+        return cover === 'Ebook' ? pts * 2 : pts
+      }
       // Size label read from a STORED code's digit (tier 0 = pending).
       this.sizeLabel = function(cat) { return ({ '0':'Pending', '1':'Small', '2':'Medium', '3':'Big', '4':'Mahabig' })[cat && cat[1]] || '—' }
       // ── Stacks ──────────────────────────────────────────────
@@ -465,7 +477,7 @@
       this.setIsStack = function(on) {
         this.form.is_stack = on
         if (on) { this.form.items = []; this.form.points_per_unit = 0; this.form.cost_cents = 0 }
-        else { this.form.points_per_unit = this.autoPointsFromPages(this.form.pages) }
+        else { this.form.points_per_unit = this.autoPointsFromPages(this.form.pages, this.form.cover) }
       }
       this.bookById = function(id) { var list = (this.books && this.books.length) ? this.books : (this._catalog || []); return list.find(function(x) { return x.id === id }) }
       this.isComponent = function(id) { return this.form.items.indexOf(id) >= 0 }
@@ -527,7 +539,7 @@
         this.form.language = ''
         this.form.cover = 'Soft'
         this.form.pages = null
-        this.form.points_per_unit = this.autoPointsFromPages(null)
+        this.form.points_per_unit = this.autoPointsFromPages(null, 'Soft')
         this.form.cost_cents = 0
         this.form.retail_price_cents = 0
         this.form.exclude_from_bbt = false
@@ -546,10 +558,10 @@
         this.form.title = b.title || ''
         this.form.author = b.author || (b.is_stack ? '' : this.DEFAULT_AUTHOR)
         this.form.language = b.language || ''
-        this.form.cover = (b.category && b.category[0] === 'H') ? 'Hard' : 'Soft'
+        this.form.cover = this.coverFromLetter(b.category && b.category[0])
         this.form.pages = b.pages || null
         // Preserve the stored score (a stack/custom score is not re-derived).
-        this.form.points_per_unit = b.points_per_unit ?? this.autoPointsFromPages(b.pages)
+        this.form.points_per_unit = b.points_per_unit ?? this.autoPointsFromPages(b.pages, this.form.cover)
         this.form.cost_cents = b.cost_cents || 0
         this.form.retail_price_cents = b.retail_price_cents || 0
         this.form.exclude_from_bbt = !!b.exclude_from_bbt
