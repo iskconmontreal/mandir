@@ -198,11 +198,70 @@ preloads:
       </div>
     </div>
   </div>
+
+  <!-- Backup -->
+  <div class="card" :if="canBackup">
+    <div class="card-header" style="align-items:flex-start; gap:var(--s-md); flex-wrap:wrap">
+      <div>
+        <h3 style="margin:0">Backup</h3>
+        <div class="dim" style="font-size:var(--f-sm)">Nightly cloud backup of all data — sessions, stock, orders, users, finances.</div>
+      </div>
+      <div class="org-form-actions">
+        <button type="button" class="btn btn-primary" :class="{'btn-loading': backingUp}" :disabled="!(backup && backup.remote_configured) || restoring" :onclick="runBackup">Backup now</button>
+        <button type="button" class="btn btn-outline" style="color:var(--c-err); border-color:var(--c-err)" :disabled="!(backup && backup.remote_configured) || backingUp || restoring" :onclick="openRestoreModal">Restore latest backup</button>
+      </div>
+    </div>
+
+    <div :if="backupErr" class="login-error" :text="backupErr"></div>
+    <div :if="!backupErr && backup && !backup.remote_configured" class="dim">Cloud storage is not configured on the server.</div>
+
+    <div :if="!backupErr && backup && backup.remote_configured">
+      <div class="org-readiness" :class="backupStale ? 'org-readiness-err' : 'org-readiness-ok'">
+        <div class="org-readiness-icon" :html="backupStale ? icons.warn : icons.check"></div>
+        <div>
+          <div style="font-weight:var(--f-wt-b)" :text="'Last backup: ' + lastBackupText"></div>
+          <div class="dim" style="font-size:var(--f-sm)" :text="backupStale ? 'Backup is older than 26 hours — the nightly backup may have failed.' : (backingUp ? 'Backup in progress…' : 'Backups run automatically every night.')"></div>
+        </div>
+      </div>
+      <div :if="backup.restore_error" class="login-error" style="margin-top:var(--s-sm)" :text="'Restore error: ' + backup.restore_error"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Restore confirmation modal -->
+<div :if="showRestoreModal" class="modal-overlay"
+  :onclick="e => { if (e.target === e.currentTarget) closeRestoreModal() }"
+  :onkeydown.esc.document="closeRestoreModal()">
+  <div class="modal" style="max-width:32rem">
+    <div class="modal-header">
+      <h2 :text="restoring ? 'Restoring backup' : 'Restore latest backup'"></h2>
+      <button :if="!restoring" class="modal-close" type="button" aria-label="Close" :onclick="closeRestoreModal" :html="icons.close"></button>
+    </div>
+    <div class="modal-body">
+      <div :if="!restoring">
+        <div class="login-error" style="margin-bottom:var(--s-md)">This replaces ALL current data (sessions, stock, orders, users, finances) with the most recent backup. Anything entered since that backup will be lost.</div>
+        <div class="field">
+          <label for="restore-confirm">Type RESTORE to confirm</label>
+          <input id="restore-confirm" type="text" autocomplete="off" spellcheck="false" :value="restoreInput" :oninput="e => restoreInput = e.target.value" placeholder="RESTORE">
+        </div>
+        <div :if="restoreFailed" class="login-error" style="margin-top:var(--s-sm)" :text="restoreFailed"></div>
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); margin-top:var(--s-md)">
+          <button type="button" class="btn btn-outline" :onclick="closeRestoreModal">Cancel</button>
+          <button type="button" class="btn btn-primary" style="background:var(--c-err); border-color:var(--c-err)" :disabled="restoreInput !== 'RESTORE'" :onclick="confirmRestore">Restore</button>
+        </div>
+      </div>
+      <div :if="restoring" style="text-align:center; padding:var(--s-md) 0">
+        <img src="/assets/preloader.svg" alt="" style="width:3rem">
+        <div style="margin-top:var(--s-sm); font-weight:var(--f-wt-b)">Restoring — the site is restarting…</div>
+        <div class="dim" style="font-size:var(--f-sm); margin-top:var(--s-sm)">Do not close this page. It will reload automatically.</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script type="module">
   import { init, auth, canEditOrgSettings, fmtAmt, rawAmt, toCents, toast } from 'lib/app.js'
-  import { api } from 'lib/api.js'
+  import { api, BASE } from 'lib/api.js'
   import { icon } from 'lib/icons.js'
 
   const EMPTY = {
@@ -225,6 +284,8 @@ preloads:
   }
 
   function cleanText(v) { return String(v ?? '').trim() }
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms))
 
   function normalize(res) {
     const src = res?.settings || res?.item || res || {}
@@ -277,7 +338,100 @@ preloads:
     logoBroken: false,
     snapshot: { ...EMPTY },
     form: toForm(EMPTY),
-    icons: { check: icon('status_approved'), warn: icon('status_submitted') },
+    icons: { check: icon('status_approved'), warn: icon('status_submitted'), close: icon('close') },
+
+    canBackup: auth.can('settings:manage'),
+    backup: null,
+    backupErr: '',
+    backingUp: false,
+    showRestoreModal: false,
+    restoreInput: '',
+    restoring: false,
+    restoreFailed: '',
+
+    get backupStale() {
+      const m = this.backup ? this.backup.age_minutes : null
+      return m == null || m > 1560
+    },
+
+    get lastBackupText() {
+      return this.backup && this.backup.last_backup ? new Date(this.backup.last_backup).toLocaleString() : 'Never'
+    },
+
+    async refreshBackup() {
+      try {
+        this.backup = await api.getBackupStatus()
+        this.backupErr = ''
+      } catch (e) {
+        this.backupErr = e.message || 'Failed to load backup status'
+      }
+    },
+
+    async runBackup() {
+      if (this.backingUp || this.restoring) return
+      const prev = this.backup && this.backup.last_backup
+      this.backingUp = true
+      try {
+        await api.runBackup()
+        const deadline = Date.now() + 5 * 60_000
+        let misses = 0
+        while (Date.now() < deadline) {
+          await sleep(3000)
+          try {
+            this.backup = await api.getBackupStatus()
+            misses = 0
+            if (!this.backup.running && this.backup.last_backup && this.backup.last_backup !== prev) {
+              toast('Backup completed', 'success')
+              return
+            }
+          } catch (e) {
+            if (++misses >= 3) throw e
+          }
+        }
+        throw new Error('Backup did not finish within 5 minutes — check again later')
+      } catch (e) {
+        toast(e.message || 'Backup failed', 'error')
+      } finally {
+        this.backingUp = false
+      }
+    },
+
+    openRestoreModal() {
+      this.restoreInput = ''
+      this.restoreFailed = ''
+      this.showRestoreModal = true
+    },
+
+    closeRestoreModal() {
+      if (!this.restoring) this.showRestoreModal = false
+    },
+
+    async confirmRestore() {
+      if (this.restoreInput !== 'RESTORE' || this.restoring) return
+      this.restoring = true
+      this.restoreFailed = ''
+      try {
+        try {
+          await api.restoreBackup()
+        } catch (e) {
+          // the server restarts mid-request; only real API errors abort
+          if (!/timed out|Cannot reach server/i.test(e.message || '')) throw e
+        }
+        await sleep(5000)
+        const deadline = Date.now() + 5 * 60_000
+        while (Date.now() < deadline) {
+          try {
+            const r = await fetch(`${BASE}/api/health`)
+            if (r.ok) { location.reload(); return }
+          } catch {}
+          await sleep(3000)
+        }
+        throw new Error('Server did not come back — check the server logs')
+      } catch (e) {
+        this.restoreFailed = e.message || 'Restore failed'
+        this.restoring = false
+      }
+    },
 
     get receiptReady() {
       return RECEIPT_FIELDS.every(k => cleanText(this.form[k]))
@@ -356,6 +510,7 @@ preloads:
   async function load() {
     s.loading = true
     s.loadErr = ''
+    if (s.canBackup) s.refreshBackup()
     try {
       s.apply(await api.getOrgSettings())
     } catch (e) {

@@ -2877,6 +2877,12 @@ form {
   background: var(--c-warn-bg);
 }
 .org-readiness-warn .org-readiness-icon { color: var(--c-warn-amber); }
+.org-readiness-err {
+  border-color: var(--c-err);
+  background: var(--c-err-hover);
+  color: var(--c-err);
+}
+.org-readiness-err .org-readiness-icon { color: var(--c-err); }
 .org-readiness-icon { flex-shrink: 0; }
 .org-readiness-icon svg { width: 20px; height: 20px; }
 .org-form-sections {
