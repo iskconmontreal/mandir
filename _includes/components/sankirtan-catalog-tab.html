@@ -67,6 +67,20 @@
         background: #ffe5d0;
         color: #c2410c;
       }
+      .cover-thumb {
+        width: 5.5rem;
+        border-radius: var(--r-sm);
+        border: 1px solid var(--c-border);
+        object-fit: cover;
+      }
+      .cover-thumb-empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 7rem;
+        color: var(--c-text-dim);
+        font-size: var(--f-sm);
+      }
     </style>
     <template>
       <section :if="active">
@@ -282,12 +296,45 @@
                 </div>
               </div>
 
+              <!-- ── Description (applies to books and stacks, per language edition) ── -->
+              <div class="field">
+                <label for="bk-description">Description <span class="dim" style="font-weight:normal">(optional)</span></label>
+                <textarea id="bk-description" rows="4" maxlength="2000"
+                  placeholder="Plain-text description of this edition (max 2000 characters)"
+                  :value="form.description"
+                  :oninput="e => form.description = e.target.value"></textarea>
+              </div>
+
               <!-- ── Note (applies to books and stacks) ── -->
               <div class="field">
                 <label for="bk-note">Note</label>
                 <textarea id="bk-note" rows="2" placeholder="e.g. To order 2 boxes"
                   :value="form.note"
                   :oninput="e => form.note = e.target.value"></textarea>
+              </div>
+
+              <!-- ── Cover image (edit only — needs a saved book id) ── -->
+              <div :if="modalBook" class="field">
+                <label>Cover image</label>
+                <div style="display:flex; align-items:flex-start; gap:var(--s-md)">
+                  <img :if="!coverMissing" class="cover-thumb" alt="Book cover"
+                    :src="coverSrc"
+                    :onerror="coverMissing = true">
+                  <div :if="coverMissing" class="cover-thumb cover-thumb-empty">No cover</div>
+                  <div style="display:flex; flex-direction:column; align-items:flex-start; gap:var(--s-xs)">
+                    <button type="button" class="btn btn-outline btn-sm"
+                      :class="{'btn-loading': coverUploading}"
+                      :onclick="(host || document).querySelector('#bk-cover-file')?.click()"
+                      :text="coverMissing ? 'Upload cover' : 'Replace cover'"></button>
+                    <input type="file" id="bk-cover-file" accept="image/jpeg,image/png,image/webp" style="display:none"
+                      :onchange="e => { uploadCover(e.target.files[0]); e.target.value = '' }">
+                    <button :if="!coverMissing" type="button" class="btn btn-outline btn-sm"
+                      style="color:var(--c-err)"
+                      :class="{'btn-loading': coverRemoving}"
+                      :onclick="removeCover()">Remove</button>
+                    <p class="dim" style="font-size:var(--f-sm); margin:0">JPEG, PNG, or WebP · max 10MB</p>
+                  </div>
+                </div>
               </div>
 
               <!-- ── Stack-only fields: component picker ── -->
@@ -404,7 +451,52 @@
       this.showModal = false
       this._downOnBackdrop = false
       this.modalBook = null
-      this.form = { title:'', author:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, exclude_from_bbt:false, low_stock_threshold:5, pages:null, stock:0, note:'', active:true, is_stack:false, items:[] }
+      this.form = { title:'', author:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, exclude_from_bbt:false, low_stock_threshold:5, pages:null, stock:0, note:'', description:'', active:true, is_stack:false, items:[] }
+      // Cover image (edit modal only): coverSrc is a plain state prop (cache-busted
+      // on open/upload); a 404 fires the img's onerror → coverMissing.
+      this.coverSrc = ''
+      this.coverMissing = false
+      this.coverUploading = false
+      this.coverRemoving = false
+      this.uploadCover = function(file) {
+        if (!file || !this.modalBook) return
+        var self = this
+        if (['image/jpeg','image/png','image/webp'].indexOf(file.type) < 0) {
+          self.toast && self.toast('Cover must be a JPEG, PNG, or WebP image', 'error')
+          return
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          self.toast && self.toast('Cover image must be 10MB or smaller', 'error')
+          return
+        }
+        self.coverUploading = true
+        self.api.uploadSankirtanBookCover(self.modalBook.id, file)
+          .then(function() {
+            self.coverUploading = false
+            self.coverMissing = false
+            self.coverSrc = self.api.sankirtanBookCoverUrl(self.modalBook.id, Date.now())
+            self.toast && self.toast('Cover uploaded', 'success')
+          })
+          .catch(function(e) {
+            self.coverUploading = false
+            self.toast && self.toast(e.message || 'Failed to upload cover', 'error')
+          })
+      }
+      this.removeCover = function() {
+        if (!this.modalBook) return
+        var self = this
+        self.coverRemoving = true
+        self.api.deleteSankirtanBookCover(self.modalBook.id)
+          .then(function() {
+            self.coverRemoving = false
+            self.coverMissing = true
+            self.toast && self.toast('Cover removed', 'success')
+          })
+          .catch(function(e) {
+            self.coverRemoving = false
+            self.toast && self.toast(e.message || 'Failed to remove cover', 'error')
+          })
+      }
       this.componentSearch = ''
       // Snapshot of the catalog taken when the modal opens — the `books` prop is
       // not in scope inside the modal subtree, so the stack picker reads this instead.
@@ -546,6 +638,7 @@
         this.form.low_stock_threshold = 5
         this.form.stock = 0
         this.form.note = ''
+        this.form.description = ''
         this.form.is_stack = false
         this.form.items = []
         this.componentSearch = ''
@@ -568,10 +661,13 @@
         this.form.low_stock_threshold = b.low_stock_threshold ?? 5
         this.form.stock = b.stock ?? 0
         this.form.note = b.note || ''
+        this.form.description = b.description || ''
         this.form.active = b.active !== false
         this.form.is_stack = !!b.is_stack
         this.form.items = b.is_stack ? this.stackItemIds(b) : []
         this.componentSearch = ''
+        this.coverMissing = false
+        this.coverSrc = this.api.sankirtanBookCoverUrl(b.id, Date.now())
         this._catalog = (this.books || []).slice()
         this.modalBook = b
         this.saveErr = null
@@ -597,6 +693,7 @@
           cost_cents:         self.form.cost_cents || 0,
           retail_price_cents: self.form.retail_price_cents || 0,
           note:               self.form.note || '',
+          description:        self.form.description || '',
         } : {
           title:               self.form.title,
           author:              (self.form.author || '').trim() || self.DEFAULT_AUTHOR,
@@ -609,6 +706,7 @@
           low_stock_threshold: self.form.low_stock_threshold ?? 5,
           pages:               self.form.pages || null,
           note:                self.form.note || '',
+          description:         self.form.description || '',
         }
         var payload, req
         if (self.modalBook) {
