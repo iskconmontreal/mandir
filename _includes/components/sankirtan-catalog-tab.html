@@ -546,6 +546,9 @@
       this.loadGallery = function(id) {
         var self = this
         this.gallery = []
+        // Deployed pages revalidate but /lib assets cache for 4h — after a deploy
+        // the fresh HTML can run against a stale api.js missing this helper.
+        if (!this.api.getSankirtanBookImages) return
         this.api.getSankirtanBookImages(id)
           .then(function(res) {
             if (self.modalBook && self.modalBook.id === id) self._setGallery(res.images, Date.now())
