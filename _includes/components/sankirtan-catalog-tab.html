@@ -81,6 +81,21 @@
         color: var(--c-text-dim);
         font-size: var(--f-sm);
       }
+      .gallery-thumb { position: relative; }
+      .gallery-thumb .cover-thumb { height: 7rem; display: block; }
+      .gallery-remove {
+        position: absolute;
+        top: -0.4rem;
+        right: -0.4rem;
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 50%;
+        border: 1px solid var(--c-border);
+        background: var(--c-surface);
+        color: var(--c-err);
+        cursor: pointer;
+        line-height: 1;
+      }
     </style>
     <template>
       <section :if="active">
@@ -338,6 +353,24 @@
                 <p class="dim" style="font-size:var(--f-sm); margin:var(--s-xs) 0 0">Appears on the public website once it has both a description and a cover.</p>
               </div>
 
+              <!-- ── Extra pictures (optional gallery, shown after the cover on the website) ── -->
+              <div :if="modalBook" class="field">
+                <label>Extra pictures <span class="dim" style="font-weight:normal">(optional · up to 8)</span></label>
+                <div style="display:flex; flex-wrap:wrap; align-items:flex-start; gap:var(--s-md)">
+                  <div :each="g in gallery" class="gallery-thumb">
+                    <img class="cover-thumb" alt="Extra picture" :src="g.src">
+                    <button type="button" class="gallery-remove" title="Remove picture"
+                      :class="{'btn-loading': galleryRemoving === g.slot}"
+                      :onclick="removeGalleryImage(g.slot)">×</button>
+                  </div>
+                  <button :if="gallery.length < 8" type="button" class="btn btn-outline btn-sm"
+                    :class="{'btn-loading': galleryUploading}"
+                    :onclick="(host || document).querySelector('#bk-gallery-file')?.click()">Add picture</button>
+                  <input type="file" id="bk-gallery-file" accept="image/jpeg,image/png,image/webp" style="display:none"
+                    :onchange="e => { uploadGalleryImage(e.target.files[0]); e.target.value = '' }">
+                </div>
+              </div>
+
               <!-- ── Stack-only fields: component picker ── -->
               <div :if="form.is_stack" class="field">
                 <label>Books in this stack
@@ -496,6 +529,67 @@
           .catch(function(e) {
             self.coverRemoving = false
             self.toast && self.toast(e.message || 'Failed to remove cover', 'error')
+          })
+      }
+      // Extra pictures (gallery, max 8): server returns path lists; the slot for
+      // DELETE is the number in the filename (<bookID>-<slot>.webp).
+      this.gallery = []
+      this.galleryUploading = false
+      this.galleryRemoving = null
+      this._setGallery = function(images, t) {
+        var self = this
+        this.gallery = (images || []).map(function(p) {
+          var m = /-(\d+)\.webp$/.exec(p)
+          return { slot: m ? +m[1] : 0, src: self.api.sankirtanBookImageUrl(p, t) }
+        })
+      }
+      this.loadGallery = function(id) {
+        var self = this
+        this.gallery = []
+        this.api.getSankirtanBookImages(id)
+          .then(function(res) {
+            if (self.modalBook && self.modalBook.id === id) self._setGallery(res.images, Date.now())
+          })
+          .catch(function() {})
+      }
+      this.uploadGalleryImage = function(file) {
+        if (!file || !this.modalBook) return
+        var self = this
+        if (['image/jpeg','image/png','image/webp'].indexOf(file.type) < 0) {
+          self.toast && self.toast('Picture must be a JPEG, PNG, or WebP image', 'error')
+          return
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          self.toast && self.toast('Picture must be 10MB or smaller', 'error')
+          return
+        }
+        self.galleryUploading = true
+        self.api.uploadSankirtanBookImage(self.modalBook.id, file)
+          .then(function(res) {
+            self.galleryUploading = false
+            self._setGallery(res.images, Date.now())
+            self.toast && self.toast('Picture added', 'success')
+          })
+          .catch(function(e) {
+            self.galleryUploading = false
+            var msg = e.message || 'Failed to add picture'
+            if (/full/i.test(msg)) msg = 'Gallery is full (max 8 pictures)'
+            self.toast && self.toast(msg, 'error')
+          })
+      }
+      this.removeGalleryImage = function(slot) {
+        if (!this.modalBook) return
+        var self = this
+        self.galleryRemoving = slot
+        self.api.deleteSankirtanBookImage(self.modalBook.id, slot)
+          .then(function(res) {
+            self.galleryRemoving = null
+            self._setGallery(res.images, Date.now())
+            self.toast && self.toast('Picture removed', 'success')
+          })
+          .catch(function(e) {
+            self.galleryRemoving = null
+            self.toast && self.toast(e.message || 'Failed to remove picture', 'error')
           })
       }
       this.componentSearch = ''
@@ -671,6 +765,7 @@
         this.coverSrc = this.api.sankirtanBookCoverUrl(b.id, Date.now())
         this._catalog = (this.books || []).slice()
         this.modalBook = b
+        this.loadGallery(b.id)
         this.saveErr = null
         this.showModal = true
       }
