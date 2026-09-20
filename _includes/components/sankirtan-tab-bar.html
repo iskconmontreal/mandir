@@ -15,6 +15,9 @@
         <button type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'metrics'}"
           :onclick="emit('tabchange', 'metrics')">Metrics</button>
+        <button type="button" class="pill-tab" role="tab"
+          :class="{'pill-tab-active': active === 'events'}"
+          :onclick="emit('tabchange', 'events')">Events</button>
         <button :if="canmanage" type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'order'}"
           :onclick="emit('tabchange', 'order')"

@@ -2,7 +2,7 @@
 // FEATURE: tests — short-lived JWT rotation verification
 
 import { defineConfig } from '@playwright/test'
-import { BASE_CONFIG, makeGolakaConfig, GOLOKA_COMMON } from './playwright.common.js'
+import { BASE_CONFIG, makeGolokaConfig, GOLOKA_COMMON } from './playwright.common.js'
 
 const { HASH } = GOLOKA_COMMON
 
@@ -16,7 +16,7 @@ const BOOTSTRAP_SQL = [
   "INSERT OR REPLACE INTO trusted_devices (user_id, device_id, label, last_used, created_at) VALUES (101, 'dev-device', 'Dev Machine', datetime('now'), datetime('now'));",
 ]
 
-const rotationServer = makeGolakaConfig({
+const rotationServer = makeGolokaConfig({
   dir: '/tmp/goloka-rotation',
   port: 8082,
   env: ['JWT_EXPIRY=10s'],

@@ -33,6 +33,7 @@ export function makeGolokaConfig({ dir, port, env = {}, bootstrapSql = [] }) {
     `DB_PATH=${dir}/app.db`,
     `FINANCE_DB_PATH=${dir}/fin.db`,
     `COMMUNITY_DB_PATH=${dir}/community.db`,
+    `SANKIRTAN_DB_PATH=${dir}/sankirtan.db`,
   ]
 
   const fullEnv = [
@@ -46,7 +47,7 @@ export function makeGolokaConfig({ dir, port, env = {}, bootstrapSql = [] }) {
 
   const build = `cd ${GOLOKA_PATH} && CGO_ENABLED=1 go build -tags devtools -o ${bin} ./cmd/goloka`
   const bootstrap = bootstrapSql.length ? `&& sqlite3 ${dir}/app.db "${bootstrapSql.join(' ')}"` : ''
-  const setup = `rm -rf ${dir} && mkdir -p ${dir} && ${build} && cd ${dir} && ${fullEnv} ${BIN_NAME} seed${bootstrap} && ${fullEnv} ${BIN_NAME} serve`
+  const setup = `rm -rf ${dir} && mkdir -p ${dir} && ${build} && cd ${dir} && ${fullEnv} ./${BIN_NAME} seed${bootstrap} && ${fullEnv} ./${BIN_NAME} serve`
 
   return {
     command: setup,

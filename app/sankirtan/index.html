@@ -14,6 +14,8 @@ preloads:
 <sankirtan-catalog-tab
   :active="activeTab === 'catalog'"
   :books="books"
+  :websiteids="websiteIds"
+  :websiteloaded="websiteLoaded"
   :orderbookids="draftBookIds"
   :loading="loading"
   :error="loadErr"
@@ -51,6 +53,15 @@ preloads:
   :error="loadErr">
 </sankirtan-metrics-tab>
 
+<sankirtan-events-tab
+  :active="activeTab === 'events'"
+  :events="events"
+  :loading="eventsLoading"
+  :error="eventsErr"
+  :canmanage="can('sankirtan:manage')"
+  :onreload="loadEvents">
+</sankirtan-events-tab>
+
 <sankirtan-order-tab
   :active="activeTab === 'order'"
   :books="books"
@@ -64,6 +75,7 @@ preloads:
 {% include components/sankirtan-sessions-tab.html %}
 {% include components/sankirtan-leaderboard-tab.html %}
 {% include components/sankirtan-metrics-tab.html %}
+{% include components/sankirtan-events-tab.html %}
 {% include components/sankirtan-order-tab.html %}
 
 <script type="module">
@@ -72,8 +84,9 @@ preloads:
   import { init, fmtAmt, toast, auth } from 'lib/app.js'
   import { icon } from 'lib/icons.js'
   import { api } from 'lib/api.js'
+  import { downscaleImage } from 'lib/image.js'
 
-  setupProcessor(sprae, { fmtAmt, toast, icon, api })
+  setupProcessor(sprae, { fmtAmt, toast, icon, api, downscaleImage })
 
   if (!auth.can('sankirtan:view') && !auth.can('sankirtan:manage')) {
     location.replace(new URL('../', location.href).href)
@@ -117,7 +130,7 @@ preloads:
     }))
   }
 
-  const VALID_TABS = ['catalog', 'sessions', 'leaderboard', 'metrics', 'order']
+  const VALID_TABS = ['catalog', 'sessions', 'leaderboard', 'metrics', 'events', 'order']
   const urlTab = () => {
     const t = new URLSearchParams(location.search).get('tab')
     return VALID_TABS.includes(t) ? t : 'catalog'
@@ -129,6 +142,8 @@ preloads:
     loadErr: null,
     books: [],
     booksLoaded: false,
+    websiteIds: [],
+    websiteLoaded: false,
     sessions: [],
     sessionsLoaded: false,
     sessionsLoading: false,
@@ -142,6 +157,10 @@ preloads:
     lbErr: null,
     orders: [],
     draftBookIds: [],
+    events: [],
+    eventsLoaded: false,
+    eventsLoading: false,
+    eventsErr: null,
 
     setOrders(list) {
       s.orders = list || []
@@ -184,6 +203,24 @@ preloads:
       history.pushState(null, '', url)
       if (tab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
       if (tab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
+      if (tab === 'events' && !s.eventsLoaded) s.loadEvents()
+    },
+
+    async loadEvents() {
+      s.eventsLoading = true
+      s.eventsErr = null
+      try {
+        // Deployed pages revalidate but /lib assets cache for 4h — after a deploy
+        // the fresh HTML can run against a stale api.js missing this helper.
+        if (!api.listSankirtanEvents) throw new Error('A newer version of Mandir is available — please hard-refresh the page')
+        const res = await api.listSankirtanEvents()
+        s.events = res.items || res || []
+        s.eventsLoaded = true
+      } catch (e) {
+        s.eventsErr = e.message || 'Failed to load events'
+      } finally {
+        s.eventsLoading = false
+      }
     },
 
     async loadBooks() {
@@ -193,6 +230,13 @@ preloads:
         const res = await api.getSankirtanBooks()
         s.books = res.items || res || []
         s.booksLoaded = true
+        // Which books the public temple website currently lists (badge data).
+        try {
+          s.websiteIds = (await api.getPublicSankirtanBooks() || []).map(b => b.id)
+          s.websiteLoaded = true
+        } catch {
+          s.websiteLoaded = false
+        }
       } catch (e) {
         s.loadErr = e.message || 'Failed to load books'
       } finally {
@@ -257,8 +301,10 @@ preloads:
     s.activeTab = urlTab()
     if (s.activeTab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
     if (s.activeTab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
+    if (s.activeTab === 'events' && !s.eventsLoaded) s.loadEvents()
   })
 
   s.loadBooks()
   s.loadOrders()
+  if (s.activeTab === 'events') s.loadEvents()
 </script>

@@ -1,0 +1,571 @@
+<define-element>
+  <sankirtan-events-tab active:boolean="false" events:array loading:boolean="false" error:string="" canmanage:boolean="false">
+    <style>
+      :host { display: contents; }
+      .event-list { display: flex; flex-direction: column; gap: var(--s-md); }
+      .event-card { padding: var(--s-md) var(--s-lg); }
+      .event-title {
+        font-size: var(--f-lg);
+        font-weight: var(--f-wt-b);
+        margin: 0 0 var(--s-sm) 0;
+        line-height: 1.2;
+      }
+      .event-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--s-sm) var(--s-md);
+        font-size: var(--f-sm);
+      }
+      .event-meta .meta-label { color: var(--c-text-dim); margin-right: var(--s-xs); }
+      .event-meta .meta-value { font-weight: var(--f-wt-b); }
+      .event-actions { margin-left: auto; display: flex; gap: var(--s-xs); align-items: center; }
+      .section-label {
+        font-size: var(--f-sm);
+        font-weight: var(--f-wt-b);
+        color: var(--c-text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: var(--s-lg) 0 var(--s-sm);
+      }
+      .modal-close svg, .modal-close svg * { pointer-events: none; }
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 2.5rem;
+        height: 1.4rem;
+        flex-shrink: 0;
+      }
+      .toggle-switch input { opacity: 0; width: 0; height: 0; }
+      .toggle-switch .slider {
+        position: absolute; inset: 0;
+        background: var(--c-border);
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .toggle-switch .slider::before {
+        content: '';
+        position: absolute;
+        left: 2px; top: 2px;
+        width: calc(1.4rem - 4px);
+        height: calc(1.4rem - 4px);
+        background: var(--c-surface);
+        border-radius: 50%;
+        transition: transform 0.15s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+      }
+      .toggle-switch input:checked + .slider { background: var(--c-ok); }
+      .toggle-switch input:checked + .slider::before { transform: translateX(1.1rem); }
+      .photo-drop {
+        border: 2px dashed var(--c-border);
+        border-radius: var(--r-sm);
+        padding: var(--s-lg);
+        text-align: center;
+        color: var(--c-text-dim);
+        font-size: var(--f-sm);
+        cursor: pointer;
+      }
+      .photo-drop:hover { border-color: var(--c-primary); color: var(--c-text); }
+      .upload-row {
+        display: flex;
+        align-items: center;
+        gap: var(--s-sm);
+        font-size: var(--f-sm);
+        padding: var(--s-xs) 0;
+      }
+      .upload-row .upload-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .photo-thumb-wrap { position: relative; cursor: grab; }
+      .photo-thumb-wrap.is-dragging { opacity: 0.4; }
+      .photo-thumb {
+        width: 5.5rem;
+        height: 5.5rem;
+        object-fit: cover;
+        display: block;
+        border-radius: var(--r-sm);
+        border: 1px solid var(--c-border);
+        pointer-events: none;
+      }
+      .photo-remove {
+        position: absolute;
+        top: -0.4rem;
+        right: -0.4rem;
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 50%;
+        border: 1px solid var(--c-border);
+        background: var(--c-surface);
+        color: var(--c-err);
+        cursor: pointer;
+        line-height: 1;
+      }
+      .photo-confirm {
+        position: absolute;
+        inset: 0;
+        border-radius: var(--r-sm);
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--s-xs);
+        font-size: var(--f-sm);
+      }
+    </style>
+    <template>
+      <section :if="active">
+
+        <div :if="error" class="login-error" :text="error"></div>
+
+        <div :if="canmanage" style="display:flex; justify-content:flex-end; margin-bottom:var(--s-md)">
+          <button type="button" class="btn btn-primary" :onclick="openAdd()">+ New event</button>
+        </div>
+
+        <div :if="loading && !events.length" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
+        <div :if="!loading && !events.length && !error" class="dim" style="padding:var(--s-lg); text-align:center">No events yet.</div>
+
+        <div :if="upcomingEvents().length">
+          <div class="section-label">Upcoming</div>
+          <div class="event-list">
+            <div :each="e in upcomingEvents()" class="card event-card">
+              <h3 class="event-title" :text="e.title_en"></h3>
+              <div class="event-meta">
+                <span class="badge cat-blue" :text="fmtRange(e)"></span>
+                <span><span class="meta-label">Place:</span><span class="meta-value" :text="e.place_en"></span></span>
+                <span :if="e.when_en"><span class="meta-label">Hours:</span><span class="meta-value" :text="e.when_en"></span></span>
+                <span><span class="meta-label">Photos:</span><span class="meta-value" :text="e.photo_count || 0"></span></span>
+                <span :if="e.published" class="badge badge-paid">Published</span>
+                <span :if="!e.published" class="badge cat-gray">Hidden</span>
+                <span :if="canmanage" class="event-actions">
+                  <button type="button" class="btn btn-outline btn-sm" :onclick="openEdit(e)">Edit</button>
+                  <span :if="!e._confirm">
+                    <button type="button" class="btn btn-outline btn-sm" style="color:var(--c-err)"
+                      :onclick="e._confirm = true">Delete</button>
+                  </span>
+                  <span :if="e._confirm" style="display:inline-flex; align-items:center; gap:var(--s-xs)">
+                    <span class="dim" style="font-size:var(--f-sm)">Delete event and its photos?</span>
+                    <button type="button" class="btn btn-danger btn-sm"
+                      :class="{'btn-loading': e._deleting}"
+                      :onclick="doDelete(e)">Yes</button>
+                    <button type="button" class="btn-link" style="font-size:var(--f-sm)"
+                      :onclick="e._confirm = false">No</button>
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div :if="pastEvents().length">
+          <div class="section-label">Past</div>
+          <div class="event-list">
+            <div :each="e in pastEvents()" class="card event-card">
+              <h3 class="event-title" :text="e.title_en"></h3>
+              <div class="event-meta">
+                <span class="badge cat-gray" :text="fmtRange(e)"></span>
+                <span><span class="meta-label">Place:</span><span class="meta-value" :text="e.place_en"></span></span>
+                <span><span class="meta-label">Photos:</span><span class="meta-value" :text="e.photo_count || 0"></span></span>
+                <span :if="e.published" class="badge badge-paid">Published</span>
+                <span :if="!e.published" class="badge cat-gray">Hidden</span>
+                <span :if="canmanage" class="event-actions">
+                  <button type="button" class="btn btn-outline btn-sm" :onclick="openEdit(e)">Edit</button>
+                  <span :if="!e._confirm">
+                    <button type="button" class="btn btn-outline btn-sm" style="color:var(--c-err)"
+                      :onclick="e._confirm = true">Delete</button>
+                  </span>
+                  <span :if="e._confirm" style="display:inline-flex; align-items:center; gap:var(--s-xs)">
+                    <span class="dim" style="font-size:var(--f-sm)">Delete event and its photos?</span>
+                    <button type="button" class="btn btn-danger btn-sm"
+                      :class="{'btn-loading': e._deleting}"
+                      :onclick="doDelete(e)">Yes</button>
+                    <button type="button" class="btn-link" style="font-size:var(--f-sm)"
+                      :onclick="e._confirm = false">No</button>
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add / Edit modal -->
+        <div :if="showModal" class="modal-overlay"
+          :onpointerdown="e => { _downOnBackdrop = (e.target === e.currentTarget) }"
+          :onclick="e => { if (_downOnBackdrop && e.target === e.currentTarget) closeModal() }"
+          :onkeydown.esc.document="closeModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <h2 :text="modalEvent ? 'Edit Event' : 'New Event'"></h2>
+              <button class="modal-close" type="button" aria-label="Close"
+                :onclick="closeModal" :html="icon('close')"></button>
+            </div>
+            <form class="modal-body" :onsubmit.prevent="saveEvent()">
+              <div class="form-row">
+                <div class="field">
+                  <label for="ev-starts">Start date</label>
+                  <input id="ev-starts" type="date" required
+                    :value="form.starts_on" :change="v => setStarts(v)">
+                </div>
+                <div class="field">
+                  <label for="ev-ends">End date</label>
+                  <input id="ev-ends" type="date"
+                    :value="form.ends_on" :change="v => form.ends_on = v">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="ev-title-en">Title (English)</label>
+                  <input id="ev-title-en" type="text" required placeholder="e.g. Book table at Jeanne-Mance Park"
+                    :value="form.title_en" :oninput="e => form.title_en = e.target.value">
+                </div>
+                <div class="field">
+                  <label for="ev-title-fr">Title (French)</label>
+                  <input id="ev-title-fr" type="text" required placeholder="e.g. Table de livres au parc Jeanne-Mance"
+                    :value="form.title_fr" :oninput="e => form.title_fr = e.target.value">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="ev-place-en">Place (English)</label>
+                  <input id="ev-place-en" type="text" required placeholder="e.g. Jeanne-Mance Park"
+                    :value="form.place_en" :oninput="e => form.place_en = e.target.value">
+                </div>
+                <div class="field">
+                  <label for="ev-place-fr">Place (French)</label>
+                  <input id="ev-place-fr" type="text" required placeholder="e.g. Parc Jeanne-Mance"
+                    :value="form.place_fr" :oninput="e => form.place_fr = e.target.value">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="ev-when-en">Hours (English) <span class="dim" style="font-weight:normal">(optional)</span></label>
+                  <input id="ev-when-en" type="text" placeholder="e.g. Saturday 26 September, 11:00 – 18:00"
+                    :value="form.when_en" :oninput="e => form.when_en = e.target.value">
+                </div>
+                <div class="field">
+                  <label for="ev-when-fr">Hours (French) <span class="dim" style="font-weight:normal">(optional)</span></label>
+                  <input id="ev-when-fr" type="text" placeholder="e.g. Samedi 26 septembre, 11 h – 18 h"
+                    :value="form.when_fr" :oninput="e => form.when_fr = e.target.value">
+                </div>
+              </div>
+              <div class="field">
+                <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
+                  <span class="toggle-switch">
+                    <input type="checkbox" :value="form.published" :change="v => form.published = v">
+                    <span class="slider"></span>
+                  </span>
+                  <span :text="form.published ? 'Published on the website' : 'Hidden from the website'"></span>
+                </label>
+              </div>
+
+              <!-- ── Photos (edit only — needs a saved event id) ── -->
+              <div :if="!modalEvent" class="field">
+                <p class="dim" style="font-size:var(--f-sm); margin:0">Save the event first, then add photos.</p>
+              </div>
+              <div :if="modalEvent" class="field">
+                <label>Photos <span class="dim" style="font-weight:normal">(drag to reorder — first photo is the album cover)</span></label>
+                <div class="photo-drop"
+                  :ondragover.prevent="e => {}"
+                  :ondrop.prevent="e => queueFiles(e.dataTransfer.files)"
+                  :onclick="(host || document).querySelector('#ev-photo-file')?.click()">
+                  Tap to pick from your camera roll, or drop photos here
+                </div>
+                <input type="file" id="ev-photo-file" accept="image/*" multiple style="display:none"
+                  :onchange="e => { queueFiles(e.target.files); e.target.value = '' }">
+                <div :if="queue.length" style="margin-top:var(--s-sm)">
+                  <div :each="u in queue" class="upload-row">
+                    <span class="upload-name" :text="u.name"></span>
+                    <span class="dim" :text="statusLabel(u)"></span>
+                    <button :if="u.status === 'error'" type="button" class="btn btn-outline btn-sm"
+                      :onclick="retryUpload(u)">Retry</button>
+                  </div>
+                </div>
+                <div :if="photosLoading" class="dim" style="font-size:var(--f-sm); margin-top:var(--s-sm)">Loading photos…</div>
+                <div :if="photos.length" style="display:flex; flex-wrap:wrap; gap:var(--s-md); margin-top:var(--s-md)">
+                  <div :each="p in photos" class="photo-thumb-wrap"
+                    :class="{'is-dragging': dragId === p.id}"
+                    draggable="true"
+                    :ondragstart="e => dragId = p.id"
+                    :ondragend="e => dragId = null"
+                    :ondragover.prevent="e => {}"
+                    :ondrop.prevent="e => dropOn(p)">
+                    <img class="photo-thumb" alt="Event photo" :src="p._src">
+                    <button :if="!p._confirm" type="button" class="photo-remove" title="Delete photo"
+                      :onclick="p._confirm = true">×</button>
+                    <div :if="p._confirm" class="photo-confirm">
+                      <span>Delete?</span>
+                      <button type="button" class="btn btn-danger btn-sm"
+                        :class="{'btn-loading': photoRemoving === p.id}"
+                        :onclick="removePhoto(p)">Yes</button>
+                      <button type="button" class="btn-link" style="font-size:var(--f-sm)"
+                        :onclick="p._confirm = false">No</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div :if="saveErr" class="login-error" :text="saveErr"></div>
+              <button type="submit" class="btn btn-primary"
+                :class="{'btn-loading': saving}"
+                :text="modalEvent ? 'Save Changes' : 'Create Event'"></button>
+            </form>
+          </div>
+        </div>
+
+      </section>
+    </template>
+    <script>
+      this.showModal = false
+      this._downOnBackdrop = false
+      this.modalEvent = null
+      this.form = { starts_on:'', ends_on:'', title_en:'', title_fr:'', place_en:'', place_fr:'', when_en:'', when_fr:'', published:true }
+      this.saving = false
+      this.saveErr = null
+      this.todayKey = function() {
+        var n = new Date()
+        return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0')
+      }
+      this.fmtDate = function(d) {
+        if (!d) return ''
+        return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+      }
+      this.fmtRange = function(e) {
+        return e.starts_on === e.ends_on ? this.fmtDate(e.starts_on) : this.fmtDate(e.starts_on) + ' – ' + this.fmtDate(e.ends_on)
+      }
+      this.upcomingEvents = function() {
+        var t = this.todayKey()
+        return (this.events || []).filter(function(e) { return (e.ends_on || '') >= t })
+          .sort(function(a, b) { return a.starts_on < b.starts_on ? -1 : a.starts_on > b.starts_on ? 1 : 0 })
+      }
+      this.pastEvents = function() {
+        var t = this.todayKey()
+        return (this.events || []).filter(function(e) { return (e.ends_on || '') < t })
+          .sort(function(a, b) { return a.ends_on > b.ends_on ? -1 : a.ends_on < b.ends_on ? 1 : 0 })
+      }
+      this.setStarts = function(v) {
+        this.form.starts_on = v
+        if (!this.form.ends_on || this.form.ends_on < v) this.form.ends_on = v
+      }
+      this.openAdd = function() {
+        this.form = { starts_on:'', ends_on:'', title_en:'', title_fr:'', place_en:'', place_fr:'', when_en:'', when_fr:'', published:true }
+        this.modalEvent = null
+        this.photos = []
+        this.queue = []
+        this.saveErr = null
+        this.showModal = true
+      }
+      this.openEdit = function(e) {
+        this.form = {
+          starts_on: e.starts_on || '', ends_on: e.ends_on || '',
+          title_en: e.title_en || '', title_fr: e.title_fr || '',
+          place_en: e.place_en || '', place_fr: e.place_fr || '',
+          when_en: e.when_en || '', when_fr: e.when_fr || '',
+          published: e.published !== false,
+        }
+        this.modalEvent = e
+        this.photos = []
+        this.queue = []
+        this.saveErr = null
+        this.loadPhotos(e.id)
+        this.showModal = true
+      }
+      this.closeModal = function() {
+        this.showModal = false
+        this.modalEvent = null
+        this.queue = []
+      }
+      this.saveEvent = function() {
+        var self = this
+        self.saveErr = null
+        var f = self.form
+        if (!f.ends_on) f.ends_on = f.starts_on
+        if (!f.starts_on || !(f.title_en || '').trim() || !(f.title_fr || '').trim() || !(f.place_en || '').trim() || !(f.place_fr || '').trim()) {
+          self.saveErr = 'Start date, both titles and both places are required'
+          return
+        }
+        if (f.ends_on < f.starts_on) {
+          self.saveErr = 'End date must be on or after the start date'
+          return
+        }
+        if (!self.api.createSankirtanEvent) {
+          self.saveErr = 'A newer version of Mandir is available — please hard-refresh the page'
+          return
+        }
+        var payload = {
+          starts_on: f.starts_on, ends_on: f.ends_on,
+          title_en: f.title_en.trim(), title_fr: f.title_fr.trim(),
+          place_en: f.place_en.trim(), place_fr: f.place_fr.trim(),
+          when_en: (f.when_en || '').trim(), when_fr: (f.when_fr || '').trim(),
+          published: !!f.published,
+        }
+        self.saving = true
+        var req = self.modalEvent
+          ? self.api.updateSankirtanEvent(self.modalEvent.id, payload)
+          : self.api.createSankirtanEvent(payload)
+        req
+          .then(function(res) {
+            self.saving = false
+            self.emit('reload')
+            if (self.modalEvent) {
+              self.showModal = false
+              self.modalEvent = null
+              self.toast && self.toast('Event updated', 'success')
+            } else if (res && res.id) {
+              // Stay open in edit mode so photos can be added right away.
+              self.modalEvent = res
+              self.toast && self.toast('Event created — you can add photos now', 'success')
+            } else {
+              self.showModal = false
+              self.toast && self.toast('Event created', 'success')
+            }
+          })
+          .catch(function(e) {
+            self.saving = false
+            self.saveErr = e.message || 'Failed to save'
+          })
+      }
+      this.doDelete = function(e) {
+        var self = this
+        e._deleting = true
+        self.api.deleteSankirtanEvent(e.id)
+          .then(function() {
+            e._deleting = false
+            e._confirm = false
+            self.toast && self.toast('Event deleted', 'success')
+            self.emit('reload')
+          })
+          .catch(function(err) {
+            e._deleting = false
+            e._confirm = false
+            self.toast && self.toast(err.message || 'Failed to delete', 'error')
+          })
+      }
+      // ── Photos ──────────────────────────────────────────────
+      this.photos = []
+      this.photosLoading = false
+      this.photoRemoving = null
+      this.dragId = null
+      this.queue = []
+      this._pumping = false
+      this._thumbPath = function(p) {
+        return p.thumb || '/uploads/sankirtan/events/' + p.event_id + '/' + p.id + '-t.webp'
+      }
+      this._decorate = function(p, t) {
+        return Object.assign({}, p, { _src: this.api.sankirtanEventPhotoUrl(this._thumbPath(p), t) })
+      }
+      this.loadPhotos = function(id) {
+        var self = this
+        self.photos = []
+        // Guard: after a deploy the fresh HTML can run against a 4h-cached api.js.
+        if (!self.api.listSankirtanEventPhotos) return
+        self.photosLoading = true
+        self.api.listSankirtanEventPhotos(id)
+          .then(function(res) {
+            if (!self.modalEvent || self.modalEvent.id !== id) return
+            var list = (res && (res.photos || res.items)) || res || []
+            list = list.slice().sort(function(a, b) { return (a.slot || 0) - (b.slot || 0) })
+            var t = Date.now()
+            self.photos = list.map(function(p) { return self._decorate(p, t) })
+          })
+          .catch(function() {})
+          .then(function() { self.photosLoading = false })
+      }
+      this.statusLabel = function(u) {
+        return ({ queued: 'Waiting…', processing: 'Preparing…', uploading: 'Uploading…', done: 'Done' })[u.status] || u.error || 'Failed'
+      }
+      this.queueFiles = function(files) {
+        if (!this.modalEvent) return
+        var self = this
+        var added = 0
+        Array.prototype.forEach.call(files || [], function(f) {
+          if (f && (!f.type || f.type.indexOf('image/') === 0)) {
+            self.queue.push({ name: f.name || 'photo', status: 'queued', error: '', file: f })
+            added++
+          }
+        })
+        if (!added && files && files.length) self.toast && self.toast('Only images can be uploaded', 'error')
+        this.pump()
+      }
+      // One file per request, sequentially; failed files keep a Retry button.
+      this.pump = function() {
+        var self = this
+        if (self._pumping) return
+        var next = null
+        for (var i = 0; i < self.queue.length; i++) if (self.queue[i].status === 'queued') { next = self.queue[i]; break }
+        if (!next) {
+          var all = self.queue.length > 0
+          for (var j = 0; j < self.queue.length; j++) if (self.queue[j].status !== 'done') all = false
+          if (all) {
+            self.queue = []
+            self.toast && self.toast('Photos uploaded', 'success')
+            self.emit('reload')
+          }
+          return
+        }
+        if (!self.api.uploadSankirtanEventPhoto) {
+          next.status = 'error'
+          next.error = 'Please hard-refresh the page'
+          return
+        }
+        self._pumping = true
+        next.status = 'processing'
+        var scale = self.downscaleImage || function(f) { return Promise.resolve(f) }
+        scale(next.file)
+          .then(function(small) {
+            next.status = 'uploading'
+            return self.api.uploadSankirtanEventPhoto(self.modalEvent.id, small)
+          })
+          .then(function(photo) {
+            next.status = 'done'
+            next.file = null
+            if (photo && photo.id) self.photos = self.photos.concat([self._decorate(photo, Date.now())])
+          })
+          .catch(function(e) {
+            next.status = 'error'
+            next.error = e.message || 'Upload failed'
+          })
+          .then(function() {
+            self._pumping = false
+            self.pump()
+          })
+      }
+      this.retryUpload = function(u) {
+        u.status = 'queued'
+        u.error = ''
+        this.pump()
+      }
+      this.dropOn = function(target) {
+        var self = this
+        if (self.dragId == null || self.dragId === target.id) { self.dragId = null; return }
+        var list = self.photos.slice()
+        var from = list.findIndex(function(p) { return p.id === self.dragId })
+        var to = list.findIndex(function(p) { return p.id === target.id })
+        self.dragId = null
+        if (from < 0 || to < 0) return
+        var moved = list.splice(from, 1)[0]
+        list.splice(to, 0, moved)
+        self.photos = list
+        self.api.reorderSankirtanEventPhotos(self.modalEvent.id, list.map(function(p) { return p.id }))
+          .catch(function(e) {
+            self.toast && self.toast(e.message || 'Failed to reorder', 'error')
+            self.loadPhotos(self.modalEvent.id)
+          })
+      }
+      this.removePhoto = function(p) {
+        var self = this
+        self.photoRemoving = p.id
+        self.api.deleteSankirtanEventPhoto(self.modalEvent.id, p.id)
+          .then(function() {
+            self.photoRemoving = null
+            self.photos = self.photos.filter(function(x) { return x.id !== p.id })
+            self.toast && self.toast('Photo deleted', 'success')
+            self.emit('reload')
+          })
+          .catch(function(e) {
+            self.photoRemoving = null
+            self.toast && self.toast(e.message || 'Failed to delete photo', 'error')
+          })
+      }
+    </script>
+  </sankirtan-events-tab>
+</define-element>

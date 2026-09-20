@@ -2,13 +2,13 @@
 // FEATURE: tests — full-stack E2E test runner
 
 import { defineConfig } from '@playwright/test'
-import { BASE_CONFIG, makeGolakaConfig, GOLOKA_COMMON } from './playwright.common.js'
+import { BASE_CONFIG, makeGolokaConfig, GOLOKA_COMMON } from './playwright.common.js'
 
 const { HASH } = GOLOKA_COMMON
 
 const BOOTSTRAP_SQL = [
   "INSERT OR REPLACE INTO roles (id, role, permissions, permissions_default) VALUES",
-  "(1, json_object('name','Administrator','description','Frontend E2E admin'), 'users:view,users:create,members:view,members:create,members:manage,income:view,income:create,expenses:view,expenses:create,expenses:approve,roles:update', 'users:view,users:create,members:view,members:create,members:manage,income:view,income:create,expenses:view,expenses:create,expenses:approve,roles:update'),",
+  "(1, json_object('name','Administrator','description','Frontend E2E admin'), 'users:view,users:create,members:view,members:create,members:manage,income:view,income:create,expenses:view,expenses:create,expenses:approve,roles:update,sankirtan:view,sankirtan:manage', 'users:view,users:create,members:view,members:create,members:manage,income:view,income:create,expenses:view,expenses:create,expenses:approve,roles:update,sankirtan:view,sankirtan:manage'),",
   "(2, json_object('name','Treasurer','description','Frontend E2E treasurer'), 'income:view,income:create,income:delete,expenses:view,expenses:create,expenses:approve,members:view', 'income:view,income:create,income:delete,expenses:view,expenses:create,expenses:approve,members:view'),",
   "(4, json_object('name','Board Member','description','Frontend E2E approver'), 'income:view,expenses:approve,expenses:create,expenses:view,members:view,users:view', 'income:view,expenses:approve,expenses:create,expenses:view,members:view,users:view'),",
   "(5, json_object('name','Volunteer','description','Frontend E2E sevaka'), 'expenses:create', 'expenses:create'),",
@@ -26,7 +26,7 @@ const BOOTSTRAP_SQL = [
   "INSERT OR REPLACE INTO trusted_devices (user_id, device_id, label, last_used, created_at) VALUES (101, 'dev-device', 'Dev Machine', datetime('now'), datetime('now')), (102, 'dev-device', 'Dev Machine', datetime('now'), datetime('now')), (103, 'dev-device', 'Dev Machine', datetime('now'), datetime('now')), (104, 'dev-device', 'Dev Machine', datetime('now'), datetime('now')), (105, 'dev-device', 'Dev Machine', datetime('now'), datetime('now'));",
 ]
 
-const golokaServer = makeGolakaConfig({
+const golokaServer = makeGolokaConfig({
   dir: '/tmp/goloka-e2e',
   port: 8081,
   env: ['OCR_STRATEGY=none'], // Disable OCR for faster tests

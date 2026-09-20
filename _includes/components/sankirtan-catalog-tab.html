@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-catalog-tab active:boolean="false" books:array orderbookids:array loading:boolean="false" error:string="" canmanage:boolean="false">
+  <sankirtan-catalog-tab active:boolean="false" books:array websiteids:array websiteloaded:boolean="false" orderbookids:array loading:boolean="false" error:string="" canmanage:boolean="false">
     <style>
       :host { display: contents; }
       .book-list { display: flex; flex-direction: column; gap: var(--s-md); }
@@ -81,6 +81,8 @@
         color: var(--c-text-dim);
         font-size: var(--f-sm);
       }
+      .badge.badge-site-ok { background: #dcfce7; color: #15803d; }
+      .badge.badge-site-miss { background: #fef9c3; color: #a16207; }
       .gallery-thumb { position: relative; }
       .gallery-thumb .cover-thumb { height: 7rem; display: block; }
       .gallery-remove {
@@ -164,6 +166,7 @@
               <span :if="!b.is_stack && b.language" class="badge cat-gray" :text="b.language"></span>
               <span :each="lg in (b.is_stack ? stackLangs(b) : [])" class="badge cat-gray" :text="lg"></span>
               <span :if="b.exclude_from_bbt" class="badge" style="background:#ffedd5; color:#ea580c">Excluded from BBT</span>
+              <span :if="siteBadge(b)" class="badge" :class="siteBadge(b).cls" :text="siteBadge(b).label"></span>
               <span :if="!b.exclude_from_bbt"><span class="meta-label">Points:</span><span class="meta-value" :text="b.points_per_unit"></span></span>
               <span><span class="meta-label">Cost:</span><span class="meta-value" :text="b.cost_cents ? '$' + fmtAmt(b.cost_cents) : '—'"></span></span>
               <span><span class="meta-label">Retail:</span><span class="meta-value" :text="b.retail_price_cents ? '$' + fmtAmt(b.retail_price_cents) : '—'"></span></span>
@@ -318,6 +321,8 @@
                   placeholder="Plain-text description of this edition (max 2000 characters)"
                   :value="form.description"
                   :oninput="e => form.description = e.target.value"></textarea>
+                <div class="dim" style="font-size:var(--f-sm); text-align:right"
+                  :text="(form.description || '').length + ' / 2000'"></div>
               </div>
 
               <!-- ── Note (applies to books and stacks) ── -->
@@ -332,22 +337,20 @@
               <div :if="modalBook" class="field">
                 <label>Cover image</label>
                 <div style="display:flex; align-items:flex-start; gap:var(--s-md)">
-                  <img :if="!coverMissing" class="cover-thumb" alt="Book cover"
-                    :src="coverSrc"
-                    :onerror="coverMissing = true">
+                  <img :if="!coverMissing" class="cover-thumb" alt="Book cover" :src="coverSrc">
                   <div :if="coverMissing" class="cover-thumb cover-thumb-empty">No cover</div>
                   <div style="display:flex; flex-direction:column; align-items:flex-start; gap:var(--s-xs)">
                     <button type="button" class="btn btn-outline btn-sm"
                       :class="{'btn-loading': coverUploading}"
                       :onclick="(host || document).querySelector('#bk-cover-file')?.click()"
                       :text="coverMissing ? 'Upload cover' : 'Replace cover'"></button>
-                    <input type="file" id="bk-cover-file" accept="image/jpeg,image/png,image/webp" style="display:none"
+                    <input type="file" id="bk-cover-file" accept="image/jpeg,image/png,image/webp,image/avif" style="display:none"
                       :onchange="e => { uploadCover(e.target.files[0]); e.target.value = '' }">
                     <button :if="!coverMissing" type="button" class="btn btn-outline btn-sm"
                       style="color:var(--c-err)"
                       :class="{'btn-loading': coverRemoving}"
                       :onclick="removeCover()">Remove</button>
-                    <p class="dim" style="font-size:var(--f-sm); margin:0">JPEG, PNG, or WebP · max 10MB</p>
+                    <p class="dim" style="font-size:var(--f-sm); margin:0">JPEG, PNG, WebP, or AVIF · max 10MB</p>
                   </div>
                 </div>
                 <p class="dim" style="font-size:var(--f-sm); margin:var(--s-xs) 0 0">Appears on the public website once it has both a description and a cover.</p>
@@ -366,7 +369,7 @@
                   <button :if="gallery.length < 8" type="button" class="btn btn-outline btn-sm"
                     :class="{'btn-loading': galleryUploading}"
                     :onclick="(host || document).querySelector('#bk-gallery-file')?.click()">Add picture</button>
-                  <input type="file" id="bk-gallery-file" accept="image/jpeg,image/png,image/webp" style="display:none"
+                  <input type="file" id="bk-gallery-file" accept="image/jpeg,image/png,image/webp,image/avif" style="display:none"
                     :onchange="e => { uploadGalleryImage(e.target.files[0]); e.target.value = '' }">
                 </div>
               </div>
@@ -482,21 +485,40 @@
       }
       // Low stock is per-book now: each book carries its own low_stock_threshold (default 5).
       this.isLowStock = function(b) { return (b.stock || 0) <= (b.low_stock_threshold ?? 5) }
+      // Public-website readiness, derived from the unauthenticated public catalog
+      // (visible = active + priced + description + cover). Cover presence isn't in
+      // the admin book JSON, so absence from the public list is the cover signal.
+      this.siteBadge = function(b) {
+        if (!this.websiteloaded || b.active === false) return null
+        if ((this.websiteids || []).indexOf(b.id) >= 0) return { cls: 'badge-site-ok', label: 'On website' }
+        if (!b.description) return { cls: 'badge-site-miss', label: 'Missing description' }
+        if (!b.retail_price_cents) return { cls: 'badge-site-miss', label: 'No retail price' }
+        return { cls: 'badge-site-miss', label: 'Missing cover' }
+      }
       this.showModal = false
       this._downOnBackdrop = false
       this.modalBook = null
       this.form = { title:'', author:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, exclude_from_bbt:false, low_stock_threshold:5, pages:null, stock:0, note:'', description:'', active:true, is_stack:false, items:[] }
-      // Cover image (edit modal only): coverSrc is a plain state prop (cache-busted
-      // on open/upload); a 404 fires the img's onerror → coverMissing.
+      // Cover image (edit modal only). Presence is detected with a detached Image
+      // probe, never the template img's own events — stale onerror/onload from a
+      // torn-down modal subtree can corrupt the flag after close/reopen.
       this.coverSrc = ''
-      this.coverMissing = false
+      this.coverMissing = true
       this.coverUploading = false
       this.coverRemoving = false
+      this._coverGen = 0
+      this.probeCover = function(url) {
+        var self = this, gen = ++this._coverGen
+        this.coverMissing = true
+        var probe = new Image()
+        probe.onload = function() { if (gen === self._coverGen) self.coverMissing = false }
+        probe.src = url
+      }
       this.uploadCover = function(file) {
         if (!file || !this.modalBook) return
         var self = this
-        if (['image/jpeg','image/png','image/webp'].indexOf(file.type) < 0) {
-          self.toast && self.toast('Cover must be a JPEG, PNG, or WebP image', 'error')
+        if (['image/jpeg','image/png','image/webp','image/avif'].indexOf(file.type) < 0) {
+          self.toast && self.toast('Cover must be a JPEG, PNG, WebP, or AVIF image', 'error')
           return
         }
         if (file.size > 10 * 1024 * 1024) {
@@ -507,9 +529,11 @@
         self.api.uploadSankirtanBookCover(self.modalBook.id, file)
           .then(function() {
             self.coverUploading = false
+            self._coverGen++
             self.coverMissing = false
             self.coverSrc = self.api.sankirtanBookCoverUrl(self.modalBook.id, Date.now())
             self.toast && self.toast('Cover uploaded', 'success')
+            self.emit('reload')
           })
           .catch(function(e) {
             self.coverUploading = false
@@ -523,8 +547,10 @@
         self.api.deleteSankirtanBookCover(self.modalBook.id)
           .then(function() {
             self.coverRemoving = false
+            self._coverGen++
             self.coverMissing = true
             self.toast && self.toast('Cover removed', 'success')
+            self.emit('reload')
           })
           .catch(function(e) {
             self.coverRemoving = false
@@ -558,8 +584,8 @@
       this.uploadGalleryImage = function(file) {
         if (!file || !this.modalBook) return
         var self = this
-        if (['image/jpeg','image/png','image/webp'].indexOf(file.type) < 0) {
-          self.toast && self.toast('Picture must be a JPEG, PNG, or WebP image', 'error')
+        if (['image/jpeg','image/png','image/webp','image/avif'].indexOf(file.type) < 0) {
+          self.toast && self.toast('Picture must be a JPEG, PNG, WebP, or AVIF image', 'error')
           return
         }
         if (file.size > 10 * 1024 * 1024) {
@@ -764,8 +790,8 @@
         this.form.is_stack = !!b.is_stack
         this.form.items = b.is_stack ? this.stackItemIds(b) : []
         this.componentSearch = ''
-        this.coverMissing = false
         this.coverSrc = this.api.sankirtanBookCoverUrl(b.id, Date.now())
+        this.probeCover(this.coverSrc)
         this._catalog = (this.books || []).slice()
         this.modalBook = b
         this.loadGallery(b.id)
