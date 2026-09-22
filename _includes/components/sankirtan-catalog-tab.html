@@ -167,6 +167,7 @@
               <span :each="lg in (b.is_stack ? stackLangs(b) : [])" class="badge cat-gray" :text="lg"></span>
               <span :if="b.exclude_from_bbt" class="badge" style="background:#ffedd5; color:#ea580c">Excluded from BBT</span>
               <span :if="siteBadge(b)" class="badge" :class="siteBadge(b).cls" :text="siteBadge(b).label"></span>
+              <span :if="needsFrench(b)" class="badge badge-site-miss">No French</span>
               <span :if="!b.exclude_from_bbt"><span class="meta-label">Points:</span><span class="meta-value" :text="b.points_per_unit"></span></span>
               <span><span class="meta-label">Cost:</span><span class="meta-value" :text="b.cost_cents ? '$' + fmtAmt(b.cost_cents) : '—'"></span></span>
               <span><span class="meta-label">Retail:</span><span class="meta-value" :text="b.retail_price_cents ? '$' + fmtAmt(b.retail_price_cents) : '—'"></span></span>
@@ -314,15 +315,27 @@
                 </div>
               </div>
 
-              <!-- ── Description (applies to books and stacks, per language edition) ── -->
+              <!-- ── Descriptions (books and stacks): English is what the website
+                   lists on; French is optional and falls back to English. ── -->
               <div class="field">
-                <label for="bk-description">Description <span class="dim" style="font-weight:normal">(optional)</span></label>
+                <label for="bk-description">Description (English) <span class="dim" style="font-weight:normal">(optional)</span></label>
                 <textarea id="bk-description" rows="4" maxlength="2000"
                   placeholder="Plain-text description of this edition (max 2000 characters)"
                   :value="form.description"
                   :oninput="e => form.description = e.target.value"></textarea>
                 <div class="dim" style="font-size:var(--f-sm); text-align:right"
                   :text="(form.description || '').length + ' / 2000'"></div>
+              </div>
+
+              <div class="field">
+                <label for="bk-description-fr">Description (French) <span class="dim" style="font-weight:normal">(optional)</span></label>
+                <textarea id="bk-description-fr" rows="4" maxlength="2000" lang="fr"
+                  placeholder="Description en français (max 2000 caractères)"
+                  :value="form.description_fr"
+                  :oninput="e => form.description_fr = e.target.value"></textarea>
+                <div class="dim" style="font-size:var(--f-sm); text-align:right"
+                  :text="(form.description_fr || '').length + ' / 2000'"></div>
+                <p class="dim" style="font-size:var(--f-sm); margin:var(--s-xs) 0 0">Shown to French visitors; the English text is used when this is empty.</p>
               </div>
 
               <!-- ── Note (applies to books and stacks) ── -->
@@ -472,7 +485,7 @@
         })
         return authors
       }
-      this.LANGUAGES = ['English','French','Spanish','Arabic','Bengali','Hindi','Gujarati','Chinese','Farsi','Russian','Tamil','Urdu']
+      this.LANGUAGES = ['English','French','Spanish','Arabic','Bengali','Hindi','Gujarati','Marathi','Chinese','Farsi','Russian','Tamil','Urdu']
       // Languages the BBT tracks separately — Mandir defaults "Exclude from BBT" on
       // for these and shows a reminder note (the flag is still editable per book).
       this.TRACKED_SEPARATELY = ['Farsi','Arabic']
@@ -488,6 +501,11 @@
       // Public-website readiness, derived from the unauthenticated public catalog
       // (visible = active + priced + description + cover). Cover presence isn't in
       // the admin book JSON, so absence from the public list is the cover signal.
+      // Written in English but not yet in French — the website falls back to the
+      // English blurb, so this is a to-do, not a blocker.
+      this.needsFrench = function(b) {
+        return b.active !== false && !!b.description && !b.description_fr
+      }
       this.siteBadge = function(b) {
         if (!this.websiteloaded || b.active === false) return null
         if ((this.websiteids || []).indexOf(b.id) >= 0) return { cls: 'badge-site-ok', label: 'On website' }
@@ -498,7 +516,7 @@
       this.showModal = false
       this._downOnBackdrop = false
       this.modalBook = null
-      this.form = { title:'', author:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, exclude_from_bbt:false, low_stock_threshold:5, pages:null, stock:0, note:'', description:'', active:true, is_stack:false, items:[] }
+      this.form = { title:'', author:'', language:'', cover:'Soft', points_per_unit:0, cost_cents:0, retail_price_cents:0, exclude_from_bbt:false, low_stock_threshold:5, pages:null, stock:0, note:'', description:'', description_fr:'', active:true, is_stack:false, items:[] }
       // Cover image (edit modal only). Presence is detected with a detached Image
       // probe, never the template img's own events — stale onerror/onload from a
       // torn-down modal subtree can corrupt the flag after close/reopen.
@@ -763,6 +781,7 @@
         this.form.stock = 0
         this.form.note = ''
         this.form.description = ''
+        this.form.description_fr = ''
         this.form.is_stack = false
         this.form.items = []
         this.componentSearch = ''
@@ -786,6 +805,7 @@
         this.form.stock = b.stock ?? 0
         this.form.note = b.note || ''
         this.form.description = b.description || ''
+        this.form.description_fr = b.description_fr || ''
         this.form.active = b.active !== false
         this.form.is_stack = !!b.is_stack
         this.form.items = b.is_stack ? this.stackItemIds(b) : []
@@ -819,6 +839,7 @@
           retail_price_cents: self.form.retail_price_cents || 0,
           note:               self.form.note || '',
           description:        self.form.description || '',
+          description_fr:     self.form.description_fr || '',
         } : {
           title:               self.form.title,
           author:              (self.form.author || '').trim() || self.DEFAULT_AUTHOR,
@@ -832,6 +853,7 @@
           pages:               self.form.pages || null,
           note:                self.form.note || '',
           description:         self.form.description || '',
+          description_fr:      self.form.description_fr || '',
         }
         var payload, req
         if (self.modalBook) {

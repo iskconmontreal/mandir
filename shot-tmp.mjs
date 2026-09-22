@@ -1,0 +1,18 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch({ channel: 'chrome' });
+const errs = [];
+const p = await b.newPage({ viewport: { width: 1440, height: 860 } });
+p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+p.on('pageerror', e => errs.push('PAGEERROR ' + e.message));
+await p.goto('http://localhost:8799/sacred.html', { waitUntil: 'networkidle' });
+await p.waitForTimeout(2500);
+const q = await p.locator('.hero-quote').first();
+console.log('quote visible:', await q.isVisible().catch(() => false));
+console.log('text:', (await q.innerText().catch(() => '')).replace(/\n/g, ' | '));
+await p.screenshot({ path: '/tmp/claude-501/hero.png' });
+const m = await b.newPage({ viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+await m.goto('http://localhost:8799/sacred.html', { waitUntil: 'networkidle' });
+await m.waitForTimeout(2500);
+await m.screenshot({ path: '/tmp/claude-501/hero-mobile.png' });
+console.log('errors:', errs.slice(0, 6));
+await b.close();
