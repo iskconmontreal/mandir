@@ -9,6 +9,9 @@
       .order-table th { color: var(--c-text-dim); font-weight: normal; }
       .order-table th, .order-table td { text-align: left; padding: var(--s-xs) var(--s-sm); border-bottom: 1px solid var(--c-border); }
       .order-table input { width: 5.5rem; }
+      .order-table input[type=checkbox] { width: auto; }
+      .order-table td.chk { width: 1.75rem; padding-right: 0; }
+      .order-table tr.ticked td { color: var(--c-text-dim); background: rgba(34,197,94,.08); }
       .order-table .lang-row td { background: rgba(0,0,0,.03); font-weight: var(--f-wt-b); color: var(--c-text-dim); }
       .badge.badge-draft { background: #e5e7eb; color: #374151; }
       .badge.badge-active { background: #dbeafe; color: #1d4ed8; }
@@ -29,6 +32,9 @@
                 <h3 style="margin:0" :text="'Order #' + o.id"></h3>
                 <span class="badge" :class="statusCls(o.status)" :text="o.status"></span>
                 <span class="dim" style="font-size:var(--f-sm)" :text="fmtDate(o.created_at)"></span>
+                <span :if="o.items.length" class="dim" style="font-size:var(--f-sm)" :text="checkedLabel(o)"></span>
+                <button :if="checkedCount(o)" type="button" class="btn-link" style="font-size:var(--f-sm)"
+                  :onclick="clearChecks(o)">Reset ticks</button>
                 <span class="order-actions">
                   <button :if="o.items.length" type="button" class="btn btn-outline btn-sm" :onclick="exportOrder(o)">Export Excel</button>
                   <button :if="o.status === 'draft' && o.items.length" type="button" class="btn btn-primary btn-sm"
@@ -53,10 +59,14 @@
               </p>
 
               <table :if="o.items.length && !o._receiving" class="order-table">
-                <thead><tr><th>Title</th><th>Cover</th><th>Stock</th><th>Boxes</th><th :if="o.status === 'draft'"></th></tr></thead>
+                <thead><tr><th title="Tick when checked against the invoice">✓</th><th>Title</th><th>Cover</th><th>Stock</th><th>Boxes</th><th :if="o.status === 'draft'"></th></tr></thead>
                 <tbody :each="g in langGroups(o)">
-                  <tr class="lang-row"><td colspan="5" :text="g.lang"></td></tr>
-                  <tr :each="it in g.items">
+                  <tr class="lang-row"><td colspan="6" :text="g.lang"></td></tr>
+                  <tr :each="it in g.items" :class="{ticked: isChecked(o.id, it.book_id)}">
+                    <td class="chk">
+                      <input type="checkbox" title="Checked against invoice"
+                        :checked="isChecked(o.id, it.book_id)" :onchange="toggleCheck(o.id, it.book_id)">
+                    </td>
                     <td>
                       <div :text="bookFor(it.book_id).title"></div>
                       <div class="dim" style="font-size:0.85em" :text="bookFor(it.book_id).author"></div>
@@ -78,10 +88,14 @@
               <!-- Receive mode: count what actually arrived, key books per box -->
               <div :if="o._receiving">
                 <table class="order-table">
-                  <thead><tr><th>Title</th><th>Ordered</th><th>Boxes received</th><th>Books / box</th><th>Books</th></tr></thead>
+                  <thead><tr><th title="Tick when checked against the invoice">✓</th><th>Title</th><th>Ordered</th><th>Boxes received</th><th>Books / box</th><th>Books</th></tr></thead>
                   <tbody :each="g in langGroups(o)">
-                    <tr class="lang-row"><td colspan="5" :text="g.lang"></td></tr>
-                    <tr :each="it in g.items">
+                    <tr class="lang-row"><td colspan="6" :text="g.lang"></td></tr>
+                    <tr :each="it in g.items" :class="{ticked: isChecked(o.id, it.book_id)}">
+                      <td class="chk">
+                        <input type="checkbox" title="Checked against invoice"
+                          :checked="isChecked(o.id, it.book_id)" :onchange="toggleCheck(o.id, it.book_id)">
+                      </td>
                       <td>
                         <div :text="bookFor(it.book_id).title"></div>
                         <div class="dim" style="font-size:0.85em" :text="bookFor(it.book_id).author"></div>
@@ -176,11 +190,41 @@
         self.api.setSankirtanOrderStatus(o.id, status)
           .then(function() {
             o._saving = false
+            if (status === 'cancelled') self.clearChecks(o)
             self.toast(status === 'active' ? 'Order activated' : 'Order cancelled', 'success')
             self.emit('reload')
           })
           .catch(function(e) { o._saving = false; self.toast(e.message || 'Failed to update order', 'error') })
       }
+      // Invoice ticks are local-only: a visual aid while checking lines against the paper invoice.
+      this.checked = (function() {
+        try { return JSON.parse(localStorage.getItem('mandir_order_checked')) || {} } catch (e) { return {} }
+      })()
+      this.saveChecks = function(m) {
+        this.checked = m
+        try { localStorage.setItem('mandir_order_checked', JSON.stringify(m)) } catch (e) {}
+      }
+      this.isChecked = function(orderId, bookId) { return !!this.checked[orderId + ':' + bookId] }
+      this.toggleCheck = function(orderId, bookId) {
+        var m = Object.assign({}, this.checked)
+        var k = orderId + ':' + bookId
+        if (m[k]) delete m[k]; else m[k] = true
+        this.saveChecks(m)
+      }
+      this.checkedCount = function(o) {
+        var self = this
+        return (o.items || []).filter(function(it) { return self.isChecked(o.id, it.book_id) }).length
+      }
+      this.checkedLabel = function(o) {
+        return this.checkedCount(o) + ' / ' + o.items.length + ' checked'
+      }
+      this.clearChecks = function(o) {
+        var m = Object.assign({}, this.checked)
+        var prefix = o.id + ':'
+        Object.keys(m).forEach(function(k) { if (k.indexOf(prefix) === 0) delete m[k] })
+        this.saveChecks(m)
+      }
+
       // Receive-mode inputs live in component state, reassigned on every edit —
       // mutating the server order objects directly wouldn't re-render.
       this.recv = {}
@@ -220,6 +264,7 @@
         self.api.receiveSankirtanOrder(o.id, items)
           .then(function() {
             o._saving = false
+            self.clearChecks(o)
             self.toast('Order completed — stock updated', 'success')
             self.emit('reload')
           })
