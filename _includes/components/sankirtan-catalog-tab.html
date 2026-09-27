@@ -525,6 +525,11 @@
       this.coverUploading = false
       this.coverRemoving = false
       this._coverGen = 0
+      this._coverPreview = null
+      this._revokeCoverPreview = function() {
+        if (this._coverPreview) URL.revokeObjectURL(this._coverPreview)
+        this._coverPreview = null
+      }
       this.probeCover = function(url) {
         var self = this, gen = ++this._coverGen
         this.coverMissing = true
@@ -549,7 +554,10 @@
             self.coverUploading = false
             self._coverGen++
             self.coverMissing = false
-            self.coverSrc = self.api.sankirtanBookCoverUrl(self.modalBook.id, Date.now())
+            // Show the picked file itself: a blob URL can never be a stale cached copy.
+            self._revokeCoverPreview()
+            self._coverPreview = URL.createObjectURL(file)
+            self.coverSrc = self._coverPreview
             self.toast && self.toast('Cover uploaded', 'success')
             self.emit('reload')
           })
@@ -566,6 +574,7 @@
           .then(function() {
             self.coverRemoving = false
             self._coverGen++
+            self._revokeCoverPreview()
             self.coverMissing = true
             self.toast && self.toast('Cover removed', 'success')
             self.emit('reload')
@@ -810,6 +819,7 @@
         this.form.is_stack = !!b.is_stack
         this.form.items = b.is_stack ? this.stackItemIds(b) : []
         this.componentSearch = ''
+        this._revokeCoverPreview()
         this.coverSrc = this.api.sankirtanBookCoverUrl(b.id, Date.now())
         this.probeCover(this.coverSrc)
         this._catalog = (this.books || []).slice()
