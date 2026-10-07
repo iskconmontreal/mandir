@@ -289,8 +289,6 @@
                       <option value="Audio" :selected="form.cover === 'Audio'">Audiobook</option>
                       <option value="Ebook" :selected="form.cover === 'Ebook'">Audiobook + Ebook</option>
                     </select>
-                    <p class="dim" style="font-size:var(--f-sm); margin:var(--s-xs) 0 0" :if="form.pages"
-                      :text="coverLabel(coverLetter(form.cover)) + ' · ' + sizeLabel(categoryFrom(form.cover, form.pages)) + ' book'"></p>
                   </div>
                   <div class="field">
                     <label for="bk-pages">Pages</label>
@@ -350,8 +348,9 @@
               <div :if="modalBook" class="field">
                 <label>Cover image</label>
                 <div style="display:flex; align-items:flex-start; gap:var(--s-md)">
-                  <img :if="!coverMissing" class="cover-thumb" alt="Book cover" :src="coverSrc">
-                  <div :if="coverMissing" class="cover-thumb cover-thumb-empty">No cover</div>
+                  <!-- :hidden, not :if — a re-shown modal keeps a torn-down :if element in the DOM, so the previous book's cover lingered. -->
+                  <img :hidden="coverMissing" class="cover-thumb" alt="Book cover" :src="coverSrc || null">
+                  <div :hidden="!coverMissing" class="cover-thumb cover-thumb-empty">No cover</div>
                   <div style="display:flex; flex-direction:column; align-items:flex-start; gap:var(--s-xs)">
                     <button type="button" class="btn btn-outline btn-sm"
                       :class="{'btn-loading': coverUploading}"
@@ -359,7 +358,7 @@
                       :text="coverMissing ? 'Upload cover' : 'Replace cover'"></button>
                     <input type="file" id="bk-cover-file" accept="image/jpeg,image/png,image/webp,image/avif" style="display:none"
                       :onchange="e => { uploadCover(e.target.files[0]); e.target.value = '' }">
-                    <button :if="!coverMissing" type="button" class="btn btn-outline btn-sm"
+                    <button :hidden="coverMissing" type="button" class="btn btn-outline btn-sm"
                       style="color:var(--c-err)"
                       :class="{'btn-loading': coverRemoving}"
                       :onclick="removeCover()">Remove</button>
