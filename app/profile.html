@@ -38,7 +38,7 @@ title: My Profile
 
   <div :if="hasMember && !editing" class="mx-auto pb-12 w-full" style="display:flex; flex-direction:column; gap:var(--s-lg)">
     <profile-view :member="m" :user="u" :role-names="roleNames" :photosrc="photoSrc"></profile-view>
-    <profile-devices :items="deviceItems" :currentid="deviceId"></profile-devices>
+    <profile-devices :items="deviceItems" :currentid="deviceId" :signingout="signingOut" :onlogoutall="logoutAll"></profile-devices>
     <profile-permissions :permissions="permissions" :perm-groups="permGroups"></profile-permissions>
   </div>
   <div :if="hasMember && editing" class="mx-auto pb-12 w-full" style="max-width:48rem">
@@ -98,6 +98,7 @@ title: My Profile
     saveErr: null,
     photoSrc: null,
     deviceItems: [],
+    signingOut: false,
     deviceId: auth.deviceId || '',
     roleNames: userRoleNames(auth.user),
     permissions: auth.permissions,
@@ -114,6 +115,18 @@ title: My Profile
       return this.m.spiritual_name || this.m.name || this.u?.meta?.spiritual_name || this.u?.meta?.name || this.u?.email?.split('@')[0] || '—'
     },
     
+    async logoutAll() {
+      s.signingOut = true
+      try {
+        // /lib assets cache for 4h — a stale api.js lacks this helper.
+        if (!api.logoutAll) throw new Error('A newer version of Mandir is available — please hard-refresh the page')
+        await api.logoutAll()
+        auth.logout('Signed out everywhere. Please sign in again.')
+      } catch (e) {
+        s.signingOut = false
+        toast(e.message || 'Failed to sign out everywhere')
+      }
+    },
     handleSave(opts) {
       s.editing = false
       if (opts?.member) s.m = opts.member

@@ -1,5 +1,5 @@
 <define-element>
-  <profile-devices items:array currentid:string>
+  <profile-devices items:array currentid:string signingout:boolean>
     <style>:host { display: contents; }</style>
     <template>
       <div class="card">
@@ -25,9 +25,21 @@
             <button class="btn-link" style="font-size:var(--f-sm)" :onclick.stop="d._confirm = false">No</button>
           </div>
         </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:var(--s-md); padding-top:var(--s-md); flex-wrap:wrap">
+          <div class="dim" style="font-size:var(--f-sm)">Signs this account out of every browser and app at once. Trusted devices stay.</div>
+          <button :if="!allConfirm" class="btn btn-outline btn-sm" style="color:var(--c-err); white-space:nowrap"
+            :onclick.stop="allConfirm = true">Sign out everywhere</button>
+          <div :if="allConfirm" style="display:flex; align-items:center; gap:var(--s-sm)">
+            <span class="dim" style="font-size:var(--f-sm)">You will be signed out here too.</span>
+            <button class="btn btn-danger btn-sm" :class="{'btn-loading': signingout}"
+              :onclick.stop="emit('logoutall')">Yes, sign out everywhere</button>
+            <button class="btn-link" style="font-size:var(--f-sm)" :onclick.stop="allConfirm = false">No</button>
+          </div>
+        </div>
       </div>
     </template>
     <script>
+      this.allConfirm = false
       this.doRevoke = function(d) {
         var self = this
         d._actioning = true
