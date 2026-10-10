@@ -275,10 +275,22 @@
                 :onclick="closeEditModal" :html="icon('close')"></button>
             </div>
             <form class="modal-body" :onsubmit.prevent="saveEdit()">
+              <div class="field">
+                <label for="se-account">Devotee account</label>
+                <select id="se-account"
+                  :value="String(editForm.distributor_id || '')"
+                  :change="v => pickDistributor(parseInt(v) || 0)">
+                  <option value="">— Not linked to an account —</option>
+                  <option :each="d in distributors" :value="String(d.id)"
+                    :text="(d.spiritual_name || d.name || d.email) + (d.spiritual_name && d.name ? ' (' + d.name + ')' : '')"></option>
+                </select>
+                <div class="dim" style="font-size:var(--f-sm); margin-top:var(--s-xs)">Use this when the session was entered from another login on behalf of this devotee. Their points and leaderboard rank follow the account.</div>
+              </div>
               <div class="form-row">
                 <div class="field">
-                  <label for="se-who">Distributor</label>
+                  <label for="se-who">Distributor name</label>
                   <input id="se-who" type="text" required
+                    :disabled="!!editForm.distributor_id"
                     :value="editForm.distributor_name" :change="v => editForm.distributor_name = v">
                 </div>
                 <div class="field">
@@ -365,9 +377,11 @@
       this.PAYMENT_METHODS = ['Cash', 'Card', 'Stripe', 'Cheque', 'Interac', 'Bank Transfer', 'Other']
       this.showEditModal = false
       this.editSession = null
-      this.editForm = { distributor_name:'', occurred_at:'', location:'', note:'', books:[], payments:[] }
+      this.editForm = { distributor_id:0, distributor_name:'', occurred_at:'', location:'', note:'', books:[], payments:[] }
       this.savingEdit = false
       this.editErr = null
+      this.distributors = []
+      this.distributorsLoaded = false
 
       // BBT monthly score report — Excel export + emailed report (manager-only).
       this.DEFAULT_TO = 'anuttamadasa.bms@gmail.com'
@@ -427,9 +441,28 @@
       }
       // Session edit/delete (manager-only). Edit sends the full session back;
       // the backend recomputes points/costs and adjusts stock by the difference.
+      this.loadDistributors = function() {
+        var self = this
+        if (self.distributorsLoaded) return
+        var call = self.api.getSankirtanDistributors ? self.api.getSankirtanDistributors() : self.api.get('/api/sankirtan/distributors')
+        call.then(function(res) {
+          self.distributors = (res.items || res || []).slice().sort(function(a, b) {
+            return (a.spiritual_name || a.name || a.email).localeCompare(b.spiritual_name || b.name || b.email)
+          })
+          self.distributorsLoaded = true
+        }).catch(function() {})
+      }
+      // Picking an account takes its display name; the backend does the same.
+      this.pickDistributor = function(id) {
+        this.editForm.distributor_id = id
+        var d = this.distributors.find(function(x) { return x.id === id })
+        if (d) this.editForm.distributor_name = d.spiritual_name || d.name || d.email
+      }
       this.openEditModal = function(sess) {
+        this.loadDistributors()
         this.editSession = sess
         this.editForm = {
+          distributor_id: sess.distributor_id || 0,
           distributor_name: sess.distributor_name || '',
           occurred_at: (sess.occurred_at || '').slice(0, 10),
           location: sess.location || '',
@@ -472,6 +505,7 @@
         self.savingEdit = true
         self.editErr = null
         self.api.updateSankirtanSession(self.editSession.id, {
+          distributor_id: f.distributor_id || 0,
           distributor_name: f.distributor_name,
           occurred_at: f.occurred_at,
           location: f.location,
