@@ -241,7 +241,7 @@
 
               <!-- Stack toggle (Add only) / kind label (Edit) -->
               <div class="form-row">
-                <div class="field" :if="!modalBook">
+                <div class="field" :hidden="!!modalBook">
                   <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
                     <span class="toggle-switch">
                       <input type="checkbox"
@@ -255,7 +255,7 @@
               </div>
 
               <!-- ── Book-only fields ── -->
-              <div :if="!form.is_stack" style="display:flex; flex-direction:column; gap:var(--s-md)">
+              <div :hidden="form.is_stack" style="display:flex; flex-direction:column; gap:var(--s-md)">
                 <div class="form-row">
                   <div class="field">
                     <label for="bk-author">Author</label>
@@ -275,7 +275,7 @@
                       <option value="" :selected="!form.language">— Select —</option>
                       <option :each="l in LANGUAGES" :value="l" :text="l" :selected="l === form.language"></option>
                     </select>
-                    <p :if="isTrackedSeparately(form.language)" class="dim" style="font-size:var(--f-sm); margin:var(--s-xs) 0 0"
+                    <p :hidden="!isTrackedSeparately(form.language)" class="dim" style="font-size:var(--f-sm); margin:var(--s-xs) 0 0"
                       :text="form.language + ' is tracked separately by the BBT — excluded from the BBT report.'"></p>
                   </div>
                 </div>
@@ -345,7 +345,7 @@
               </div>
 
               <!-- ── Cover image (edit only — needs a saved book id) ── -->
-              <div :if="modalBook" class="field">
+              <div :hidden="!modalBook" class="field">
                 <label>Cover image</label>
                 <div style="display:flex; align-items:flex-start; gap:var(--s-md)">
                   <!-- :hidden, not :if — a re-shown modal keeps a torn-down :if element in the DOM, so the previous book's cover lingered. -->
@@ -369,7 +369,7 @@
               </div>
 
               <!-- ── Extra pictures (optional gallery, shown after the cover on the website) ── -->
-              <div :if="modalBook" class="field">
+              <div :hidden="!modalBook" class="field">
                 <label>Extra pictures <span class="dim" style="font-weight:normal">(optional · up to 8)</span></label>
                 <div style="display:flex; flex-wrap:wrap; align-items:flex-start; gap:var(--s-md)">
                   <div :each="g in gallery" class="gallery-thumb">
@@ -378,7 +378,7 @@
                       :class="{'btn-loading': galleryRemoving === g.slot}"
                       :onclick="removeGalleryImage(g.slot)">×</button>
                   </div>
-                  <button :if="gallery.length < 8" type="button" class="btn btn-outline btn-sm"
+                  <button :hidden="gallery.length >= 8" type="button" class="btn btn-outline btn-sm"
                     :class="{'btn-loading': galleryUploading}"
                     :onclick="(host || document).querySelector('#bk-gallery-file')?.click()">Add picture</button>
                   <input type="file" id="bk-gallery-file" accept="image/jpeg,image/png,image/webp,image/avif" style="display:none"
@@ -387,17 +387,17 @@
               </div>
 
               <!-- ── Stack-only fields: component picker ── -->
-              <div :if="form.is_stack" class="field">
+              <div :hidden="!form.is_stack" class="field">
                 <label>Books in this stack
                   <span class="dim" style="font-weight:normal" :text="'· contains ' + form.items.length + ' book' + (form.items.length === 1 ? '' : 's')"></span>
                 </label>
-                <div :if="form.items.length" style="display:flex; flex-wrap:wrap; gap:var(--s-xs); margin-bottom:var(--s-sm)">
+                <div :hidden="!form.items.length" style="display:flex; flex-wrap:wrap; gap:var(--s-xs); margin-bottom:var(--s-sm)">
                   <span :each="cb in stackComponentBooks()" class="badge cat-blue" style="display:inline-flex; align-items:center; gap:var(--s-xs)">
                     <span :text="cb.title + (cb.language ? ' (' + cb.language + ')' : '')"></span>
                     <button type="button" class="btn-link" style="font-size:var(--f-sm); color:inherit" :onclick="toggleComponent(cb.id)">×</button>
                   </span>
                 </div>
-                <p :if="stackLanguages().length" class="dim" style="font-size:var(--f-sm)"
+                <p :hidden="!stackLanguages().length" class="dim" style="font-size:var(--f-sm)"
                   :text="'Languages: ' + stackLanguages().join(' · ')"></p>
                 <input type="search" placeholder="Search books to add…"
                   :value="componentSearch" :oninput="e => componentSearch = e.target.value">
@@ -427,7 +427,7 @@
                     :oninput="e => form.retail_price_cents = Math.round(parseFloat(e.target.value || 0) * 100)">
                 </div>
                 <div class="field">
-                  <label for="bk-score">Score <span class="dim" style="font-weight:normal" :if="form.is_stack">(sum of score)</span></label>
+                  <label for="bk-score">Score <span class="dim" style="font-weight:normal" :hidden="!form.is_stack">(sum of score)</span></label>
                   <input id="bk-score" type="number" step="0.25" min="0" placeholder="0"
                     :disabled="form.exclude_from_bbt"
                     :value="form.points_per_unit || ''"
@@ -435,7 +435,7 @@
                 </div>
               </div>
 
-              <div :if="!form.is_stack" class="form-row">
+              <div :hidden="form.is_stack" class="form-row">
                 <div class="field">
                   <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
                     <span class="toggle-switch">
@@ -449,7 +449,7 @@
                 </div>
               </div>
 
-              <div :if="modalBook" class="form-row">
+              <div :hidden="!modalBook" class="form-row">
                 <div class="field">
                   <label style="display:flex; align-items:center; gap:var(--s-md); cursor:pointer">
                     <span class="toggle-switch">
@@ -462,7 +462,7 @@
                   </label>
                 </div>
               </div>
-              <div :if="saveErr" class="login-error" :text="saveErr"></div>
+              <div :hidden="!saveErr" class="login-error" :text="saveErr"></div>
               <button type="submit" class="btn btn-primary"
                 :class="{'btn-loading': saving}"
                 :text="modalBook ? 'Save Changes' : (form.is_stack ? 'Add Stack' : 'Add Book')"></button>
@@ -828,6 +828,9 @@
         this.showModal = true
       }
       this.closeModal = function() {
+        // Clear the spinner while its binding is still live: closing mid-save
+        // otherwise leaves btn-loading orphaned on the button until a page refresh.
+        this.saving = false
         this.form.is_stack = false
         this.form.items = []
         this.componentSearch = ''
@@ -835,8 +838,27 @@
       }
       this.saveBook = function() {
         var self = this
+        if (self.saving) return
         self.saving = true
         self.saveErr = null
+        var req
+        try { req = self._saveRequest() }
+        catch (e) { self.saving = false; self.saveErr = e.message || 'Failed to save'; return }
+        req
+          .then(function() {
+            self.saving = false
+            self.showModal = false
+            self.toast && self.toast(self.modalBook ? 'Book updated' : 'Book added', 'success')
+            self.emit('reload')
+          })
+          .catch(function(e) {
+            self.saving = false
+            self.saveErr = e.message || 'Failed to save'
+          })
+      }
+      // Builds the payload and fires the create/update request.
+      this._saveRequest = function() {
+        var self = this
         // Stacks: send is_stack + items + the (component-derived, editable) score/cost.
         // The backend derives category/language/books_per_unit; no book-only fields.
         var formChanges = self.form.is_stack ? {
@@ -864,7 +886,7 @@
           description:         self.form.description || '',
           description_fr:      self.form.description_fr || '',
         }
-        var payload, req
+        var payload
         if (self.modalBook) {
           // PUT: preserve every existing server field (retail_price_cents, etc.)
           // by spreading modalBook first, then overlaying form values.
@@ -875,23 +897,12 @@
           delete payload.id
           delete payload.created_at
           delete payload.updated_at
-          req = self.api.updateSankirtanBook(self.modalBook.id, payload)
+          return self.api.updateSankirtanBook(self.modalBook.id, payload)
         } else {
           // Add: the admin enters the current on-hand count.
           payload = Object.assign({ stock: self.form.stock || 0 }, formChanges)
-          req = self.api.createSankirtanBook(payload)
+          return self.api.createSankirtanBook(payload)
         }
-        req
-          .then(function() {
-            self.saving = false
-            self.showModal = false
-            self.toast && self.toast(self.modalBook ? 'Book updated' : 'Book added', 'success')
-            self.emit('reload')
-          })
-          .catch(function(e) {
-            self.saving = false
-            self.saveErr = e.message || 'Failed to save'
-          })
       }
       // ── Order preparation (state lives in the page; table in sankirtan-order-tab) ──
       this.inOrder = function(id) { return (this.orderbookids || []).indexOf(id) >= 0 }

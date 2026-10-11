@@ -614,15 +614,19 @@
         var self = this
         if (sess._handing) return
         sess._handing = true
+        // Whatever happens, the button never spins for more than 20 s.
+        var guard = setTimeout(function() { sess._handing = false }, 20000)
         var call = done ? self.api.handOverSankirtanSession(sess.id) : self.api.undoHandOverSankirtanSession(sess.id)
         call.then(function(full) {
           sess.handed_over_at = full.handed_over_at || null
           sess.handed_over_by = full.handed_over_by || ''
-          sess._handing = false
           self.toast && self.toast(done ? 'Marked as handed over' : 'Hand-over undone', 'success')
+          self.emit('reload')
         }).catch(function(e) {
-          sess._handing = false
           self.toast && self.toast(e.message || 'Could not update the session')
+        }).finally(function() {
+          clearTimeout(guard)
+          sess._handing = false
         })
       }
       this.groupedSessions = function() {
