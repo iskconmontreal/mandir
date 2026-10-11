@@ -5,6 +5,8 @@ preloads:
 ---
 <div class="page-header">
   <h1>Sankirtan</h1>
+  <a :if="can('sankirtan:manage')" href="https://iskconmontrealsankirtan.com/admin/books"
+     target="_blank" rel="noopener" class="btn btn-outline btn-sm">Digital books ledger ↗</a>
 </div>
 
 <sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="draftBookIds.length"
