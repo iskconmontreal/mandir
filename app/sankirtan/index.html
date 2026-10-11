@@ -33,6 +33,7 @@ preloads:
   :loading="sessionsLoading"
   :error="sessionsErr"
   :canmanage="can('sankirtan:manage')"
+  :canhandover="can('sankirtan:create') || can('sankirtan:manage')"
   :onreload="() => { loadSessions(); loadBooks() }">
 </sankirtan-sessions-tab>
 

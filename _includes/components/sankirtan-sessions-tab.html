@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-sessions-tab active:boolean="false" sessions:array books:array loading:boolean="false" error:string="" canmanage:boolean="false">
+  <sankirtan-sessions-tab active:boolean="false" sessions:array books:array loading:boolean="false" error:string="" canmanage:boolean="false" canhandover:boolean="false">
     <style>:host { display: contents; }</style>
     <template>
       <section :if="active">
@@ -8,6 +8,13 @@
 
         <!-- Filter bar -->
         <div class="filter-bar" style="margin-bottom:var(--s-lg)">
+          <div class="seg-group" title="Where the sale was made">
+            <span class="seg" :class="{'seg-active': filterChannel === ''}" :onclick="filterChannel = ''">All</span>
+            <span class="seg" :class="{'seg-active': filterChannel === 'web'}" :onclick="filterChannel = 'web'">Website</span>
+            <span class="seg" :class="{'seg-active': filterChannel === 'pos'}" :onclick="filterChannel = 'pos'">In person</span>
+            <span class="seg" :class="{'seg-active': filterChannel === 'handover'}" :onclick="filterChannel = 'handover'"
+              :text="'To hand over' + (pendingCount() ? ' (' + pendingCount() + ')' : '')"></span>
+          </div>
           <input type="date" title="From date"
             style="width:auto"
             :value="filterFrom"
@@ -24,8 +31,8 @@
             style="flex:1; min-width:10rem"
             :value="filterLocation"
             :oninput="e => filterLocation = e.target.value">
-          <button :if="filterFrom || filterTo || filterWho || filterLocation" type="button" class="btn btn-outline btn-sm"
-            :onclick="filterFrom='', filterTo='', filterWho='', filterLocation=''">Clear</button>
+          <button :if="filterFrom || filterTo || filterWho || filterLocation || filterChannel" type="button" class="btn btn-outline btn-sm"
+            :onclick="filterFrom='', filterTo='', filterWho='', filterLocation='', filterChannel=''">Clear</button>
           <label :if="canmanage" style="display:inline-flex; align-items:center; gap:var(--s-xs); font-size:var(--f-sm); cursor:pointer"
             title="Select every session matching the current filters">
             <input type="checkbox" :checked="allVisibleSelected()" :onchange="toggleSelectAll()">
@@ -76,8 +83,14 @@
                 title="Include in export">
               <div style="flex:1; min-width:8rem; display:flex; flex-direction:column">
                 <span style="font-weight:var(--f-wt-b)" :text="sess.distributor_name || 'Unknown'"></span>
-                <span :if="sess.location" class="dim" style="font-size:var(--f-sm)" :text="sess.location"></span>
-                <span :if="sess.note" class="dim" style="font-size:var(--f-sm); font-style:italic" :text="sess.note"></span>
+                <span :if="sess.location && !isWeb(sess)" class="dim" style="font-size:var(--f-sm)" :text="sess.location"></span>
+                <span :if="sess.note && !isWeb(sess)" class="dim" style="font-size:var(--f-sm); font-style:italic" :text="sess.note"></span>
+                <span :if="isWeb(sess)" style="display:flex; align-items:center; gap:var(--s-xs); flex-wrap:wrap; font-size:var(--f-sm)">
+                  <span class="badge cat-blue">Web</span>
+                  <span class="dim" :text="orderRef(sess)"></span>
+                  <span :if="needsHandover(sess)" class="badge cat-amber">To hand over</span>
+                  <span :if="sess.handed_over_at" class="badge cat-green">Handed over ✓</span>
+                </span>
               </div>
               <span class="dim" style="font-size:var(--f-sm)"
                 :text="fmtTime(sess.created_at)"></span>
@@ -95,6 +108,13 @@
             <div :if="sess._open"
               style="margin-top:var(--s-md); padding-top:var(--s-sm); border-top:1px solid var(--c-border)"
               :onclick.stop="">
+              <div :if="isWeb(sess)" style="margin-bottom:var(--s-md)">
+                <div :each="f in noteFields(sess)" style="display:flex; gap:var(--s-sm); font-size:var(--f-sm); padding:2px 0">
+                  <span class="dim" style="min-width:5rem" :text="f.label"></span>
+                  <a :if="f.href" :href="f.href" :text="f.value"></a>
+                  <span :if="!f.href" :text="f.value"></span>
+                </div>
+              </div>
               <div :if="sess._loadingBooks" class="dim" style="font-size:var(--f-sm)">Loading…</div>
               <div :if="!sess._loadingBooks && !sess.books?.length" class="dim" style="font-size:var(--f-sm)">No book details recorded.</div>
               <table :if="sess.books?.length" style="font-size:var(--f-sm)">
@@ -139,6 +159,18 @@
                   </tr>
                 </tbody>
               </table>
+
+              <div :if="isWeb(sess) && sess.printed_books > 0" style="display:flex; align-items:center; gap:var(--s-sm); margin-top:var(--s-md)">
+                <button :if="canhandover && !sess.handed_over_at" type="button" class="btn btn-primary btn-sm"
+                  :class="{'btn-loading': sess._handing}"
+                  :onclick.stop="doHandOver(sess, true)"
+                  :text="(sess.printed_books === 1 ? '1 printed book' : sess.printed_books + ' printed books') + ' handed over'"></button>
+                <span :if="sess.handed_over_at" class="dim" style="font-size:var(--f-sm)"
+                  :text="'Handed over by ' + (sess.handed_over_by || '—') + ' · ' + fmtDay(sess.handed_over_at)"></span>
+                <button :if="canhandover && sess.handed_over_at" type="button" class="btn-link" style="font-size:var(--f-sm)"
+                  :class="{'btn-loading': sess._handing}"
+                  :onclick.stop="doHandOver(sess, false)">Undo</button>
+              </div>
 
               <div :if="canmanage" style="display:flex; align-items:center; gap:var(--s-sm); margin-top:var(--s-md)">
                 <button type="button" class="btn btn-outline btn-sm"
@@ -369,6 +401,7 @@
       this.filterTo = ''
       this.filterWho = ''
       this.filterLocation = ''
+      this.filterChannel = ''   // '' | 'web' | 'pos' | 'handover'
       this.restoring = false
       this.showRestoreModal = false
       this.restoreFile = null
@@ -546,7 +579,50 @@
           if (self.filterTo && dt > self.filterTo) return false
           if (self.filterWho && !(s.distributor_name || '').toLowerCase().includes(self.filterWho.toLowerCase())) return false
           if (self.filterLocation && !(s.location || '').toLowerCase().includes(self.filterLocation.toLowerCase())) return false
+          if (self.filterChannel === 'web' && !self.isWeb(s)) return false
+          if (self.filterChannel === 'pos' && self.isWeb(s)) return false
+          if (self.filterChannel === 'handover' && !self.needsHandover(s)) return false
           return true
+        })
+      }
+      // Website sales (basket or QR link) are recorded by the website with
+      // location "Website"; everything else came from the POS, in person.
+      this.isWeb = function(s) { return (s.location || '') === 'Website' }
+      this.needsHandover = function(s) { return this.isWeb(s) && (s.printed_books || 0) > 0 && !s.handed_over_at }
+      this.pendingCount = function() { var self = this; return (self.sessions || []).filter(function(s) { return self.needsHandover(s) }).length }
+      this.fmtDay = function(iso) {
+        return iso ? new Date(iso).toLocaleDateString(undefined, { month:'short', day:'numeric' }) : ''
+      }
+      // The website writes its note as "Label: value" lines.
+      this.noteLines = function(s) {
+        return (s.note || '').split('\n').map(function(l) {
+          var i = l.indexOf(':')
+          return i > 0 ? { label: l.slice(0, i).trim(), value: l.slice(i + 1).trim() } : { label: '', value: l.trim() }
+        }).filter(function(f) { return f.value })
+      }
+      this.orderRef = function(s) {
+        var o = this.noteLines(s).find(function(f) { return f.label === 'Order' })
+        return o ? o.value : ''
+      }
+      this.noteFields = function(s) {
+        return this.noteLines(s).map(function(f) {
+          var href = f.label === 'Email' ? 'mailto:' + f.value : f.label === 'Phone' ? 'tel:' + f.value.replace(/\s+/g, '') : ''
+          return { label: f.label, value: f.value, href: href }
+        })
+      }
+      this.doHandOver = function(sess, done) {
+        var self = this
+        if (sess._handing) return
+        sess._handing = true
+        var call = done ? self.api.handOverSankirtanSession(sess.id) : self.api.undoHandOverSankirtanSession(sess.id)
+        call.then(function(full) {
+          sess.handed_over_at = full.handed_over_at || null
+          sess.handed_over_by = full.handed_over_by || ''
+          sess._handing = false
+          self.toast && self.toast(done ? 'Marked as handed over' : 'Hand-over undone', 'success')
+        }).catch(function(e) {
+          sess._handing = false
+          self.toast && self.toast(e.message || 'Could not update the session')
         })
       }
       this.groupedSessions = function() {
