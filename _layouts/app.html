@@ -45,6 +45,8 @@
         </a>
       </nav>
 
+      {% include components/backup-status.html %}
+
       <div class="topbar-user" style="position:relative">
         <button class="user-trigger" :onclick="userMenu = !userMenu" :onclick.outside="userMenu = false">
           <span :text="user?.meta?.spiritual_name || user?.meta?.name || user?.email?.split('@')[0] || 'User'"></span>

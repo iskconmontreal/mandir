@@ -1,0 +1,104 @@
+<!-- Backup status pill + popover (settings:manage) -->
+<div :if="can('settings:manage') && backupStatus && backupStatus !== 'loading'" class="topbar-backup"
+  :scope="{
+    tone: {ok: 'ok', stale: 'warn', never: 'warn', failed: 'err', running: 'run', disabled: 'dim', loading: 'dim', error: 'dim'},
+    short: {ok: 'Backed up', stale: 'Backup overdue', failed: 'Backup failed', running: 'Backing up…', never: 'No backup yet', disabled: 'No cloud backup', loading: 'Backup…', error: 'Backup status unavailable'},
+    title: {ok: 'Backup healthy', stale: 'Backup overdue', failed: 'Backup failed', running: 'Backup in progress…', never: 'No backup yet', disabled: 'Cloud backup not configured', loading: 'Checking backup…', error: 'Backup status unavailable'},
+    fmtAt: v => v ? new Date(v).toLocaleString([], {dateStyle: 'medium', timeStyle: 'short'}) : '',
+    fmtBytes: b => b == null ? '' : b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(b < 10240 ? 1 : 0) + ' KB' : (b / 1048576).toFixed(1) + ' MB',
+  }"
+  :onclick.outside="backupOpen = false"
+  :onkeydown.esc.document="backupOpen = false">
+  <button type="button" class="backup-pill" :class="'backup-pill-' + (tone[backupStatus] || 'warn')"
+    :aria-expanded="backupOpen ? 'true' : 'false'" :title="short[backupStatus] || 'Backup'"
+    :onclick="backupOpen = !backupOpen">
+    <span :if="backupStatus === 'running'" class="backup-spinner" aria-hidden="true"></span>
+    <span :if="backupStatus !== 'running'" class="backup-dot" aria-hidden="true"></span>
+    <span class="backup-pill-label" :text="short[backupStatus] || 'Backup'"></span>
+  </button>
+
+  <div :if="backupOpen" class="backup-pop" role="dialog" aria-label="Backup status">
+    <div class="backup-pop-head" :class="'backup-pop-' + (tone[backupStatus] || 'warn')">
+      <div class="backup-pop-title" :text="title[backupStatus] || 'Backup'"></div>
+      <div class="dim backup-pop-sub" :scope="(() => {
+        const b = backup || {}, st = backupStatus
+        if (st === 'ok') return {sub: 'Done ' + fmtAt(b.last_backup)}
+        if (st === 'stale') return {sub: 'Last success ' + fmtAt(b.last_backup) + ', more than ' + (b.expected_hours || 26) + ' h ago'}
+        if (st === 'failed') return {sub: (b.last_error ? ((b.last_error.source || 'nightly') === 'manual' ? 'Manual' : 'Nightly') + ' backup failed at ' + fmtAt(b.last_error.at) : 'The last backup failed') + (b.last_backup ? ' · last good copy ' + fmtAt(b.last_backup) : '')}
+        if (st === 'running') return {sub: 'Copying databases to cloud storage…'}
+        if (st === 'never') return {sub: 'Backups run automatically every night.'}
+        if (st === 'disabled') return {sub: 'Cloud storage is not configured on the server.'}
+        if (st === 'error') return {sub: backupErr}
+        return {sub: ''}
+      })()" :text="sub"></div>
+      <div :if="backup && backup.next_run" class="dim backup-pop-sub" :scope="(() => {
+        const min = Math.round((new Date(backup.next_run) - backupNow) / 60000)
+        const rel = min <= 0 ? 'due now' : 'in ' + (min >= 60 ? Math.floor(min / 60) + ' h ' + (min % 60 ? min % 60 + ' min' : '') : min + ' min').trim()
+        return {nextText: 'Next backup: ' + fmtAt(backup.next_run) + ' (' + rel + ')'}
+      })()" :text="nextText"></div>
+    </div>
+
+    <div :if="backupStatus === 'failed' && backup.last_error && backup.last_error.message" class="backup-pop-error">
+      <button type="button" class="btn-link" :aria-expanded="showBackupError ? 'true' : 'false'" :onclick="showBackupError = !showBackupError" :text="showBackupError ? 'Hide error' : 'Show error'"></button>
+      <pre :if="showBackupError" :text="backup.last_error.message"></pre>
+    </div>
+
+    <table :if="backup && backup.databases && backup.databases.length" class="backup-table">
+      <tbody>
+        <tr :each="db in backup.databases">
+          <td :html="icon('status_approved')"></td>
+          <td :text="db.label || db.file"></td>
+          <td class="backup-mono" :text="db.file"></td>
+          <td class="backup-num" :text="fmtBytes(db.bytes)"></td>
+          <td class="backup-num dim" :text="fmtAt(db.backed_up_at)"></td>
+        </tr>
+        <tr :if="backup.uploads">
+          <td :html="icon('status_approved')"></td>
+          <td>Uploads</td>
+          <td class="backup-mono" :text="(backup.uploads.files || 0) + ' file' + (backup.uploads.files === 1 ? '' : 's')"></td>
+          <td class="backup-num" :text="fmtBytes(backup.uploads.bytes)"></td>
+          <td class="backup-num dim" :text="backup.duration_ms != null ? 'took ' + (backup.duration_ms < 1000 ? backup.duration_ms + ' ms' : (backup.duration_ms / 1000).toFixed(1) + ' s') : ''"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div :if="backup && backup.restore_error" class="login-error backup-pop-restore-error" :text="'Restore error: ' + backup.restore_error"></div>
+
+    <div :if="backup && backup.remote_configured" class="backup-pop-actions">
+      <a :if="backup.dashboard_url" class="backup-link" :href="backup.dashboard_url" target="_blank" rel="noopener">View in R2 ↗</a>
+      <button type="button" class="btn btn-outline btn-sm" :disabled="backingUp || restoring || backupStatus === 'running'" :onclick="openRestoreModal">Restore…</button>
+      <button type="button" class="btn btn-primary btn-sm" :class="{'btn-loading': backingUp}" :disabled="restoring || backupStatus === 'running'" :onclick="runBackup">Backup now</button>
+    </div>
+  </div>
+</div>
+
+<!-- Restore confirmation modal -->
+<div :if="can('settings:manage') && showRestoreModal" class="modal-overlay"
+  :onclick="e => { if (e.target === e.currentTarget) closeRestoreModal() }"
+  :onkeydown.esc.document="closeRestoreModal()">
+  <div class="modal" style="max-width:32rem">
+    <div class="modal-header">
+      <h2 :text="restoring ? 'Restoring backup' : 'Restore latest backup'"></h2>
+      <button :if="!restoring" class="modal-close" type="button" aria-label="Close" :onclick="closeRestoreModal" :html="icon('close')"></button>
+    </div>
+    <div class="modal-body">
+      <div :if="!restoring">
+        <div class="login-error" style="margin-bottom:var(--s-md)">This replaces ALL current data (sessions, stock, orders, users, finances) with the most recent backup. Anything entered since that backup will be lost.</div>
+        <div class="field">
+          <label for="restore-confirm">Type RESTORE to confirm</label>
+          <input id="restore-confirm" type="text" autocomplete="off" spellcheck="false" :value="restoreInput" :oninput="e => restoreInput = e.target.value" placeholder="RESTORE">
+        </div>
+        <div :if="restoreFailed" class="login-error" style="margin-top:var(--s-sm)" :text="restoreFailed"></div>
+        <div style="display:flex; justify-content:flex-end; gap:var(--s-sm); margin-top:var(--s-md)">
+          <button type="button" class="btn btn-outline" :onclick="closeRestoreModal">Cancel</button>
+          <button type="button" class="btn btn-primary" style="background:var(--c-err); border-color:var(--c-err)" :disabled="restoreInput !== 'RESTORE'" :onclick="confirmRestore">Restore</button>
+        </div>
+      </div>
+      <div :if="restoring" style="text-align:center; padding:var(--s-md) 0">
+        <img src="/assets/preloader.svg" alt="" style="width:3rem">
+        <div style="margin-top:var(--s-sm); font-weight:var(--f-wt-b)">Restoring — the site is restarting…</div>
+        <div class="dim" style="font-size:var(--f-sm); margin-top:var(--s-sm)">Do not close this page. It will reload automatically.</div>
+      </div>
+    </div>
+  </div>
+</div>
