@@ -207,22 +207,76 @@ preloads:
         <div class="dim" style="font-size:var(--f-sm)">Nightly cloud backup of all data — sessions, stock, orders, users, finances.</div>
       </div>
       <div class="org-form-actions">
-        <button type="button" class="btn btn-primary" :class="{'btn-loading': backingUp}" :disabled="!(backup && backup.remote_configured) || restoring" :onclick="runBackup">Backup now</button>
-        <button type="button" class="btn btn-outline" style="color:var(--c-err); border-color:var(--c-err)" :disabled="!(backup && backup.remote_configured) || backingUp || restoring" :onclick="openRestoreModal">Restore latest backup</button>
+        <button type="button" class="btn btn-primary" :class="{'btn-loading': backingUp}" :disabled="!(backup && backup.remote_configured) || restoring || backupStatus === 'running'" :onclick="runBackup">Backup now</button>
+        <button type="button" class="btn btn-outline" style="color:var(--c-err); border-color:var(--c-err)" :disabled="!(backup && backup.remote_configured) || backingUp || restoring || backupStatus === 'running'" :onclick="openRestoreModal">Restore latest backup</button>
       </div>
     </div>
 
     <div :if="backupErr" class="login-error" :text="backupErr"></div>
-    <div :if="!backupErr && backup && !backup.remote_configured" class="dim">Cloud storage is not configured on the server.</div>
+    <div :if="!backupErr && backup && backupStatus === 'disabled'" class="dim">Cloud storage is not configured on the server.</div>
 
-    <div :if="!backupErr && backup && backup.remote_configured">
-      <div class="org-readiness" :class="backupStale ? 'org-readiness-err' : 'org-readiness-ok'">
-        <div class="org-readiness-icon" :html="backupStale ? icons.warn : icons.check"></div>
-        <div>
-          <div style="font-weight:var(--f-wt-b)" :text="'Last backup: ' + lastBackupText"></div>
-          <div class="dim" style="font-size:var(--f-sm)" :text="backupStale ? 'Backup is older than 26 hours — the nightly backup may have failed.' : (backingUp ? 'Backup in progress…' : 'Backups run automatically every night.')"></div>
+    <div :if="!backupErr && backup && backupStatus !== 'disabled'"
+      :scope="{
+        fmtAt: v => v ? new Date(v).toLocaleString([], {dateStyle: 'medium', timeStyle: 'short'}) : '',
+        fmtBytes: b => b == null ? '' : b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(b < 10240 ? 1 : 0) + ' KB' : (b / 1048576).toFixed(1) + ' MB',
+        tone: {ok: 'ok', stale: 'warn', never: 'warn', failed: 'err', running: 'run'},
+        title: {ok: 'Backup healthy', stale: 'Backup overdue', failed: 'Backup failed', running: 'Backup in progress…', never: 'No backup yet'},
+      }">
+      <div class="org-readiness" :class="'org-readiness-' + (tone[backupStatus] || 'warn')">
+        <div class="org-readiness-icon">
+          <span :if="backupStatus === 'running'" class="org-backup-spinner" aria-hidden="true"></span>
+          <span :if="backupStatus !== 'running'" :html="{ok: icons.check, failed: icons.error}[backupStatus] || icons.warn"></span>
         </div>
+        <div class="org-backup-text">
+          <div style="font-weight:var(--f-wt-b)" :text="title[backupStatus] || 'Backup status unknown'"></div>
+          <div class="dim" style="font-size:var(--f-sm)" :scope="(() => {
+            const b = backup, st = backupStatus
+            if (st === 'ok') return {sub: 'Done ' + fmtAt(b.last_backup)}
+            if (st === 'stale') return {sub: 'Last success ' + fmtAt(b.last_backup) + ', more than ' + (b.expected_hours || 26) + ' h ago'}
+            if (st === 'failed') return {sub: (b.last_error ? ((b.last_error.source || 'nightly') === 'manual' ? 'Manual' : 'Nightly') + ' backup failed at ' + fmtAt(b.last_error.at) : 'The last backup failed') + (b.last_backup ? ' · last good copy ' + fmtAt(b.last_backup) : '')}
+            if (st === 'running') return {sub: 'Copying databases to cloud storage…'}
+            if (st === 'never') return {sub: 'Backups run automatically every night.'}
+            return {sub: ''}
+          })()" :text="sub"></div>
+          <div :if="backup.next_run" class="dim" style="font-size:var(--f-sm)" :scope="(() => {
+            const min = Math.round((new Date(backup.next_run) - backupNow) / 60000)
+            const rel = min <= 0 ? 'due now' : 'in ' + (min >= 60 ? Math.floor(min / 60) + ' h ' + (min % 60 ? min % 60 + ' min' : '') : min + ' min').trim()
+            return {nextText: 'Next backup: ' + fmtAt(backup.next_run) + ' (' + rel + ')'}
+          })()" :text="nextText"></div>
+        </div>
+        <a :if="backup.dashboard_url && (backupStatus === 'ok' || backupStatus === 'failed')" class="org-backup-link" :href="backup.dashboard_url" target="_blank" rel="noopener">View in R2 ↗</a>
       </div>
+
+      <div :if="backupStatus === 'failed' && backup.last_error && backup.last_error.message" class="org-backup-error">
+        <button type="button" class="btn-link" :aria-expanded="showBackupError ? 'true' : 'false'" :onclick="showBackupError = !showBackupError" :text="showBackupError ? 'Hide error' : 'Show error'"></button>
+        <pre :if="showBackupError" :text="backup.last_error.message"></pre>
+      </div>
+
+      <div :if="backup.databases && backup.databases.length" class="org-backup-details">
+        <button type="button" class="btn-link org-backup-toggle" :class="{'org-backup-toggle-open': backupDetailsOpen}" :aria-expanded="backupDetailsOpen ? 'true' : 'false'" :onclick="backupDetailsOpen = !backupDetailsOpen">
+          <span class="org-backup-chevron" :html="icons.chevron"></span>
+          <span :text="'Details · ' + backup.databases.length + ' database' + (backup.databases.length === 1 ? '' : 's') + (backup.uploads ? ' + uploads' : '')"></span>
+        </button>
+        <table :if="backupDetailsOpen" class="org-backup-table">
+          <tbody>
+            <tr :each="db in backup.databases">
+              <td :html="icons.check"></td>
+              <td :text="db.label || db.file"></td>
+              <td class="org-backup-mono" :text="db.file"></td>
+              <td class="org-backup-num" :text="fmtBytes(db.bytes)"></td>
+              <td class="org-backup-num dim" :text="fmtAt(db.backed_up_at)"></td>
+            </tr>
+            <tr :if="backup.uploads">
+              <td :html="icons.check"></td>
+              <td>Uploads</td>
+              <td class="org-backup-mono" :text="(backup.uploads.files || 0) + ' file' + (backup.uploads.files === 1 ? '' : 's')"></td>
+              <td class="org-backup-num" :text="fmtBytes(backup.uploads.bytes)"></td>
+              <td class="org-backup-num dim" :text="backup.duration_ms != null ? 'took ' + (backup.duration_ms < 1000 ? backup.duration_ms + ' ms' : (backup.duration_ms / 1000).toFixed(1) + ' s') : ''"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <div :if="backup.restore_error" class="login-error" style="margin-top:var(--s-sm)" :text="'Restore error: ' + backup.restore_error"></div>
     </div>
   </div>
@@ -338,7 +392,7 @@ preloads:
     logoBroken: false,
     snapshot: { ...EMPTY },
     form: toForm(EMPTY),
-    icons: { check: icon('status_approved'), warn: icon('status_submitted'), close: icon('close') },
+    icons: { check: icon('status_approved'), warn: icon('status_submitted'), error: icon('status_rejected'), chevron: icon('chevron_down'), close: icon('close') },
 
     canBackup: auth.can('settings:manage'),
     backup: null,
@@ -349,46 +403,73 @@ preloads:
     restoring: false,
     restoreFailed: '',
 
+    backupDetailsOpen: false,
+    showBackupError: false,
+    watchingBackup: false,
+    backupNow: Date.now(),
+
     get backupStale() {
       const m = this.backup ? this.backup.age_minutes : null
       return m == null || m > 1560
     },
 
-    get lastBackupText() {
-      return this.backup && this.backup.last_backup ? new Date(this.backup.last_backup).toLocaleString() : 'Never'
+    // server status wins; age_minutes fallback covers older goloka builds
+    get backupStatus() {
+      const b = this.backup
+      if (!b) return ''
+      if (!b.remote_configured) return 'disabled'
+      if (this.backingUp || b.running) return 'running'
+      if (b.status) return b.status
+      return this.backupStale ? (b.last_backup ? 'stale' : 'never') : 'ok'
     },
 
     async refreshBackup() {
       try {
         this.backup = await api.getBackupStatus()
+        this.backupNow = Date.now()
         this.backupErr = ''
       } catch (e) {
         this.backupErr = e.message || 'Failed to load backup status'
+        return
       }
+      if (this.backup.running && !this.backingUp && !this.watchingBackup) {
+        this.watchingBackup = true
+        try { await this.pollBackup(this.backup) } catch {} finally { this.watchingBackup = false }
+      }
+    },
+
+    // poll every 3 s until a run finishes (new success or new failure); resolves to the final status
+    async pollBackup(prev) {
+      const prevOk = prev && prev.last_backup, prevErr = prev && prev.last_error && prev.last_error.at
+      const deadline = Date.now() + 5 * 60_000
+      let misses = 0
+      while (Date.now() < deadline) {
+        await sleep(3000)
+        try {
+          this.backup = await api.getBackupStatus()
+          this.backupNow = Date.now()
+          misses = 0
+          const b = this.backup, errAt = b.last_error && b.last_error.at
+          if (!b.running && ((b.last_backup && b.last_backup !== prevOk) || (errAt && errAt !== prevErr))) return b
+        } catch (e) {
+          if (++misses >= 3) throw e
+        }
+      }
+      throw new Error('Backup did not finish within 5 minutes — check again later')
     },
 
     async runBackup() {
       if (this.backingUp || this.restoring) return
-      const prev = this.backup && this.backup.last_backup
+      const prev = this.backup
       this.backingUp = true
       try {
         await api.runBackup()
-        const deadline = Date.now() + 5 * 60_000
-        let misses = 0
-        while (Date.now() < deadline) {
-          await sleep(3000)
-          try {
-            this.backup = await api.getBackupStatus()
-            misses = 0
-            if (!this.backup.running && this.backup.last_backup && this.backup.last_backup !== prev) {
-              toast('Backup completed', 'success')
-              return
-            }
-          } catch (e) {
-            if (++misses >= 3) throw e
-          }
+        const b = await this.pollBackup(prev)
+        if (b.status === 'failed' && b.last_error && (!prev || !prev.last_backup || b.last_backup === prev.last_backup)) {
+          this.showBackupError = true
+          throw new Error(b.last_error.message || 'Backup failed')
         }
-        throw new Error('Backup did not finish within 5 minutes — check again later')
+        toast('Backup completed', 'success')
       } catch (e) {
         toast(e.message || 'Backup failed', 'error')
       } finally {
@@ -521,4 +602,5 @@ preloads:
   }
 
   load()
+  if (s.canBackup) setInterval(() => { if (!s.backingUp && !s.watchingBackup) s.refreshBackup() }, 60_000)
 </script>

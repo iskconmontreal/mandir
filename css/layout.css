@@ -2970,3 +2970,82 @@ form {
 .exp-item-remove { position: absolute; right: var(--s-sm); top: 50%; transform: translateY(-50%); display: none; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; border: none; background: transparent; color: var(--c-text-dim); font-size: var(--f-md); line-height: 1; cursor: pointer; border-radius: var(--r-sm); padding: 0; }
 .exp-items-table tr:hover .exp-item-remove { display: flex; }
 .exp-item-remove:hover { color: var(--c-err); }
+
+/* Organization — backup status */
+.org-readiness-run {
+  border-color: var(--c-border);
+  background: var(--c-bg);
+}
+.org-readiness .org-backup-text { flex: 1; min-width: 0; }
+.org-backup-spinner {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--c-border);
+  border-top-color: var(--c-accent);
+  animation: btn-spin .6s linear infinite;
+}
+.org-backup-link {
+  font-size: var(--f-sm);
+  white-space: nowrap;
+  color: var(--c-accent);
+  text-decoration: none;
+}
+.org-backup-link:hover { color: var(--c-accent-h); text-decoration: underline; }
+.org-backup-error { margin-top: var(--s-sm); }
+.org-backup-error .btn-link:hover { color: var(--c-accent); }
+.org-backup-error pre {
+  margin: var(--s-xs) 0 0;
+  padding: var(--s-sm);
+  font-family: var(--f-mono);
+  font-size: var(--f-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--c-text);
+  background: var(--c-err-hover);
+  border-radius: var(--r-sm);
+}
+.org-backup-details { margin-top: var(--s-sm); }
+.org-backup-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-xs);
+}
+.org-backup-toggle:hover { color: var(--c-accent); }
+.org-backup-chevron svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  transition: transform .15s ease;
+}
+.org-backup-toggle-open .org-backup-chevron svg { transform: rotate(180deg); }
+.org-backup-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--s-xs);
+  font-size: var(--f-sm);
+  table-layout: auto;
+}
+.org-backup-table td {
+  padding: var(--s-xs) var(--s-sm);
+  border-bottom: 1px solid var(--c-border);
+  vertical-align: middle;
+}
+.org-backup-table tr:last-child td { border-bottom: none; }
+.org-backup-table td:first-child {
+  width: 16px;
+  padding-left: 0;
+  color: var(--c-ok);
+}
+.org-backup-table td:first-child svg { width: 16px; height: 16px; display: block; }
+.org-backup-mono {
+  font-family: var(--f-mono);
+  font-size: var(--f-xs);
+  color: var(--c-text-dim);
+}
+.org-backup-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
