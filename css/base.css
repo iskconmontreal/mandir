@@ -208,12 +208,14 @@ th:last-child, td:last-child { padding-right: 0; }
 
 .btn-block { width: 100%; }
 
-.btn-loading {
+.btn-loading,
+.btn[aria-busy="true"] {
   position: relative;
   pointer-events: none;
   color: transparent !important;
 }
-.btn-loading::after {
+.btn-loading::after,
+.btn[aria-busy="true"]::after {
   content: '';
   position: absolute;
   width: 1.1em;
@@ -225,7 +227,10 @@ th:last-child, td:last-child { padding-right: 0; }
 }
 .btn-outline.btn-loading::after,
 .btn-danger.btn-loading::after,
-.btn-link.btn-loading::after {
+.btn-link.btn-loading::after,
+.btn-outline[aria-busy="true"]::after,
+.btn-danger[aria-busy="true"]::after,
+.btn-link[aria-busy="true"]::after {
   border-color: rgba(0,0,0,.1);
   border-top-color: var(--c-accent);
 }

@@ -347,7 +347,7 @@
                     :change="v => row.book_id = parseInt(v) || 0">
                     <option value="">Select a book…</option>
                     <option :each="b in editBookOptions(row)" :value="String(b.id)"
-                      :text="b.title + (b.language ? ' (' + b.language + ')' : '')"></option>
+                      :text="[b.title, coverLabel(b.category), b.language, b.exclude_from_bbt ? 'not scored' : (b.points_per_unit || 0) + ' pt'].filter(Boolean).join(' · ')"></option>
                   </select>
                   <input type="text" inputmode="numeric" style="width:4.5rem" placeholder="Qty"
                     :value="row.qty || ''"
@@ -387,7 +387,7 @@
 
               <div :if="editErr" class="login-error" :text="editErr"></div>
               <button type="submit" class="btn btn-primary"
-                :class="{'btn-loading': savingEdit}" :disabled="savingEdit"
+                :aria-busy="savingEdit ? 'true' : null" :disabled="savingEdit"
                 :text="savingEdit ? 'Saving…' : 'Save'"></button>
               <p class="dim" style="font-size:var(--f-sm); margin-top:var(--s-xs)">Points and costs are recalculated from the current catalog; stock is adjusted by the difference.</p>
             </form>
@@ -519,7 +519,12 @@
           var cur = all.find(function(b) { return b.id === row.book_id })
           if (cur) list = [cur].concat(list)
         }
-        return list
+        // Same title, different formats sit next to each other.
+        return list.slice().sort(function(a, b) {
+          return (a.title || '').localeCompare(b.title || '') ||
+            (a.language || '').localeCompare(b.language || '') ||
+            (a.category || '').localeCompare(b.category || '')
+        })
       }
       this.editTotal = function() {
         var sum = (this.editForm.payments || []).reduce(function(acc, p) { return acc + (parseFloat(p.amount) || 0) }, 0)

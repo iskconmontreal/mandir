@@ -283,7 +283,7 @@
                   <div class="field">
                     <label for="bk-cover">Cover</label>
                     <select id="bk-cover"
-                      :change="v => { form.cover = v; form.points_per_unit = autoPointsFromPages(form.pages, v) }">
+                      :change="v => setCover(v)">
                       <option value="Soft" :selected="form.cover === 'Soft'">Soft cover</option>
                       <option value="Hard" :selected="form.cover === 'Hard'">Hard cover</option>
                       <option value="Audio" :selected="form.cover === 'Audio'">Audiobook</option>
@@ -295,6 +295,13 @@
                     <input id="bk-pages" type="number" min="1" placeholder="e.g. 320"
                       :value="form.pages || ''"
                       :oninput="e => { form.pages = parseInt(e.target.value) || null; form.points_per_unit = autoPointsFromPages(form.pages, form.cover) }">
+                    <div class="dim" style="font-size:var(--f-sm); margin-top:var(--s-xs)"
+                      :hidden="!isDigital(form.cover) || !!form.pages">
+                      Digital editions score by the print edition's page count — without it this book earns 0 pts.
+                      <button type="button" class="btn-link" :hidden="!printEditionPages()"
+                        :onclick="usePrintPages()"
+                        :text="'Use ' + printEditionPages() + ' pages from the print edition'"></button>
+                    </div>
                   </div>
                   <div class="field">
                     <label for="bk-low-stock">Low-stock threshold</label>
@@ -464,7 +471,7 @@
               </div>
               <div :hidden="!saveErr" class="login-error" :text="saveErr"></div>
               <button type="submit" class="btn btn-primary"
-                :class="{'btn-loading': saving}"
+                :aria-busy="saving ? 'true' : null"
                 :text="modalBook ? 'Save Changes' : (form.is_stack ? 'Add Stack' : 'Add Book')"></button>
             </form>
           </div>
@@ -712,6 +719,29 @@
         // E* bundle counts as ebook + audiobook: the server doubles books and default points.
         return cover === 'Ebook' ? pts * 2 : pts
       }
+      this.isDigital = function(cover) { return cover === 'Audio' || cover === 'Ebook' }
+      // Page count of the print edition with the same title (and language), if any.
+      this.printEditionPages = function() {
+        var title = (this.form.title || '').trim().toLowerCase(), lang = this.form.language || ''
+        if (!title) return null
+        var list = (this.books && this.books.length) ? this.books : (this._catalog || [])
+        var hit = list.find(function(b) {
+          return !b.is_stack && b.pages > 0 && 'SH'.indexOf((b.category || 'S')[0]) >= 0 &&
+            (b.title || '').trim().toLowerCase() === title && (!lang || !b.language || b.language === lang)
+        })
+        return hit ? hit.pages : null
+      }
+      this.usePrintPages = function() {
+        var p = this.printEditionPages()
+        if (!p) return
+        this.form.pages = p
+        this.form.points_per_unit = this.autoPointsFromPages(p, this.form.cover)
+      }
+      this.setCover = function(v) {
+        this.form.cover = v
+        if (this.isDigital(v) && !this.form.pages) this.form.pages = this.printEditionPages()
+        this.form.points_per_unit = this.autoPointsFromPages(this.form.pages, v)
+      }
       // Size label read from a STORED code's digit (tier 0 = pending).
       this.sizeLabel = function(cat) { return ({ '0':'Pending', '1':'Small', '2':'Medium', '3':'Big', '4':'Mahabig' })[cat && cat[1]] || '—' }
       // ── Stacks ──────────────────────────────────────────────
@@ -796,6 +826,7 @@
         this._catalog = (this.books || []).slice()
         this.modalBook = null
         this.saveErr = null
+        this.saving = false
         this.showModal = true
       }
       this.openEdit = function(b) {
@@ -804,8 +835,12 @@
         this.form.language = b.language || ''
         this.form.cover = this.coverFromLetter(b.category && b.category[0])
         this.form.pages = b.pages || null
-        // Preserve the stored score (a stack/custom score is not re-derived).
-        this.form.points_per_unit = b.points_per_unit ?? this.autoPointsFromPages(b.pages, this.form.cover)
+        // Preserve the stored score (a stack/custom score is not re-derived). A plain
+        // book with pages but a 0 score (created before its page count was set) gets
+        // its tier score back so a Save repairs it.
+        var storedPts = b.points_per_unit
+        if (!b.is_stack && !b.exclude_from_bbt && !storedPts && b.pages) storedPts = this.autoPointsFromPages(b.pages, this.form.cover)
+        this.form.points_per_unit = storedPts ?? this.autoPointsFromPages(b.pages, this.form.cover)
         this.form.cost_cents = b.cost_cents || 0
         this.form.retail_price_cents = b.retail_price_cents || 0
         this.form.exclude_from_bbt = !!b.exclude_from_bbt
@@ -825,6 +860,7 @@
         this.modalBook = b
         this.loadGallery(b.id)
         this.saveErr = null
+        this.saving = false
         this.showModal = true
       }
       this.closeModal = function() {
