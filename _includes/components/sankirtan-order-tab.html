@@ -41,6 +41,8 @@
                     :class="{'btn-loading': o._saving}" :onclick="setStatus(o, 'active')">Activate</button>
                   <button :if="o.status === 'active' && !o._receiving" type="button" class="btn btn-primary btn-sm"
                     :onclick="startReceive(o)">Complete</button>
+                  <button :if="o.status === 'active' && !o._receiving" type="button" class="btn btn-outline btn-sm"
+                    :class="{'btn-loading': o._saving}" :onclick="setStatus(o, 'draft')">Back to draft</button>
                   <span :if="!o._confirm">
                     <button type="button" class="btn btn-outline btn-sm" style="color:var(--c-err)"
                       :onclick="o._confirm = true">Cancel</button>
@@ -195,7 +197,7 @@
           .then(function() {
             o._saving = false
             if (status === 'cancelled') self.clearChecks(o)
-            self.toast(status === 'active' ? 'Order activated' : 'Order cancelled', 'success')
+            self.toast(({ active: 'Order activated', draft: 'Order back to draft', cancelled: 'Order cancelled' })[status], 'success')
             self.emit('reload')
           })
           .catch(function(e) { o._saving = false; self.toast(e.message || 'Failed to update order', 'error') })
