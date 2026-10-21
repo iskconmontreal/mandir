@@ -59,7 +59,7 @@
               </p>
 
               <table :if="o.items.length && !o._receiving" class="order-table">
-                <thead><tr><th title="Tick when checked against the invoice">✓</th><th>Title</th><th>Cover</th><th>Stock</th><th>Boxes</th><th :if="o.status === 'draft'"></th></tr></thead>
+                <thead><tr><th title="Tick when checked against the invoice">✓</th><th>Title</th><th>Cover</th><th>Stock</th><th>Boxes</th><th></th></tr></thead>
                 <tbody :each="g in langGroups(o)">
                   <tr class="lang-row"><td colspan="6" :text="g.lang"></td></tr>
                   <tr :each="it in g.items" :class="{ticked: isChecked(o.id, it.book_id)}">
@@ -74,50 +74,17 @@
                     <td :text="coverFor(it.book_id)"></td>
                     <td :text="bookFor(it.book_id).stock ?? 0"></td>
                     <td>
-                      <input :if="o.status === 'draft'" type="number" min="1" inputmode="numeric"
+                      <input type="number" min="1" inputmode="numeric"
                         :value="it.boxes_ordered" :onchange="e => setBoxes(o, it, e.target.value)">
-                      <span :if="o.status !== 'draft'" :text="it.boxes_ordered"></span>
                     </td>
-                    <td :if="o.status === 'draft'">
-                      <button type="button" class="btn-link" :onclick="removeItem(o, it)">×</button>
+                    <td>
+                      <button :if="o.status === 'draft' || o.items.length > 1" type="button" class="btn-link" title="Remove line"
+                        :onclick="removeItem(o, it)">×</button>
                     </td>
                   </tr>
                 </tbody>
               </table>
 
-              <!-- Receive mode: count what actually arrived, key books per box -->
-              <div :if="o._receiving">
-                <table class="order-table">
-                  <thead><tr><th title="Tick when checked against the invoice">✓</th><th>Title</th><th>Ordered</th><th>Boxes received</th><th>Books / box</th><th>Books</th></tr></thead>
-                  <tbody :each="g in langGroups(o)">
-                    <tr class="lang-row"><td colspan="6" :text="g.lang"></td></tr>
-                    <tr :each="it in g.items" :class="{ticked: isChecked(o.id, it.book_id)}">
-                      <td class="chk">
-                        <input type="checkbox" title="Checked against invoice"
-                          :checked="isChecked(o.id, it.book_id)" :onchange="toggleCheck(o.id, it.book_id)">
-                      </td>
-                      <td>
-                        <div :text="bookFor(it.book_id).title"></div>
-                        <div class="dim" style="font-size:0.85em" :text="bookFor(it.book_id).author"></div>
-                      </td>
-                      <td :text="it.boxes_ordered"></td>
-                      <td><input type="number" min="0" inputmode="numeric"
-                        :value="(recv[it.book_id] || {}).boxes" :oninput="e => setRecv(it.book_id, 'boxes', e.target.value)"></td>
-                      <td><input type="number" min="1" inputmode="numeric" placeholder="?"
-                        :value="(recv[it.book_id] || {}).perbox" :oninput="e => setRecv(it.book_id, 'perbox', e.target.value)"></td>
-                      <td :text="lineBooks(it.book_id)"></td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div style="display:flex; align-items:center; gap:var(--s-sm); margin-top:var(--s-sm)">
-                  <strong :text="'Total: ' + receiveTotal(o) + ' books to add to stock'"></strong>
-                  <span style="margin-left:auto; display:inline-flex; gap:var(--s-xs)">
-                    <button type="button" class="btn btn-primary btn-sm" :class="{'btn-loading': o._saving}"
-                      :onclick="completeOrder(o)">Complete & update stock</button>
-                    <button type="button" class="btn btn-outline btn-sm" :onclick="o._receiving = false">Back</button>
-                  </span>
-                </div>
-              </div>
             </div>
 
             <!-- Completed / cancelled: compact history row -->
@@ -129,7 +96,44 @@
                 :text="o.items.length + ' title' + (o.items.length === 1 ? '' : 's') + ' · ' + orderBoxes(o) + ' boxes' + (o.status === 'completed' ? ' · ' + orderBooks(o) + ' books added' : '')"></span>
               <span class="order-actions">
                 <button type="button" class="btn btn-outline btn-sm" :onclick="exportOrder(o)">Export Excel</button>
+                <button :if="o.status === 'completed' && !o._receiving" type="button" class="btn btn-outline btn-sm"
+                  :onclick="startReceive(o)">Edit</button>
               </span>
+            </div>
+
+            <!-- Receive / correct mode: ordered, boxes arrived, books per box. Stock moves by the difference. -->
+            <div :if="o._receiving">
+              <table class="order-table">
+                <thead><tr><th title="Tick when checked against the invoice">✓</th><th>Title</th><th>Ordered</th><th>Boxes received</th><th>Books / box</th><th>Books</th></tr></thead>
+                <tbody :each="g in langGroups(o)">
+                  <tr class="lang-row"><td colspan="6" :text="g.lang"></td></tr>
+                  <tr :each="it in g.items" :class="{ticked: isChecked(o.id, it.book_id)}">
+                    <td class="chk">
+                      <input type="checkbox" title="Checked against invoice"
+                        :checked="isChecked(o.id, it.book_id)" :onchange="toggleCheck(o.id, it.book_id)">
+                    </td>
+                    <td>
+                      <div :text="bookFor(it.book_id).title"></div>
+                      <div class="dim" style="font-size:0.85em" :text="bookFor(it.book_id).author"></div>
+                    </td>
+                    <td><input type="number" min="1" inputmode="numeric"
+                      :value="(recv[it.book_id] || {}).ordered" :oninput="e => setRecv(it.book_id, 'ordered', e.target.value)"></td>
+                    <td><input type="number" min="0" inputmode="numeric"
+                      :value="(recv[it.book_id] || {}).boxes" :oninput="e => setRecv(it.book_id, 'boxes', e.target.value)"></td>
+                    <td><input type="number" min="1" inputmode="numeric" placeholder="?"
+                      :value="(recv[it.book_id] || {}).perbox" :oninput="e => setRecv(it.book_id, 'perbox', e.target.value)"></td>
+                    <td :text="lineBooks(it.book_id)"></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div style="display:flex; align-items:center; gap:var(--s-sm); margin-top:var(--s-sm)">
+                <strong :text="'Total: ' + receiveTotal(o) + ' books' + (o.status === 'completed' ? ' from this order (stock moves by the difference)' : ' to add to stock')"></strong>
+                <span style="margin-left:auto; display:inline-flex; gap:var(--s-xs)">
+                  <button type="button" class="btn btn-primary btn-sm" :class="{'btn-loading': o._saving}"
+                    :onclick="completeOrder(o)" :text="o.status === 'completed' ? 'Save & adjust stock' : 'Complete & update stock'"></button>
+                  <button type="button" class="btn btn-outline btn-sm" :onclick="o._receiving = false">Back</button>
+                </span>
+              </div>
             </div>
 
           </div>
@@ -230,7 +234,10 @@
       this.recv = {}
       this.startReceive = function(o) {
         var m = {}
-        o.items.forEach(function(it) { m[it.book_id] = { boxes: it.boxes_ordered, perbox: '' } })
+        var done = o.status === 'completed'
+        o.items.forEach(function(it) {
+          m[it.book_id] = { ordered: it.boxes_ordered, boxes: done ? it.boxes_received : it.boxes_ordered, perbox: done && it.books_per_box ? it.books_per_box : '' }
+        })
         this.orders.forEach(function(o2) { if (o2.id !== o.id) o2._receiving = false })
         this.recv = m
         o._receiving = true
@@ -258,14 +265,15 @@
         if (missing) { self.toast('Enter books per box for every received line', 'error'); return }
         var items = o.items.map(function(it) {
           var r = self.recv[it.book_id] || {}
-          return { book_id: it.book_id, boxes_received: parseInt(r.boxes) || 0, books_per_box: parseInt(r.perbox) || 0 }
+          return { book_id: it.book_id, boxes_ordered: parseInt(r.ordered) || it.boxes_ordered,
+            boxes_received: parseInt(r.boxes) || 0, books_per_box: parseInt(r.perbox) || 0 }
         })
         o._saving = true
         self.api.receiveSankirtanOrder(o.id, items)
           .then(function() {
             o._saving = false
             self.clearChecks(o)
-            self.toast('Order completed — stock updated', 'success')
+            self.toast(o.status === 'completed' ? 'Order corrected — stock adjusted' : 'Order completed — stock updated', 'success')
             self.emit('reload')
           })
           .catch(function(e) { o._saving = false; self.toast(e.message || 'Failed to complete order', 'error') })
