@@ -13,8 +13,8 @@ Make financial truth visible to a non-accountant. Solve one temple's problem per
 ## Architecture
 
 ```
-Frontend: Static HTML on GitHub Pages (Jekyll)
-Backend:  Goloka — REST API on Mac Mini at https://api.iskconmontreal.ca
+Frontend: Static HTML (Jekyll) on Cloudflare Pages, project `admin` → admin.iskconmontrealsankirtan.com
+Backend:  Goloka — REST API at https://api.iskconmontrealsankirtan.com
 Auth:     Google OAuth2 direct + email/password fallback, JWT in localStorage
 Cross-domain: CORS + Authorization: Bearer header, no cookies
 ```
@@ -23,13 +23,13 @@ No build step. No bundler. No framework beyond sprae. No Tailwind.
 
 ## API
 
-Goloka REST API: `https://api.iskconmontreal.ca`
-Swagger: `https://api.iskconmontreal.ca/swagger/index.html`
+Goloka REST API: `https://api.iskconmontrealsankirtan.com`
+Swagger: `https://api.iskconmontrealsankirtan.com/swagger/index.html`
 
 ## Stack
 
 - **Sprae v12** — DOM microhydration (`lib/sprae.js`). Directives: `:scope`, `:text`, `:if`, `:each`, `:class`, `:onclick`, `:onsubmit`. Loaded with `data-start` attribute for auto-init.
-- **Jekyll 4.3** — GitHub Pages hosting. `jekyll-optional-front-matter` plugin so HTML files don't need front matter.
+- **Jekyll 4.3** — static build, deployed via `wrangler pages deploy _site --project-name admin`. `jekyll-optional-front-matter` plugin so HTML files don't need front matter.
 - **CSS custom properties** — Hand-written design tokens in `tokens.css`. Temple-inspired palette: devotional purple `#6b5ce7`, warm neutrals.
 - **ES modules** — Vanilla JS, no transpilation.
 
