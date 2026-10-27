@@ -258,12 +258,9 @@
                 </label>
               </div>
 
-              <!-- ── Photos (edit only — needs a saved event id) ── -->
-              <div :if="!modalEvent" class="field">
-                <p class="dim" style="font-size:var(--f-sm); margin:0">Save the event first, then add photos.</p>
-              </div>
-              <div :if="modalEvent" class="field">
-                <label>Photos <span class="dim" style="font-weight:normal">(drag to reorder — first photo is the album cover)</span></label>
+              <!-- ── Photos (new events: queued, uploaded right after create) ── -->
+              <div class="field">
+                <label>Photos <span class="dim" style="font-weight:normal" :text="modalEvent ? '(drag to reorder — first photo is the album cover)' : '(uploaded when you create the event — first photo is the album cover)'"></span></label>
                 <div class="photo-drop"
                   :ondragover.prevent="e => {}"
                   :ondrop.prevent="e => queueFiles(e.dataTransfer.files)"
@@ -275,9 +272,11 @@
                 <div :if="queue.length" style="margin-top:var(--s-sm)">
                   <div :each="u in queue" class="upload-row">
                     <span class="upload-name" :text="u.name"></span>
-                    <span class="dim" :text="statusLabel(u)"></span>
+                    <span class="dim" :text="!modalEvent && u.status === 'queued' ? 'Ready' : statusLabel(u)"></span>
                     <button :if="u.status === 'error'" type="button" class="btn btn-outline btn-sm"
                       :onclick="retryUpload(u)">Retry</button>
+                    <button :if="!modalEvent && u.status === 'queued'" type="button" class="btn-link" style="font-size:var(--f-sm)"
+                      :onclick="queue = queue.filter(x => x !== u)">Remove</button>
                   </div>
                 </div>
                 <div :if="photosLoading" class="dim" style="font-size:var(--f-sm); margin-top:var(--s-sm)">Loading photos…</div>
@@ -307,7 +306,7 @@
               <div :if="saveErr" class="login-error" :text="saveErr"></div>
               <button type="submit" class="btn btn-primary"
                 :class="{'btn-loading': saving}"
-                :text="modalEvent ? 'Save Changes' : 'Create Event'"></button>
+                :text="modalEvent ? 'Save Changes' : queue.length ? 'Create Event with ' + queue.length + ' photo' + (queue.length > 1 ? 's' : '') : 'Create Event'"></button>
             </form>
           </div>
         </div>
@@ -352,6 +351,8 @@
         this.photos = []
         this.queue = []
         this.saveErr = null
+        this._publishAfter = null
+        this._closeAfter = false
         this.showModal = true
       }
       this.openEdit = function(e) {
@@ -366,10 +367,17 @@
         this.photos = []
         this.queue = []
         this.saveErr = null
+        this._publishAfter = null
+        this._closeAfter = false
         this.loadPhotos(e.id)
         this.showModal = true
       }
       this.closeModal = function() {
+        if (this._uploading()) {
+          this.toast && this.toast('Photos are still uploading — please wait', 'error')
+          return
+        }
+        this.saving = false
         this.showModal = false
         this.modalEvent = null
         this.queue = []
@@ -398,23 +406,33 @@
           when_en: (f.when_en || '').trim(), when_fr: (f.when_fr || '').trim(),
           published: !!f.published,
         }
+        // New event with photos: create hidden, publish once the album is uploaded.
+        var withPhotos = !self.modalEvent && self.queue.length > 0
+        self._publishAfter = withPhotos && payload.published ? payload : null
+        if (self._publishAfter) payload = Object.assign({}, payload, { published: false })
         self.saving = true
         var req = self.modalEvent
           ? self.api.updateSankirtanEvent(self.modalEvent.id, payload)
           : self.api.createSankirtanEvent(payload)
         req
           .then(function(res) {
-            self.saving = false
             self.emit('reload')
             if (self.modalEvent) {
+              self.saving = false
               self.showModal = false
               self.modalEvent = null
               self.toast && self.toast('Event updated', 'success')
+            } else if (res && res.id && withPhotos) {
+              // Stays loading until pump() settles the queue.
+              self.modalEvent = res
+              self._closeAfter = true
+              self.pump()
             } else if (res && res.id) {
-              // Stay open in edit mode so photos can be added right away.
+              self.saving = false
               self.modalEvent = res
               self.toast && self.toast('Event created — you can add photos now', 'success')
             } else {
+              self.saving = false
               self.showModal = false
               self.toast && self.toast('Event created', 'success')
             }
@@ -446,7 +464,6 @@
       this.photoRemoving = null
       this.dragId = null
       this.queue = []
-      this._pumping = false
       this._thumbPath = function(p) {
         return p.thumb || '/uploads/sankirtan/events/' + p.event_id + '/' + p.id + '-t.webp'
       }
@@ -474,7 +491,6 @@
         return ({ queued: 'Waiting…', processing: 'Preparing…', uploading: 'Uploading…', done: 'Done' })[u.status] || u.error || 'Failed'
       }
       this.queueFiles = function(files) {
-        if (!this.modalEvent) return
         var self = this
         var added = 0
         Array.prototype.forEach.call(files || [], function(f) {
@@ -486,48 +502,76 @@
         if (!added && files && files.length) self.toast && self.toast('Only images can be uploaded', 'error')
         this.pump()
       }
-      // One file per request, sequentially; failed files keep a Retry button.
+      this._uploading = function() {
+        return this.queue.some(function(u) { return u.status === 'processing' || u.status === 'uploading' }) ||
+          (!!this.modalEvent && this.queue.some(function(u) { return u.status === 'queued' }))
+      }
+      // Up to UPLOAD_CONCURRENCY files in flight, one per request; failed files keep a Retry button.
+      this.UPLOAD_CONCURRENCY = 4
       this.pump = function() {
         var self = this
-        if (self._pumping) return
-        var next = null
-        for (var i = 0; i < self.queue.length; i++) if (self.queue[i].status === 'queued') { next = self.queue[i]; break }
-        if (!next) {
-          var all = self.queue.length > 0
-          for (var j = 0; j < self.queue.length; j++) if (self.queue[j].status !== 'done') all = false
-          if (all) {
-            self.queue = []
-            self.toast && self.toast('Photos uploaded', 'success')
-            self.emit('reload')
-          }
-          return
-        }
+        if (!self.modalEvent) return
+        var eventId = self.modalEvent.id
+        var active = self.queue.filter(function(u) { return u.status === 'processing' || u.status === 'uploading' }).length
+        var waiting = self.queue.filter(function(u) { return u.status === 'queued' })
+        if (!active && !waiting.length) return self._settle(eventId)
         if (!self.api.uploadSankirtanEventPhoto) {
-          next.status = 'error'
-          next.error = 'Please hard-refresh the page'
-          return
+          waiting.forEach(function(u) { u.status = 'error'; u.error = 'Please hard-refresh the page' })
+          return self._settle(eventId)
         }
-        self._pumping = true
-        next.status = 'processing'
         var scale = self.downscaleImage || function(f) { return Promise.resolve(f) }
-        scale(next.file)
-          .then(function(small) {
-            next.status = 'uploading'
-            return self.api.uploadSankirtanEventPhoto(self.modalEvent.id, small)
-          })
-          .then(function(photo) {
-            next.status = 'done'
-            next.file = null
-            if (photo && photo.id) self.photos = self.photos.concat([self._decorate(photo, Date.now())])
-          })
-          .catch(function(e) {
-            next.status = 'error'
-            next.error = e.message || 'Upload failed'
-          })
-          .then(function() {
-            self._pumping = false
-            self.pump()
-          })
+        waiting.slice(0, Math.max(0, self.UPLOAD_CONCURRENCY - active)).forEach(function(next) {
+          next.status = 'processing'
+          scale(next.file)
+            .then(function(small) {
+              next.status = 'uploading'
+              return self.api.uploadSankirtanEventPhoto(eventId, small)
+            })
+            .then(function(photo) {
+              next.status = 'done'
+              next.file = null
+              next.photoId = photo && photo.id
+              if (photo && photo.id) self.photos = self.photos.concat([self._decorate(photo, Date.now())])
+            })
+            .catch(function(e) {
+              next.status = 'error'
+              next.error = e.message || 'Upload failed'
+            })
+            .then(function() { self.pump() })
+        })
+      }
+      // Queue drained: restore pick order (parallel uploads finish out of order), publish, close.
+      this._settle = function(eventId) {
+        var self = this
+        if (!self.queue.length) return
+        var failed = self.queue.filter(function(u) { return u.status === 'error' }).length
+        var newIds = self.queue.map(function(u) { return u.photoId }).filter(Boolean)
+        var order = self.photos.filter(function(p) { return newIds.indexOf(p.id) < 0 }).map(function(p) { return p.id }).concat(newIds)
+        var byId = {}
+        self.photos.forEach(function(p) { byId[p.id] = p })
+        self.photos = order.map(function(id) { return byId[id] }).filter(Boolean)
+        var steps = []
+        if (newIds.length > 1 && self.api.reorderSankirtanEventPhotos)
+          steps.push(self.api.reorderSankirtanEventPhotos(eventId, order).catch(function() {}))
+        var pub = self._publishAfter
+        self._publishAfter = null
+        if (pub) steps.push(self.api.updateSankirtanEvent(eventId, pub).catch(function(e) {
+          self.toast && self.toast('Photos uploaded, but publishing failed: ' + (e.message || 'error'), 'error')
+        }))
+        if (!failed) self.queue = []
+        Promise.all(steps).then(function() {
+          self.emit('reload')
+          if (failed) {
+            self.saving = false
+            self.toast && self.toast(failed + ' photo' + (failed > 1 ? 's' : '') + ' failed — tap Retry', 'error')
+          } else if (self._closeAfter) {
+            self._closeAfter = false
+            self.closeModal()
+            self.toast && self.toast('Event created with ' + newIds.length + ' photo' + (newIds.length > 1 ? 's' : ''), 'success')
+          } else {
+            self.toast && self.toast('Photos uploaded', 'success')
+          }
+        })
       }
       this.retryUpload = function(u) {
         u.status = 'queued'
