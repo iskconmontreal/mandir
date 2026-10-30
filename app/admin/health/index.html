@@ -6,7 +6,7 @@ preloads:
 <div class="page-header health-header">
   <div>
     <h1>System health</h1>
-    <p class="dim" :text="health ? 'Checked ' + fmtTime(checkedAt) + ' · ' + health.environment + ' · version ' + health.version : 'What goloka reports about itself'"></p>
+    <p class="dim" :text="health ? 'Checked ' + fmtTime(healthAt) + ' · ' + health.environment + ' · version ' + health.version : 'What goloka reports about itself'"></p>
   </div>
   <button class="btn btn-secondary" :class="{'btn-loading': refreshing}" :disabled="refreshing" :onclick="refresh()">Refresh</button>
 </div>
@@ -17,8 +17,8 @@ preloads:
 
 <div :if="health" class="health-banner" :class="'health-banner-' + tone(verdict())">
   <strong :text="{ok: 'All good', warn: 'Needs attention', error: 'Something is wrong'}[verdict()] || verdict()"></strong>
-  <ul :if="shownWarnings().length" class="health-warnings">
-    <li :each="w in shownWarnings()" :text="w"></li>
+  <ul :if="shownWarnings(health).length" class="health-warnings">
+    <li :each="w in shownWarnings(health)" :text="w"></li>
   </ul>
 </div>
 
@@ -39,8 +39,16 @@ preloads:
           <td>Claude access</td>
           <td :text="health.street.ai_configured ? 'Configured' : 'Not set — add STREET_KEY on Railway'"></td>
         </tr>
-        <tr><td>Through</td><td class="health-mono" :text="health.street.endpoint"></td></tr>
+        <tr :if="health.street.proxy !== 'direct'">
+          <td>Through Cloudflare</td>
+          <td :class="health.street.proxy === 'reachable' ? '' : 'health-err'" :text="health.street.proxy === 'reachable' ? 'Reachable · ' + health.street.endpoint : health.street.proxy"></td>
+        </tr>
         <tr><td>Model</td><td class="health-mono" :text="health.street.model"></td></tr>
+        <tr :if="health.street.last_ok_at"><td>Last import</td><td :text="'OK · ' + fmtTime(health.street.last_ok_at)"></td></tr>
+        <tr :if="health.street.last_error_at">
+          <td>Last problem</td>
+          <td class="health-err" :text="fmtTime(health.street.last_error_at) + ' — ' + health.street.last_error"></td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -182,27 +190,20 @@ preloads:
 
 <script type="module">
   import { init, auth } from 'lib/app.js'
-  import { api } from 'lib/api.js'
+  import { healthTone, healthLabel, worstStatus, healthVerdict } from 'lib/health.js'
 
   if (!auth.can('settings:manage')) {
     location.replace(new URL('../../', location.href).href)
     throw new Error('redirecting')
   }
 
-  const TONE = { ok: 'ok', warn: 'warn', error: 'err', disabled: 'dim', skipped: 'dim' }
-  const LABEL = { ok: 'OK', warn: 'Check', error: 'Problem', disabled: 'Off', skipped: 'Not checked' }
-  const RANK = { error: 2, warn: 1 }
-
   const s = init({
     loading: true,
     refreshing: false,
-    health: null,
-    healthErr: '',
-    checkedAt: null,
 
-    tone: st => TONE[st] || 'dim',
-    label: st => LABEL[st] || st || '—',
-    worst: list => list.reduce((a, b) => ((RANK[b] || 0) > (RANK[a] || 0) ? b : a), 'ok'),
+    tone: healthTone,
+    label: healthLabel,
+    worst: worstStatus,
 
     fmtTime: v => v ? new Date(v).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
     fmtAge: min => min == null ? '' : min < 60 ? min + ' min ago' : min < 2880 ? Math.round(min / 60) + ' h ago' : Math.round(min / 1440) + ' days ago',
@@ -216,24 +217,11 @@ preloads:
       return { ok: 'OK', running: 'Running', stale: 'Overdue', never: 'Never', failed: 'Failed', disabled: 'Off', loading: '…' }[s.backupStatus] || 'Unknown'
     },
 
-    // Receipt reading isn't shown here, so its warnings shouldn't colour the verdict.
-    verdict() {
-      const h = s.health
-      const offsite = { failed: 'error', stale: 'warn', never: 'warn' }[s.backupStatus] || 'ok'
-      return s.worst([h.street.status, s.worst(Object.values(h.dbs)), h.backups.status, h.disk.status, h.storage.status, h.mailer.status, offsite])
-    },
-    shownWarnings: () => (s.health.warnings || []).filter(w => !/^(ocr|ollama|pdf rasterizer)/i.test(w)),
+    verdict: () => healthVerdict(s.health, s.backupStatus),
 
     async refresh() {
       s.refreshing = true
-      const [health] = await Promise.allSettled([api.getAdminHealth(), s.refreshBackup()])
-      if (health.status === 'fulfilled' && health.value) {
-        s.health = health.value
-        s.healthErr = ''
-        s.checkedAt = new Date()
-      } else if (health.status === 'rejected') {
-        s.healthErr = health.reason?.message || 'unknown error'
-      }
+      await Promise.allSettled([s.refreshHealth(), s.refreshBackup()])
       s.refreshing = false
       s.loading = false
     },

@@ -1,0 +1,40 @@
+<!-- System health pill + popover (settings:manage), same look as the backup pill -->
+<div :if="can('settings:manage') && healthStatus !== 'loading'" class="topbar-backup"
+  :scope="{
+    tone: {ok: 'ok', warn: 'warn', error: 'err', unknown: 'dim'},
+    short: {ok: 'System OK', warn: 'Needs attention', error: 'System problem', unknown: 'Health unknown'},
+  }"
+  :onclick.outside="healthOpen = false"
+  :onkeydown.esc.document="healthOpen = false">
+  <button type="button" class="backup-pill" :class="'backup-pill-' + (tone[healthStatus] || 'dim')"
+    :aria-expanded="healthOpen ? 'true' : 'false'" :title="short[healthStatus] || 'System health'"
+    :onclick="() => { healthOpen = !healthOpen; if (healthOpen) refreshHealth() }">
+    <span class="backup-dot" aria-hidden="true"></span>
+    <span class="backup-pill-label" :text="short[healthStatus] || 'System health'"></span>
+  </button>
+
+  <div :if="healthOpen" class="backup-pop" role="dialog" aria-label="System health">
+    <div class="backup-pop-head" :class="'backup-pop-' + (tone[healthStatus] || 'warn')">
+      <div class="backup-pop-title" :text="{ok: 'Everything is working', warn: 'Something needs attention', error: 'Something is wrong', unknown: 'Health report unavailable'}[healthStatus]"></div>
+      <div class="dim backup-pop-sub" :text="healthErr || (healthAt ? 'Checked ' + healthAt.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}) : '')"></div>
+    </div>
+
+    <table :if="health" class="backup-table health-pop-table">
+      <tbody>
+        <tr :each="row in healthRows(health)">
+          <td><span class="health-dot" :class="'health-dot-' + healthTone(row.status)"></span></td>
+          <td :text="row.name"></td>
+          <td class="dim" :text="row.text"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <ul :if="health && shownWarnings(health).length" class="health-pop-warnings">
+      <li :each="w in shownWarnings(health)" :text="w"></li>
+    </ul>
+
+    <div class="backup-pop-actions">
+      <a class="backup-link" href="{{ '/app/admin/health/' | relative_url }}">Open System health →</a>
+    </div>
+  </div>
+</div>
