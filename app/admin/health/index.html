@@ -84,7 +84,7 @@ preloads:
     </table>
   </div>
 
-  <div class="card">
+  <div class="card" :if="health.backups.plans">
     <div class="card-header">
       <h3>Local backup copies</h3>
       <span class="badge" :class="'hb-' + tone(health.backups.status)" :text="label(health.backups.status)"></span>
