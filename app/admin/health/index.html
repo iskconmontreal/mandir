@@ -15,10 +15,10 @@ preloads:
 
 <div :if="healthErr" class="login-error" :text="'Could not load the health report: ' + healthErr"></div>
 
-<div :if="health" class="health-banner" :class="'health-banner-' + tone(health.status)">
-  <strong :text="{ok: 'All good', warn: 'Needs attention', error: 'Something is wrong'}[health.status] || health.status"></strong>
-  <ul :if="health.warnings && health.warnings.length" class="health-warnings">
-    <li :each="w in health.warnings" :text="w"></li>
+<div :if="health" class="health-banner" :class="'health-banner-' + tone(verdict())">
+  <strong :text="{ok: 'All good', warn: 'Needs attention', error: 'Something is wrong'}[verdict()] || verdict()"></strong>
+  <ul :if="shownWarnings().length" class="health-warnings">
+    <li :each="w in shownWarnings()" :text="w"></li>
   </ul>
 </div>
 
@@ -135,36 +135,6 @@ preloads:
     </table>
   </div>
 
-  <div class="card">
-    <div class="card-header">
-      <h3>Receipt reading</h3>
-      <span class="badge" :class="'hb-' + tone(worst([health.ocr.status, health.ollama.status]))" :text="label(worst([health.ocr.status, health.ollama.status]))"></span>
-    </div>
-    <table class="health-table" :if="health.ocr.status !== 'skipped'">
-      <tbody>
-        <tr><td>Engine</td><td :text="health.ocr.resolved === 'none' ? 'None available' : health.ocr.resolved"></td></tr>
-        <tr><td>PDF</td><td :text="health.ocr.pdf.tool || 'No converter'"></td></tr>
-        <tr><td>Ollama</td><td :text="health.ollama.status === 'disabled' ? 'Not configured' : health.ollama.host + (health.ollama.error ? ' — ' + health.ollama.error : '')"></td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <h3>Camera & mixer</h3>
-      <span :if="proxy" class="badge" :class="'hb-' + proxyTone()" :text="proxyTone() === 'ok' ? 'OK' : proxyTone() === 'dim' ? 'Off' : 'Check'"></span>
-    </div>
-    <p :if="proxyErr" class="dim" :text="proxyErr"></p>
-    <table class="health-table" :if="proxy">
-      <tbody>
-        <tr :each="d in [['Camera', proxy.camera], ['Mixer', proxy.mixer]]">
-          <td :text="d[0]"></td>
-          <td :text="proxyText(d[1] && d[1].status)"></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
 </div>
 
 <details :if="health" class="health-raw">
@@ -228,8 +198,6 @@ preloads:
     refreshing: false,
     health: null,
     healthErr: '',
-    proxy: null,
-    proxyErr: '',
     checkedAt: null,
 
     tone: st => TONE[st] || 'dim',
@@ -248,16 +216,17 @@ preloads:
       return { ok: 'OK', running: 'Running', stale: 'Overdue', never: 'Never', failed: 'Failed', disabled: 'Off', loading: '…' }[s.backupStatus] || 'Unknown'
     },
 
-    proxyText: st => ({ ok: 'Reachable', not_configured: 'Not configured', unreachable: 'Offline', auth_failed: 'Login refused', error: 'Error' }[st] || '—'),
-    proxyTone() {
-      const all = [s.proxy?.camera?.status, s.proxy?.mixer?.status].filter(st => st && st !== 'not_configured')
-      if (!all.length) return 'dim'
-      return all.every(st => st === 'ok') ? 'ok' : 'warn'
+    // Receipt reading isn't shown here, so its warnings shouldn't colour the verdict.
+    verdict() {
+      const h = s.health
+      const offsite = { failed: 'error', stale: 'warn', never: 'warn' }[s.backupStatus] || 'ok'
+      return s.worst([h.street.status, s.worst(Object.values(h.dbs)), h.backups.status, h.disk.status, h.storage.status, h.mailer.status, offsite])
     },
+    shownWarnings: () => (s.health.warnings || []).filter(w => !/^(ocr|ollama|pdf rasterizer)/i.test(w)),
 
     async refresh() {
       s.refreshing = true
-      const [health, proxy] = await Promise.allSettled([api.getAdminHealth(), api.getProxyStatus(), s.refreshBackup()])
+      const [health] = await Promise.allSettled([api.getAdminHealth(), s.refreshBackup()])
       if (health.status === 'fulfilled' && health.value) {
         s.health = health.value
         s.healthErr = ''
@@ -265,8 +234,6 @@ preloads:
       } else if (health.status === 'rejected') {
         s.healthErr = health.reason?.message || 'unknown error'
       }
-      if (proxy.status === 'fulfilled') { s.proxy = proxy.value; s.proxyErr = '' }
-      else s.proxyErr = proxy.reason?.message || 'Could not load camera and mixer status'
       s.refreshing = false
       s.loading = false
     },
