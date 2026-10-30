@@ -1,0 +1,277 @@
+---
+title: System health
+preloads:
+  - /lib/icons.js
+---
+<div class="page-header health-header">
+  <div>
+    <h1>System health</h1>
+    <p class="dim" :text="health ? 'Checked ' + fmtTime(checkedAt) + ' · ' + health.environment + ' · version ' + health.version : 'What goloka reports about itself'"></p>
+  </div>
+  <button class="btn btn-secondary" :class="{'btn-loading': refreshing}" :disabled="refreshing" :onclick="refresh()">Refresh</button>
+</div>
+
+<div :if="loading" class="section-loader"><img src="/assets/preloader.svg"></div>
+
+<div :if="healthErr" class="login-error" :text="'Could not load the health report: ' + healthErr"></div>
+
+<div :if="health" class="health-banner" :class="'health-banner-' + tone(health.status)">
+  <strong :text="{ok: 'All good', warn: 'Needs attention', error: 'Something is wrong'}[health.status] || health.status"></strong>
+  <ul :if="health.warnings && health.warnings.length" class="health-warnings">
+    <li :each="w in health.warnings" :text="w"></li>
+  </ul>
+</div>
+
+<div :if="health" class="health-grid">
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Street notes</h3>
+      <span class="badge" :class="'hb-' + tone(health.street.status)" :text="label(health.street.status)"></span>
+    </div>
+    <table class="health-table" :if="health.street.status !== 'skipped'">
+      <tbody>
+        <tr>
+          <td>Screenshot reading</td>
+          <td :text="health.street.tesseract.present ? 'Installed · ' + health.street.tesseract.version : 'Not installed'"></td>
+        </tr>
+        <tr>
+          <td>Claude access</td>
+          <td :text="health.street.ai_configured ? 'Configured' : 'Not set — add STREET_KEY on Railway'"></td>
+        </tr>
+        <tr><td>Through</td><td class="health-mono" :text="health.street.endpoint"></td></tr>
+        <tr><td>Model</td><td class="health-mono" :text="health.street.model"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Databases</h3>
+      <span class="badge" :class="'hb-' + tone(worst(Object.values(health.dbs)))" :text="label(worst(Object.values(health.dbs)))"></span>
+    </div>
+    <table class="health-table">
+      <tbody>
+        <tr :each="db in Object.entries(health.dbs)">
+          <td :text="db[0]"></td>
+          <td><span class="badge badge-sm" :class="'hb-' + tone(db[1])" :text="label(db[1])"></span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Off-site backups</h3>
+      <span class="badge" :class="'hb-' + backupTone()" :text="backupLabel()"></span>
+    </div>
+    <p :if="backupErr && !backup" class="dim" :text="backupErr"></p>
+    <table class="health-table" :if="backup">
+      <tbody>
+        <tr><td>Last backup</td><td :text="backup.last_backup ? fmtTime(backup.last_backup) + ' · ' + fmtAge(backup.age_minutes) : 'Never'"></td></tr>
+        <tr :if="backup.next_run"><td>Next backup</td><td :text="fmtTime(backup.next_run)"></td></tr>
+        <tr :if="backup.remote"><td>Stored in</td><td class="health-mono" :text="backup.remote"></td></tr>
+        <tr :if="backup.last_error"><td>Last error</td><td class="health-err" :text="fmtTime(backup.last_error.at) + ' — ' + backup.last_error.message"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Local backup copies</h3>
+      <span class="badge" :class="'hb-' + tone(health.backups.status)" :text="label(health.backups.status)"></span>
+    </div>
+    <table class="health-table">
+      <tbody>
+        <tr :each="plan in Object.entries(health.backups.plans || {})">
+          <td :text="plan[0]"></td>
+          <td :text="plan[1].latest_at ? fmtAge(plan[1].age_minutes) : (plan[1].status === 'disabled' ? 'Not used' : 'None found')"></td>
+          <td><span class="badge badge-sm" :class="'hb-' + tone(plan[1].status)" :text="label(plan[1].status)"></span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Disk</h3>
+      <span class="badge" :class="'hb-' + tone(health.disk.status)" :text="label(health.disk.status)"></span>
+    </div>
+    <p :if="health.disk.error" class="health-err" :text="health.disk.error"></p>
+    <div :if="health.disk.total_bytes">
+      <div class="health-bar"><div class="health-bar-fill" :class="'hb-' + tone(health.disk.status)"
+        :style="'width:' + Math.round(100 * health.disk.used_bytes / health.disk.total_bytes) + '%'"></div></div>
+      <p class="dim health-small" :text="fmtBytes(health.disk.free_bytes) + ' free of ' + fmtBytes(health.disk.total_bytes)"></p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Storage folders</h3>
+      <span class="badge" :class="'hb-' + tone(health.storage.status)" :text="label(health.storage.status)"></span>
+    </div>
+    <table class="health-table" :if="health.storage.paths">
+      <tbody>
+        <tr :each="p in Object.entries(health.storage.paths)">
+          <td :text="p[0]"></td>
+          <td class="health-mono" :title="p[1].path" :text="shortPath(p[1].path)"></td>
+          <td :text="p[1].writable ? 'writable' : (p[1].error || 'not writable')"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Email</h3>
+      <span class="badge" :class="'hb-' + tone(health.mailer.status)" :text="label(health.mailer.status)"></span>
+    </div>
+    <table class="health-table">
+      <tbody>
+        <tr><td>Mode</td><td :text="health.mailer.mode"></td></tr>
+        <tr :if="health.mailer.host"><td>Server</td><td class="health-mono" :text="health.mailer.host + ':' + health.mailer.port"></td></tr>
+        <tr :if="health.mailer.from"><td>From</td><td :text="health.mailer.from"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Receipt reading</h3>
+      <span class="badge" :class="'hb-' + tone(worst([health.ocr.status, health.ollama.status]))" :text="label(worst([health.ocr.status, health.ollama.status]))"></span>
+    </div>
+    <table class="health-table" :if="health.ocr.status !== 'skipped'">
+      <tbody>
+        <tr><td>Engine</td><td :text="health.ocr.resolved === 'none' ? 'None available' : health.ocr.resolved"></td></tr>
+        <tr><td>PDF</td><td :text="health.ocr.pdf.tool || 'No converter'"></td></tr>
+        <tr><td>Ollama</td><td :text="health.ollama.status === 'disabled' ? 'Not configured' : health.ollama.host + (health.ollama.error ? ' — ' + health.ollama.error : '')"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>Camera & mixer</h3>
+      <span :if="proxy" class="badge" :class="'hb-' + proxyTone()" :text="proxyTone() === 'ok' ? 'OK' : proxyTone() === 'dim' ? 'Off' : 'Check'"></span>
+    </div>
+    <p :if="proxyErr" class="dim" :text="proxyErr"></p>
+    <table class="health-table" :if="proxy">
+      <tbody>
+        <tr :each="d in [['Camera', proxy.camera], ['Mixer', proxy.mixer]]">
+          <td :text="d[0]"></td>
+          <td :text="proxyText(d[1] && d[1].status)"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<details :if="health" class="health-raw">
+  <summary>Full report (for troubleshooting)</summary>
+  <pre :text="JSON.stringify(health, null, 2)"></pre>
+</details>
+
+<style>
+  .health-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-md); }
+  .hb-ok   { background: var(--c-ok-active); color: var(--c-ok); }
+  .hb-warn { background: var(--c-warn-bg); color: var(--c-warn-text); }
+  .hb-err  { background: var(--c-err-active); color: var(--c-err); }
+  .hb-dim  { background: var(--c-neutral-hover); color: var(--c-text-dim); }
+  .health-banner {
+    border-radius: var(--r-md);
+    padding: var(--s-md) var(--s-lg);
+    margin-bottom: var(--s-lg);
+    border: 1px solid var(--c-border);
+  }
+  .health-banner-ok   { background: var(--c-ok-active); }
+  .health-banner-warn { background: var(--c-warn-bg); border-color: var(--c-warn-border); }
+  .health-banner-err  { background: var(--c-err-active); }
+  .health-banner strong { font-size: var(--f-lg); }
+  .health-warnings { margin: var(--s-sm) 0 0; padding-left: 1.2em; font-size: var(--f-sm); }
+  .health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+    gap: var(--s-md);
+  }
+  .health-table { width: 100%; font-size: var(--f-sm); }
+  .health-table td { padding: 6px 0; vertical-align: top; border: none; }
+  .health-table td:first-child { color: var(--c-text-dim); padding-right: var(--s-md); white-space: nowrap; }
+  .health-table td:last-child { text-align: right; }
+  .health-mono { font-family: var(--f-mono, ui-monospace, monospace); font-size: var(--f-xs); overflow-wrap: anywhere; }
+  .health-err { color: var(--c-err); font-size: var(--f-sm); }
+  .health-small { font-size: var(--f-sm); margin-top: var(--s-xs); }
+  .health-bar { height: 8px; border-radius: 4px; background: var(--c-neutral-hover); overflow: hidden; }
+  .health-bar-fill { height: 100%; }
+  .health-bar-fill.hb-ok { background: var(--c-ok); }
+  .health-bar-fill.hb-warn { background: var(--c-warn); }
+  .health-bar-fill.hb-err { background: var(--c-err); }
+  .health-raw { margin-top: var(--s-lg); font-size: var(--f-sm); }
+  .health-raw pre { max-height: 24rem; overflow: auto; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-sm); padding: var(--s-md); }
+</style>
+
+<script type="module">
+  import { init, auth } from 'lib/app.js'
+  import { api } from 'lib/api.js'
+
+  if (!auth.can('settings:manage')) {
+    location.replace(new URL('../../', location.href).href)
+    throw new Error('redirecting')
+  }
+
+  const TONE = { ok: 'ok', warn: 'warn', error: 'err', disabled: 'dim', skipped: 'dim' }
+  const LABEL = { ok: 'OK', warn: 'Check', error: 'Problem', disabled: 'Off', skipped: 'Not checked' }
+  const RANK = { error: 2, warn: 1 }
+
+  const s = init({
+    loading: true,
+    refreshing: false,
+    health: null,
+    healthErr: '',
+    proxy: null,
+    proxyErr: '',
+    checkedAt: null,
+
+    tone: st => TONE[st] || 'dim',
+    label: st => LABEL[st] || st || '—',
+    worst: list => list.reduce((a, b) => ((RANK[b] || 0) > (RANK[a] || 0) ? b : a), 'ok'),
+
+    fmtTime: v => v ? new Date(v).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
+    fmtAge: min => min == null ? '' : min < 60 ? min + ' min ago' : min < 2880 ? Math.round(min / 60) + ' h ago' : Math.round(min / 1440) + ' days ago',
+    shortPath: p => { const parts = String(p || '').split('/').filter(Boolean); return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p },
+    fmtBytes: b => b == null ? '' : b < 1073741824 ? (b / 1048576).toFixed(0) + ' MB' : (b / 1073741824).toFixed(1) + ' GB',
+
+    backupTone() {
+      return { ok: 'ok', running: 'ok', stale: 'warn', never: 'warn', failed: 'err', disabled: 'dim' }[s.backupStatus] || 'dim'
+    },
+    backupLabel() {
+      return { ok: 'OK', running: 'Running', stale: 'Overdue', never: 'Never', failed: 'Failed', disabled: 'Off', loading: '…' }[s.backupStatus] || 'Unknown'
+    },
+
+    proxyText: st => ({ ok: 'Reachable', not_configured: 'Not configured', unreachable: 'Offline', auth_failed: 'Login refused', error: 'Error' }[st] || '—'),
+    proxyTone() {
+      const all = [s.proxy?.camera?.status, s.proxy?.mixer?.status].filter(st => st && st !== 'not_configured')
+      if (!all.length) return 'dim'
+      return all.every(st => st === 'ok') ? 'ok' : 'warn'
+    },
+
+    async refresh() {
+      s.refreshing = true
+      const [health, proxy] = await Promise.allSettled([api.getAdminHealth(), api.getProxyStatus(), s.refreshBackup()])
+      if (health.status === 'fulfilled' && health.value) {
+        s.health = health.value
+        s.healthErr = ''
+        s.checkedAt = new Date()
+      } else if (health.status === 'rejected') {
+        s.healthErr = health.reason?.message || 'unknown error'
+      }
+      if (proxy.status === 'fulfilled') { s.proxy = proxy.value; s.proxyErr = '' }
+      else s.proxyErr = proxy.reason?.message || 'Could not load camera and mixer status'
+      s.refreshing = false
+      s.loading = false
+    },
+  })
+
+  s.refresh()
+  setInterval(() => { if (!document.hidden) s.refresh() }, 60_000)
+</script>
