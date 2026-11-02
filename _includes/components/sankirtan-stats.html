@@ -54,6 +54,7 @@
         padding: var(--s-xs) 0;
       }
       .sk-place-row + .sk-place-row { border-top: 1px solid var(--c-border); }
+      .sk-place-n { white-space: nowrap; }
       @media (max-width: 48rem) {
         .sk-stats { gap: var(--s-sm); width: 100%; }
         .sk-stat { flex: 1; min-width: 0; padding-left: var(--s-sm); }
@@ -91,7 +92,11 @@
             <div :if="!st.places.length" class="dim">No place recorded yet.</div>
             <div :each="p in st.places" class="sk-place-row">
               <span :text="p.label" :title="p.variants.length > 1 ? 'Also entered as: ' + p.variants.filter(v => v !== p.label).join(', ') : ''"></span>
-              <span class="dim" :text="p.visits + ' visit' + (p.visits === 1 ? '' : 's')"></span>
+              <span class="dim sk-place-n" :text="p.visits + ' visit' + (p.visits === 1 ? '' : 's')"></span>
+            </div>
+            <div :if="st.online" class="sk-place-row dim" title="Website, SMS and WhatsApp orders — not a place we went to, so not counted">
+              <span :text="st.online.label + ' (not counted)'"></span>
+              <span class="sk-place-n" :text="st.online.visits + ' order' + (st.online.visits === 1 ? '' : 's')"></span>
             </div>
           </div>
         </div>
@@ -101,18 +106,25 @@
     <script>
       this.showPlaces = false
 
-      // The temple hosts every Sunday feast, so any of these spellings is one place.
-      var TEMPLE_WORDS = ['temple', 'mandir', 'iskcon', 'sunday', 'feast', 'fest', 'dimanche', 'fete']
+      // Known places whose spellings vary: any of the words → one entry.
+      // "online" is every remote channel (website, SMS, WhatsApp…), listed but not a place we went to.
+      var GROUPS = [
+        { key: 'temple', label: 'Temple', words: ['temple', 'mandir', 'iskcon', 'sunday', 'feast', 'fest', 'dimanche', 'fete'] },
+        { key: 'laval',  label: 'Laval',  words: ['laval', 'crystal'] },
+        { key: 'online', label: 'Online', words: ['online', 'website', 'web', 'site', 'sms', 'whatsapp', 'en ligne', 'internet', 'email', 'courriel', 'messenger', 'phone', 'telephone'], virtual: true },
+      ]
 
-      // Same place, typed differently ("Laval 3", "laval", "Laval ") → one key.
-      // Trailing numbers are dropped: they usually count the outing, not the place.
+      // Same place, typed differently ("Laval 3", "laval ", "… day 2") → one key.
       this.placeKey = function(loc) {
         var k = (loc || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
           .replace(/[^a-z0-9]+/g, ' ').trim()
+          .replace(/\b(day|jour)\s*\d+$/, '').trim()
           .replace(/(\s+\d+)+$/, '').trim()
         if (!k) return ''
-        for (var i = 0; i < TEMPLE_WORDS.length; i++) {
-          if (k.indexOf(TEMPLE_WORDS[i]) !== -1) return 'temple'
+        for (var i = 0; i < GROUPS.length; i++) {
+          for (var j = 0; j < GROUPS[i].words.length; j++) {
+            if (new RegExp('\\b' + GROUPS[i].words[j] + '\\b').test(k)) return GROUPS[i].key
+          }
         }
         return k
       }
@@ -128,21 +140,22 @@
             monthBooks += s.total_books || 0
             monthCents += s.collected_cents || 0
           }
-          // Website orders are not an outing to a place.
-          if ((s.location || '') === 'Website') return
           var key = this.placeKey(s.location)
           if (!key) return
-          outings += 1
-          var g = groups[key] || (groups[key] = { key: key, visits: 0, spellings: {} })
+          var def = GROUPS.find(function(d) { return d.key === key })
+          if (!(def && def.virtual)) outings += 1
+          var g = groups[key] || (groups[key] = { key: key, visits: 0, spellings: {}, label: def && def.label, virtual: !!(def && def.virtual) })
           g.visits += 1
           var raw = (s.location || '').trim()
           g.spellings[raw] = (g.spellings[raw] || 0) + 1
         }, this)
         var places = Object.values(groups).map(function(g) {
           var variants = Object.keys(g.spellings).sort(function(a, b) { return g.spellings[b] - g.spellings[a] })
-          return { key: g.key, visits: g.visits, variants: variants, label: g.key === 'temple' ? 'Temple' : variants[0] }
+          return { key: g.key, visits: g.visits, variants: variants, label: g.label || variants[0], virtual: g.virtual }
         }).sort(function(a, b) { return b.visits - a.visits || a.label.localeCompare(b.label) })
-        return { books: books, cents: cents, monthBooks: monthBooks, monthCents: monthCents, outings: outings, places: places }
+        var online = places.find(function(p) { return p.virtual }) || null
+        places = places.filter(function(p) { return !p.virtual })
+        return { books: books, cents: cents, monthBooks: monthBooks, monthCents: monthCents, outings: outings, places: places, online: online }
       }
     </script>
   </sankirtan-stats>
