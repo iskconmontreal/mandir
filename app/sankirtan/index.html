@@ -252,8 +252,11 @@ preloads:
       s.sessionsErr = null
       try {
         const res = await api.getSankirtanSessions()
+        // Swapping the list rebuilds every card; hold the page where it was.
+        const y = window.scrollY
         s.sessions = res.items || res || []
         s.sessionsLoaded = true
+        requestAnimationFrame(() => window.scrollTo(0, y))
       } catch (e) {
         s.sessionsErr = e.message || 'Failed to load sessions'
       } finally {
