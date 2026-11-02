@@ -3,10 +3,13 @@ preloads:
   - /lib/processor.js
   - /lib/icons.js
 ---
-<div class="page-header">
-  <h1>Sankirtan</h1>
-  <a :if="can('sankirtan:manage')" href="https://iskconmontrealsankirtan.com/admin/books"
-     target="_blank" rel="noopener" class="btn btn-outline btn-sm">Digital books ledger ↗</a>
+<div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:var(--s-lg) var(--s-xl); flex-wrap:wrap">
+  <div>
+    <h1>Sankirtan</h1>
+    <a :if="can('sankirtan:manage')" href="https://iskconmontrealsankirtan.com/admin/books"
+       target="_blank" rel="noopener" class="btn btn-outline btn-sm">Digital books ledger ↗</a>
+  </div>
+  <sankirtan-stats :sessions="sessions" :loading="!sessionsLoaded && !sessionsErr"></sankirtan-stats>
 </div>
 
 <sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="draftBookIds.length"
@@ -74,6 +77,7 @@ preloads:
 
 <script src="../../lib/define-element.js" defer></script>
 {% include components/sankirtan-tab-bar.html %}
+{% include components/sankirtan-stats.html %}
 {% include components/sankirtan-catalog-tab.html %}
 {% include components/sankirtan-sessions-tab.html %}
 {% include components/sankirtan-leaderboard-tab.html %}
@@ -312,5 +316,6 @@ preloads:
 
   s.loadBooks()
   s.loadOrders()
+  s.loadSessions()           // header totals need every session, whatever tab opens first
   if (s.activeTab === 'events') s.loadEvents()
 </script>

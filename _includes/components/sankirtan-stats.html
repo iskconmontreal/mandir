@@ -1,0 +1,149 @@
+<define-element>
+  <sankirtan-stats sessions:array loading:boolean="false">
+    <style>
+      :host { display: contents; }
+      .sk-stats {
+        position: relative;
+        display: flex;
+        gap: var(--s-xl);
+        align-items: flex-start;
+      }
+      .sk-stat {
+        position: relative;
+        min-width: 8rem;
+        padding-left: var(--s-md);
+        border-left: 1px solid var(--c-border);
+      }
+      .sk-stat .stat-label { font-size: var(--f-sm); }
+      .sk-stat .stat-value { font-size: var(--f-2xl); letter-spacing: -0.02em; line-height: 1.2; }
+      .sk-stat-btn {
+        cursor: pointer;
+        border-radius: var(--r-sm);
+      }
+      .sk-stat-btn:hover .stat-label { color: var(--c-text); }
+      .sk-stat-btn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: var(--s-xs); }
+      .sk-chevron {
+        display: inline-block;
+        width: 0.8em; height: 0.8em;
+        vertical-align: -0.1em;
+        margin-left: var(--s-xs);
+        transition: transform .15s;
+      }
+      .sk-chevron-open { transform: rotate(90deg); }
+      .sk-backdrop { position: fixed; inset: 0; z-index: 19; }
+      .sk-places {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        z-index: 20;
+        margin-top: var(--s-sm);
+        min-width: 16rem;
+        max-height: 20rem;
+        overflow: auto;
+        padding: var(--s-sm) var(--s-md);
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: var(--r-md);
+        box-shadow: var(--sh-md, var(--sh-sm));
+        font-size: var(--f-sm);
+      }
+      .sk-place-row {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--s-md);
+        padding: var(--s-xs) 0;
+      }
+      .sk-place-row + .sk-place-row { border-top: 1px solid var(--c-border); }
+      @media (max-width: 48rem) {
+        .sk-stats { gap: var(--s-sm); width: 100%; }
+        .sk-stat { flex: 1; min-width: 0; padding-left: var(--s-sm); }
+        .sk-stat .stat-label { font-size: var(--f-xs); white-space: nowrap; }
+        .sk-stat .stat-value { font-size: var(--f-xl); }
+        .sk-stat .stat-sub { font-size: var(--f-xs); }
+        .sk-stat-btn { position: static; }
+        .sk-places { left: 0; right: 0; min-width: 0; }
+      }
+    </style>
+    <template>
+      <div class="sk-stats" :scope="{st: stats()}" role="group" aria-label="Sankirtan totals">
+
+        <div class="sk-stat">
+          <div class="stat-label">Books distributed</div>
+          <div class="stat-value" :text="loading ? '—' : st.books.toLocaleString()"></div>
+          <div class="stat-sub dim" :text="loading ? '' : (st.monthBooks ? st.monthBooks.toLocaleString() + ' this month' : 'none this month')"></div>
+        </div>
+
+        <div class="sk-stat">
+          <div class="stat-label">Collected</div>
+          <div class="stat-value stat-ok" :text="loading ? '—' : '$' + fmtAmt(st.cents)"></div>
+          <div class="stat-sub dim" :text="loading ? '' : (st.monthCents ? '$' + fmtAmt(st.monthCents) + ' this month' : 'none this month')"></div>
+        </div>
+
+        <div class="sk-stat sk-stat-btn" tabindex="0" role="button" :aria-expanded="showPlaces ? 'true' : 'false'"
+          title="Places visited — click to see which ones (similar spellings are merged; the temple counts once)"
+          :onclick="showPlaces = !showPlaces"
+          :onkeydown="e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showPlaces = !showPlaces } if (e.key === 'Escape') showPlaces = false }">
+          <div class="stat-label">Places visited</div>
+          <div class="stat-value" :text="loading ? '—' : st.places.length.toLocaleString()"></div>
+          <div class="stat-sub dim"><span :text="loading ? '' : st.outings.toLocaleString() + ' outing' + (st.outings === 1 ? '' : 's')"></span><span :if="!loading" class="sk-chevron" :class="{'sk-chevron-open': showPlaces}" :html="icon('chevron_right')" aria-hidden="true"></span></div>
+          <div class="sk-backdrop" :hidden="!showPlaces" :onclick="e => { e.stopPropagation(); showPlaces = false }"></div>
+          <div class="sk-places" :hidden="!showPlaces || loading" :onclick="e => e.stopPropagation()">
+            <div :if="!st.places.length" class="dim">No place recorded yet.</div>
+            <div :each="p in st.places" class="sk-place-row">
+              <span :text="p.label" :title="p.variants.length > 1 ? 'Also entered as: ' + p.variants.filter(v => v !== p.label).join(', ') : ''"></span>
+              <span class="dim" :text="p.visits + ' visit' + (p.visits === 1 ? '' : 's')"></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </template>
+    <script>
+      this.showPlaces = false
+
+      // The temple hosts every Sunday feast, so any of these spellings is one place.
+      var TEMPLE_WORDS = ['temple', 'mandir', 'iskcon', 'sunday', 'feast', 'fest', 'dimanche', 'fete']
+
+      // Same place, typed differently ("Laval 3", "laval", "Laval ") → one key.
+      // Trailing numbers are dropped: they usually count the outing, not the place.
+      this.placeKey = function(loc) {
+        var k = (loc || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ').trim()
+          .replace(/(\s+\d+)+$/, '').trim()
+        if (!k) return ''
+        for (var i = 0; i < TEMPLE_WORDS.length; i++) {
+          if (k.indexOf(TEMPLE_WORDS[i]) !== -1) return 'temple'
+        }
+        return k
+      }
+
+      this.stats = function() {
+        var month = new Date().toISOString().slice(0, 7)
+        var books = 0, cents = 0, monthBooks = 0, monthCents = 0, outings = 0
+        var groups = {}
+        ;(this.sessions || []).forEach(function(s) {
+          books += s.total_books || 0
+          cents += s.collected_cents || 0
+          if ((s.occurred_at || '').slice(0, 7) === month) {
+            monthBooks += s.total_books || 0
+            monthCents += s.collected_cents || 0
+          }
+          // Website orders are not an outing to a place.
+          if ((s.location || '') === 'Website') return
+          var key = this.placeKey(s.location)
+          if (!key) return
+          outings += 1
+          var g = groups[key] || (groups[key] = { key: key, visits: 0, spellings: {} })
+          g.visits += 1
+          var raw = (s.location || '').trim()
+          g.spellings[raw] = (g.spellings[raw] || 0) + 1
+        }, this)
+        var places = Object.values(groups).map(function(g) {
+          var variants = Object.keys(g.spellings).sort(function(a, b) { return g.spellings[b] - g.spellings[a] })
+          return { key: g.key, visits: g.visits, variants: variants, label: g.key === 'temple' ? 'Temple' : variants[0] }
+        }).sort(function(a, b) { return b.visits - a.visits || a.label.localeCompare(b.label) })
+        return { books: books, cents: cents, monthBooks: monthBooks, monthCents: monthCents, outings: outings, places: places }
+      }
+    </script>
+  </sankirtan-stats>
+</define-element>
