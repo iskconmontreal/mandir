@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-stats sessions:array loading:boolean="false">
+  <sankirtan-stats sessions:array aliases:object loading:boolean="false" canmerge:boolean="false">
     <style>
       :host { display: contents; }
       .sk-stats {
@@ -37,24 +37,38 @@
         right: 0;
         z-index: 20;
         margin-top: var(--s-sm);
-        min-width: 16rem;
-        max-height: 20rem;
+        min-width: 26rem;
+        max-height: 24rem;
         overflow: auto;
         padding: var(--s-sm) var(--s-md);
         background: var(--c-surface);
         border: 1px solid var(--c-border);
         border-radius: var(--r-md);
-        box-shadow: var(--sh-md, var(--sh-sm));
+        box-shadow: var(--sh-md);
         font-size: var(--f-sm);
+        cursor: default;
+        text-align: left;
       }
       .sk-place-row {
         display: flex;
-        justify-content: space-between;
+        align-items: center;
         gap: var(--s-md);
         padding: var(--s-xs) 0;
       }
       .sk-place-row + .sk-place-row { border-top: 1px solid var(--c-border); }
+      .sk-place-name { flex: 1; min-width: 0; }
       .sk-place-n { white-space: nowrap; }
+      .sk-place-sub { font-size: var(--f-xs); color: var(--c-text-dim); }
+      .sk-place-actions { display: flex; gap: var(--s-xs); white-space: nowrap; }
+      .sk-link {
+        background: none; border: 0; padding: 0;
+        font: inherit; font-size: var(--f-xs);
+        color: var(--c-accent); cursor: pointer;
+      }
+      .sk-link:hover { text-decoration: underline; }
+      .sk-link-dim { color: var(--c-text-dim); }
+      .sk-rename { font: inherit; width: 100%; padding: var(--s-xs) var(--s-sm); }
+      .sk-hint { padding: var(--s-xs) 0 var(--s-sm); font-size: var(--f-xs); color: var(--c-text-dim); }
       @media (max-width: 48rem) {
         .sk-stats { gap: var(--s-sm); width: 100%; }
         .sk-stat { flex: 1; min-width: 0; padding-left: var(--s-sm); }
@@ -81,22 +95,35 @@
         </div>
 
         <div class="sk-stat sk-stat-btn" tabindex="0" role="button" :aria-expanded="showPlaces ? 'true' : 'false'"
-          title="Places visited — click to see which ones (similar spellings are merged; the temple counts once)"
+          title="Places visited — click to see which ones"
           :onclick="showPlaces = !showPlaces"
-          :onkeydown="e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showPlaces = !showPlaces } if (e.key === 'Escape') showPlaces = false }">
+          :onkeydown="e => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showPlaces = !showPlaces } if (e.key === 'Escape') showPlaces = false }">
           <div class="stat-label">Places visited</div>
           <div class="stat-value" :text="loading ? '—' : st.places.length.toLocaleString()"></div>
           <div class="stat-sub dim"><span :text="loading ? '' : st.outings.toLocaleString() + ' outing' + (st.outings === 1 ? '' : 's')"></span><span :if="!loading" class="sk-chevron" :class="{'sk-chevron-open': showPlaces}" :html="icon('chevron_right')" aria-hidden="true"></span></div>
-          <div class="sk-backdrop" :hidden="!showPlaces" :onclick="e => { e.stopPropagation(); showPlaces = false }"></div>
-          <div class="sk-places" :hidden="!showPlaces || loading" :onclick="e => e.stopPropagation()">
+
+          <div class="sk-backdrop" :hidden="!showPlaces" :onclick="e => { e.stopPropagation(); closePlaces() }"></div>
+          <div class="sk-places" :hidden="!showPlaces || loading" :onclick="e => e.stopPropagation()" :onkeydown="e => e.stopPropagation()">
+            <div :if="canmerge && mergeFrom" class="sk-hint" :text="'Merging “' + mergeFrom.label + '” — pick the place it belongs to.'"></div>
             <div :if="!st.places.length" class="dim">No place recorded yet.</div>
             <div :each="p in st.places" class="sk-place-row">
-              <span :text="p.label" :title="p.variants.length > 1 ? 'Also entered as: ' + p.variants.filter(v => v !== p.label).join(', ') : ''"></span>
+              <div class="sk-place-name">
+                <input :if="renaming === p.key" class="sk-rename" type="text" placeholder="Short name, e.g. Temple"
+                  :value="renameVal" autofocus
+                  :onkeydown="e => { if (e.key === 'Enter') commitRename(p, e.target.value); if (e.key === 'Escape') cancelAction() }">
+                <span :if="renaming !== p.key" :text="p.label"
+                  :title="p.variants.length > 1 ? 'Also entered as: ' + p.variants.filter(v => v !== p.label).join(', ') : ''"></span>
+                <div :if="renaming !== p.key && p.merged.length" class="sk-place-sub">
+                  <span>includes </span><span :each="m in p.merged"><span :text="m.label"></span><button :if="canmerge" type="button" class="sk-link sk-link-dim" title="Unmerge" :onclick="unmerge(m.key)">×</button><span :text="m !== p.merged[p.merged.length - 1] ? ', ' : ''"></span></span>
+                </div>
+              </div>
               <span class="dim sk-place-n" :text="p.visits + ' visit' + (p.visits === 1 ? '' : 's')"></span>
-            </div>
-            <div :if="st.online" class="sk-place-row dim" title="Website, SMS and WhatsApp orders — not a place we went to, so not counted">
-              <span :text="st.online.label + ' (not counted)'"></span>
-              <span class="sk-place-n" :text="st.online.visits + ' order' + (st.online.visits === 1 ? '' : 's')"></span>
+              <div :if="canmerge" class="sk-place-actions">
+                <button :if="!mergeFrom && renaming !== p.key" type="button" class="sk-link" :onclick="startRename(p)">Rename</button>
+                <button :if="!mergeFrom && renaming !== p.key" type="button" class="sk-link" :onclick="startMerge(p)">Merge</button>
+                <button :if="mergeFrom && mergeFrom.key !== p.key" type="button" class="sk-link" :onclick="mergeInto(p)">Merge here</button>
+                <button :if="mergeFrom && mergeFrom.key === p.key" type="button" class="sk-link sk-link-dim" :onclick="cancelAction()">Cancel</button>
+              </div>
             </div>
           </div>
         </div>
@@ -105,31 +132,47 @@
     </template>
     <script>
       this.showPlaces = false
+      this.mergeFrom = null
+      this.renaming = null
+      this.renameVal = ''
 
-      // Known places whose spellings vary: any of the words → one entry.
-      // "online" is every remote channel (website, SMS, WhatsApp…), listed but not a place we went to.
-      var GROUPS = [
-        { key: 'temple', label: 'Temple', words: ['temple', 'mandir', 'iskcon', 'sunday', 'feast', 'fest', 'dimanche', 'fete'] },
-        { key: 'laval',  label: 'Laval',  words: ['laval', 'crystal'] },
-        { key: 'online', label: 'Online', words: ['online', 'website', 'web', 'site', 'sms', 'whatsapp', 'en ligne', 'internet', 'email', 'courriel', 'messenger', 'phone', 'telephone'], virtual: true },
-      ]
-
-      // Same place, typed differently ("Laval 3", "laval ", "… day 2") → one key.
+      // Spelling noise only: case, accents, punctuation, "day 2", trailing
+      // numbers, plural s. Which places are the same is learned from aliases.
       this.placeKey = function(loc) {
-        var k = (loc || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+        return (loc || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
           .replace(/[^a-z0-9]+/g, ' ').trim()
           .replace(/\b(day|jour)\s*\d+$/, '').trim()
           .replace(/(\s+\d+)+$/, '').trim()
-        if (!k) return ''
-        for (var i = 0; i < GROUPS.length; i++) {
-          for (var j = 0; j < GROUPS[i].words.length; j++) {
-            if (new RegExp('\\b' + GROUPS[i].words[j] + '\\b').test(k)) return GROUPS[i].key
+          .replace(/\b([a-z]{4,})s\b/g, '$1')
+      }
+
+      // aliases: { typedKey: 'Canonical name' }. A key resolves by following
+      // its alias, or by containing a canonical name as a whole phrase
+      // (so once "Online" exists, "online - SMS" joins it by itself).
+      this.resolve = function(key, canon) {
+        var aliases = this.aliases || {}
+        var self = this
+        for (var hop = 0; hop < 5; hop++) {
+          if (aliases[key]) {
+            var next = self.placeKey(aliases[key])
+            if (next === key) return key
+            key = next
+            continue
           }
+          var hit = canon.find(function(c) { return c !== key && new RegExp('\\b' + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(key) })
+          if (!hit) return key
+          key = hit
         }
-        return k
+        return key
       }
 
       this.stats = function() {
+        var self = this
+        var aliases = this.aliases || {}
+        var canonByKey = {}
+        Object.keys(aliases).forEach(function(k) { canonByKey[self.placeKey(aliases[k])] = aliases[k] })
+        var canon = Object.keys(canonByKey).filter(Boolean)
+
         var month = new Date().toISOString().slice(0, 7)
         var books = 0, cents = 0, monthBooks = 0, monthCents = 0, outings = 0
         var groups = {}
@@ -140,22 +183,54 @@
             monthBooks += s.total_books || 0
             monthCents += s.collected_cents || 0
           }
-          var key = this.placeKey(s.location)
-          if (!key) return
-          var def = GROUPS.find(function(d) { return d.key === key })
-          if (!(def && def.virtual)) outings += 1
-          var g = groups[key] || (groups[key] = { key: key, visits: 0, spellings: {}, label: def && def.label, virtual: !!(def && def.virtual) })
-          g.visits += 1
           var raw = (s.location || '').trim()
+          var typed = self.placeKey(raw)
+          if (!typed) return
+          var key = self.resolve(typed, canon)
+          outings += 1
+          var g = groups[key] || (groups[key] = { key: key, visits: 0, spellings: {}, sources: {} })
+          g.visits += 1
           g.spellings[raw] = (g.spellings[raw] || 0) + 1
-        }, this)
+          if (typed !== key) g.sources[typed] = raw
+        })
         var places = Object.values(groups).map(function(g) {
           var variants = Object.keys(g.spellings).sort(function(a, b) { return g.spellings[b] - g.spellings[a] })
-          return { key: g.key, visits: g.visits, variants: variants, label: g.label || variants[0], virtual: g.virtual }
+          var merged = Object.keys(g.sources).filter(function(k) { return aliases[k] }).map(function(k) { return { key: k, label: g.sources[k] } })
+          return { key: g.key, visits: g.visits, variants: variants, merged: merged, label: canonByKey[g.key] || variants[0] }
         }).sort(function(a, b) { return b.visits - a.visits || a.label.localeCompare(b.label) })
-        var online = places.find(function(p) { return p.virtual }) || null
-        places = places.filter(function(p) { return !p.virtual })
-        return { books: books, cents: cents, monthBooks: monthBooks, monthCents: monthCents, outings: outings, places: places, online: online }
+        return { books: books, cents: cents, monthBooks: monthBooks, monthCents: monthCents, outings: outings, places: places }
+      }
+
+      this.closePlaces = function() { this.showPlaces = false; this.cancelAction() }
+      this.cancelAction = function() { this.mergeFrom = null; this.renaming = null }
+      this.startMerge = function(p) { this.mergeFrom = p }
+      this.saveAliases = function(next) {
+        this.mergeFrom = null
+        this.renaming = null
+        this.emit('aliases', next)
+      }
+      this.mergeInto = function(target) {
+        var next = Object.assign({}, this.aliases || {})
+        next[this.mergeFrom.key] = target.label
+        this.saveAliases(next)
+      }
+      this.startRename = function(p) {
+        this.renaming = p.key
+        this.renameVal = p.label
+      }
+      this.commitRename = function(p, value) {
+        var name = (value || '').trim()
+        if (!name || name === p.label) { this.renaming = null; return }
+        var next = Object.assign({}, this.aliases || {})
+        next[p.key] = name
+        // Anything already pointing at the old name follows the new one.
+        Object.keys(next).forEach(function(k) { if (next[k] === p.label) next[k] = name })
+        this.saveAliases(next)
+      }
+      this.unmerge = function(key) {
+        var next = Object.assign({}, this.aliases || {})
+        delete next[key]
+        this.saveAliases(next)
       }
     </script>
   </sankirtan-stats>

@@ -9,7 +9,8 @@ preloads:
     <a :if="can('sankirtan:manage')" href="https://iskconmontrealsankirtan.com/admin/books"
        target="_blank" rel="noopener" class="btn btn-outline btn-sm">Digital books ledger ↗</a>
   </div>
-  <sankirtan-stats :sessions="sessions" :loading="!sessionsLoaded && !sessionsErr"></sankirtan-stats>
+  <sankirtan-stats :sessions="sessions" :aliases="placeAliases" :loading="!sessionsLoaded && !sessionsErr"
+    :canmerge="can('settings:manage')" :onaliases="e => savePlaceAliases(e.detail)"></sankirtan-stats>
 </div>
 
 <sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="draftBookIds.length"
@@ -164,6 +165,7 @@ preloads:
     lbErr: null,
     orders: [],
     draftBookIds: [],
+    placeAliases: {},        // typed location → canonical place, shared via org settings
     events: [],
     eventsLoaded: false,
     eventsLoading: false,
@@ -211,6 +213,23 @@ preloads:
       if (tab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
       if (tab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
       if (tab === 'events' && !s.eventsLoaded) s.loadEvents()
+    },
+
+    async loadPlaceAliases() {
+      try {
+        s.placeAliases = JSON.parse((await api.getOrgSettings()).sankirtan_place_aliases || '{}')
+      } catch { /* grouping still works on spelling alone */ }
+    },
+
+    async savePlaceAliases(map) {
+      try {
+        const res = await api.updateOrgSettings({ sankirtan_place_aliases: JSON.stringify(map) })
+        if (!('sankirtan_place_aliases' in res)) throw new Error('The server needs an update before place merges can be saved')
+        s.placeAliases = map
+        toast('Places updated', 'success')
+      } catch (e) {
+        toast(e.message || 'Failed to save places', 'error')
+      }
     },
 
     async loadEvents() {
@@ -317,5 +336,6 @@ preloads:
   s.loadBooks()
   s.loadOrders()
   s.loadSessions()           // header totals need every session, whatever tab opens first
+  s.loadPlaceAliases()
   if (s.activeTab === 'events') s.loadEvents()
 </script>
