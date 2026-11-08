@@ -1,0 +1,531 @@
+<define-element>
+  <sankirtan-newsletter-tab active:boolean="false" issues:array loading:boolean="false" error:string="" canmanage:boolean="false">
+    <style>
+      :host { display: contents; }
+      .section-label {
+        font-size: var(--f-sm);
+        font-weight: var(--f-wt-b);
+        color: var(--c-text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: var(--s-lg) 0 var(--s-sm);
+      }
+      .nl-list { display: flex; flex-direction: column; gap: var(--s-sm); }
+      .nl-row {
+        display: flex;
+        align-items: center;
+        gap: var(--s-md);
+        padding: var(--s-sm) var(--s-md);
+        cursor: pointer;
+        text-align: left;
+        width: 100%;
+        font: inherit;
+        color: inherit;
+      }
+      .nl-row:hover { border-color: var(--c-accent); }
+      .nl-thumb {
+        width: 3.5rem;
+        height: 3.5rem;
+        flex-shrink: 0;
+        border-radius: var(--r-sm);
+        border: 1px solid var(--c-border);
+        object-fit: cover;
+        object-position: top;
+        background: var(--c-bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--f-xs);
+        color: var(--c-text-dim);
+      }
+      .nl-main { flex: 1; min-width: 0; }
+      .nl-month { font-weight: var(--f-wt-b); }
+      .nl-title { font-size: var(--f-sm); color: var(--c-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .nl-side { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--s-xs) var(--s-sm); font-size: var(--f-sm); }
+      .nl-state { font-weight: var(--f-wt-b); }
+      .nl-state-published { color: var(--c-ok); }
+      .nl-state-scheduled { color: var(--c-accent); }
+      .nl-state-draft { color: var(--c-text-dim); }
+
+      .nl-back { margin-bottom: var(--s-md); }
+      .nl-head { padding: var(--s-md) var(--s-lg); margin-bottom: var(--s-lg); }
+      .nl-head h2 { margin: 0 0 var(--s-md); font-size: var(--f-lg); }
+      .nl-head .form-row { align-items: flex-end; }
+      .nl-hint { font-size: var(--f-sm); color: var(--c-text-dim); margin: var(--s-xs) 0 0; }
+      .nl-next {
+        margin-top: var(--s-md);
+        padding: var(--s-sm) var(--s-md);
+        border-radius: var(--r-sm);
+        background: var(--c-accent-active);
+        font-size: var(--f-sm);
+      }
+      .nl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-sm); margin-top: var(--s-md); }
+
+      .nl-editions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--s-lg); }
+      .nl-edition { padding: var(--s-md) var(--s-lg); min-width: 0; }
+      .nl-edition h3 { margin: 0 0 var(--s-md); font-size: var(--f-md); display: flex; align-items: center; gap: var(--s-sm); }
+      .nl-drop {
+        border: 2px dashed var(--c-border);
+        border-radius: var(--r-sm);
+        padding: var(--s-xl) var(--s-lg);
+        text-align: center;
+        color: var(--c-text-dim);
+        font-size: var(--f-sm);
+        cursor: pointer;
+      }
+      .nl-drop:hover, .nl-drop.is-over { border-color: var(--c-accent); color: var(--c-text); }
+      .nl-drop strong { display: block; color: var(--c-text); font-size: var(--f-md); margin-bottom: var(--s-xs); }
+      .nl-bar { height: var(--s-sm); border-radius: var(--r-sm); background: var(--c-neutral-active); overflow: hidden; margin-top: var(--s-sm); }
+      .nl-bar > span { display: block; height: 100%; background: var(--c-accent); transition: width 0.2s; }
+      .nl-preview {
+        border: 1px solid var(--c-border);
+        border-radius: var(--r-sm);
+        overflow: auto;
+        height: 70vh;
+        background: var(--c-white);
+      }
+      .nl-preview iframe { width: 600px; height: 100%; border: 0; display: block; margin: 0 auto; }
+      .nl-edition .field { margin-top: var(--s-md); }
+      .nl-edition textarea { resize: vertical; }
+    </style>
+    <template>
+      <section :if="active">
+
+        <div :if="error" class="login-error" :text="error"></div>
+
+        <!-- ── List ── -->
+        <div :hidden="!!curId">
+          <div :hidden="!canmanage" style="display:flex; justify-content:flex-end; margin-bottom:var(--s-md)">
+            <button type="button" class="btn btn-primary" :class="{'btn-loading': creating}" :onclick="createIssue()">+ New issue</button>
+          </div>
+
+          <div :hidden="!(loading && !issues.length)" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
+          <div :hidden="!(!loading && !issues.length && !error)" class="dim" style="padding:var(--s-lg); text-align:center">
+            No newsletter yet. Each month, add the issue here and drop the zip that Canva exports.
+          </div>
+
+          <div :each="g in years()">
+            <div class="section-label" :text="g.year"></div>
+            <div class="nl-list">
+              <button :each="n in g.items" type="button" class="card nl-row" :onclick="openIssue(n)">
+                <img :if="coverOf(n)" class="nl-thumb" alt="" :src="coverOf(n)">
+                <span :if="!coverOf(n)" class="nl-thumb">—</span>
+                <span class="nl-main">
+                  <span class="nl-month" :text="monthName(n.issue)"></span>
+                  <span class="nl-title" style="display:block"
+                    :text="(n.en && n.en.title) || (n.fr && n.fr.title) || (n.en || n.fr ? 'No title yet' : 'No zip uploaded yet')"></span>
+                </span>
+                <span class="nl-side">
+                  <span class="badge badge-sm" :class="n.en ? 'badge-paid' : 'cat-gray'" :text="n.en ? 'EN ✓' : 'EN missing'"></span>
+                  <span class="badge badge-sm" :class="n.fr ? 'badge-paid' : 'cat-gray'" :text="n.fr ? 'FR ✓' : 'FR missing'"></span>
+                  <span class="nl-state" :class="'nl-state-' + stateOf(n)"
+                    :text="{ draft: 'Draft', scheduled: 'Scheduled for ' + fmtWhen(n.publish_at), published: 'Published' }[stateOf(n)]"></span>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Issue page ── -->
+        <div :hidden="!curId">
+          <button type="button" class="btn-link nl-back" style="color:var(--c-text-dim)" :onclick="closeIssue()">← All issues</button>
+
+          <div class="card nl-head">
+            <h2 :text="cur ? monthName(cur.issue) : ''"></h2>
+            <form :onsubmit.prevent="saveSchedule()">
+              <div class="form-row">
+                <div class="field">
+                  <label for="nl-issue">Month</label>
+                  <input id="nl-issue" type="month" required :disabled="!canmanage"
+                    :value="sched.issue" :oninput="e => setSched('issue', e.target.value)">
+                </div>
+                <div class="field">
+                  <label for="nl-publish">Publish on <span class="dim" style="font-weight:normal">(Montréal time)</span></label>
+                  <input id="nl-publish" type="datetime-local" :disabled="!canmanage"
+                    :value="sched.publish" :oninput="e => setSched('publish', e.target.value)">
+                </div>
+              </div>
+              <p class="nl-hint">Set this to the Mailchimp send time. Leave it empty to keep the issue as a draft.</p>
+              <div :hidden="!canmanage" class="nl-actions">
+                <button type="submit" class="btn btn-primary btn-sm" :disabled="!sched.dirty"
+                  :class="{'btn-loading': sched.saving}">Save</button>
+                <button type="button" class="btn btn-outline btn-sm" :disabled="!hasEdition()"
+                  :title="hasEdition() ? '' : 'Upload a zip first'" :onclick="publishNow()">Publish now</button>
+                <button type="button" class="btn-link" style="font-size:var(--f-sm)" :hidden="!sched.publish"
+                  :onclick="setSched('publish', '')">Make it a draft</button>
+              </div>
+            </form>
+            <div class="nl-next" :text="(() => {
+              if (!cur) return ''
+              const st = stateOf(cur)
+              if (!cur.en && !cur.fr) return 'Next: drop the English zip from Canva into the English card below.'
+              if (st === 'published') return cur.fr && cur.en ? 'On the website now, in English and French.' : 'On the website now. The ' + (cur.en ? 'French' : 'English') + ' version is missing.'
+              if (st === 'scheduled') return 'Goes on the website on ' + fmtWhen(cur.publish_at) + ' (Montréal time).'
+              if (!cur.fr) return 'Next: drop the French zip into the Français card, then set Publish on.'
+              if (!cur.en) return 'Next: drop the English zip into the English card, then set Publish on.'
+              return 'Next: set Publish on to the Mailchimp send time, then Save.'
+            })()"></div>
+          </div>
+
+          <div class="nl-editions">
+            <div :each="lang in LANGS" class="card nl-edition" :data-lang="lang">
+              <h3>
+                <span :text="lang === 'en' ? 'English' : 'Français'"></span>
+                <span class="badge badge-sm" :class="ed(lang) ? 'badge-paid' : 'cat-gray'" :text="ed(lang) ? 'Uploaded' : 'Missing'"></span>
+              </h3>
+
+              <input type="file" accept=".zip,application/zip" style="display:none" :id="'nl-zip-' + lang"
+                :onchange="e => { pickZip(lang, e.target.files[0]); e.target.value = '' }">
+
+              <div :hidden="!!ed(lang) || !canmanage" class="nl-drop" :class="{'is-over': over === lang}"
+                :ondragover.prevent="e => dragOver(lang)"
+                :ondragleave="e => dragOver(null)"
+                :ondrop.prevent="e => { dragOver(null); pickZip(lang, e.dataTransfer.files[0]) }"
+                :onclick="browse(lang)">
+                <strong>Drop Canva's HTML zip here</strong>
+                or tap to choose the file
+              </div>
+              <div :hidden="!!ed(lang) || canmanage" class="dim" style="font-size:var(--f-sm)">Not uploaded yet.</div>
+
+              <div :hidden="!up[lang].busy">
+                <div class="nl-bar"><span :style="'width:' + Math.round(up[lang].pct * 100) + '%'"></span></div>
+                <div class="dim" style="font-size:var(--f-sm); margin-top:var(--s-xs)"
+                  :text="up[lang].pct < 1 ? 'Uploading… ' + Math.round(up[lang].pct * 100) + '%' : 'Preparing the newsletter…'"></div>
+              </div>
+              <div :hidden="!up[lang].err" class="login-error" style="margin-top:var(--s-sm)" :text="up[lang].err"></div>
+
+              <div :hidden="!ed(lang)">
+                <div class="nl-preview">
+                  <iframe sandbox title="Newsletter preview" loading="lazy" :src="previewSrc(lang)"></iframe>
+                </div>
+                <div :hidden="!canmanage" class="nl-actions">
+                  <button type="button" class="btn btn-outline btn-sm" :disabled="up[lang].busy" :onclick="browse(lang)">Replace zip</button>
+                  <button type="button" class="btn-link" style="font-size:var(--f-sm); color:var(--c-err)" :hidden="confirmLang === lang"
+                    :onclick="askRemove(lang)">Remove</button>
+                  <span :hidden="confirmLang !== lang" style="display:inline-flex; align-items:center; gap:var(--s-xs)">
+                    <span class="dim" style="font-size:var(--f-sm)" :text="'Remove the ' + (lang === 'en' ? 'English' : 'French') + ' version?'"></span>
+                    <button type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': removing === lang}" :onclick="removeEdition(lang)">Yes</button>
+                    <button type="button" class="btn-link" style="font-size:var(--f-sm)" :onclick="askRemove(null)">No</button>
+                  </span>
+                </div>
+
+                <form :onsubmit.prevent="saveText(lang)">
+                  <div class="field">
+                    <label :for="'nl-title-' + lang">Title <span class="dim" style="font-weight:normal">(optional)</span></label>
+                    <input type="text" :id="'nl-title-' + lang" :disabled="!canmanage"
+                      :placeholder="lang === 'en' ? 'e.g. The Sacred Month of Kārtika' : 'ex. Le mois sacré de Kārtika'"
+                      :value="text[lang].title" :oninput="e => setText(lang, 'title', e.target.value)">
+                  </div>
+                  <div class="field">
+                    <label :for="'nl-summary-' + lang">Summary <span class="dim" style="font-weight:normal">(optional, two lines)</span></label>
+                    <textarea rows="2" :id="'nl-summary-' + lang" :disabled="!canmanage"
+                      :value="text[lang].summary" :oninput="e => setText(lang, 'summary', e.target.value)"></textarea>
+                    <p class="nl-hint">Shown above the newsletter on the website and in link previews.</p>
+                  </div>
+                  <div :hidden="!canmanage" class="nl-actions" style="margin-top:var(--s-sm)">
+                    <button type="submit" class="btn btn-primary btn-sm" :disabled="!text[lang].dirty"
+                      :class="{'btn-loading': text[lang].saving}">Save title and summary</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <div :hidden="!canmanage" style="margin-top:var(--s-xl); text-align:right">
+            <button type="button" class="btn-link" style="font-size:var(--f-sm); color:var(--c-err)" :hidden="confirmDelete"
+              :onclick="askDelete(true)">Delete this issue</button>
+            <span :hidden="!confirmDelete" style="display:inline-flex; align-items:center; gap:var(--s-xs)">
+              <span class="dim" style="font-size:var(--f-sm)">Delete this issue and both versions?</span>
+              <button type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': deleting}" :onclick="deleteIssue()">Yes</button>
+              <button type="button" class="btn-link" style="font-size:var(--f-sm)" :onclick="askDelete(false)">No</button>
+            </span>
+          </div>
+        </div>
+
+      </section>
+    </template>
+    <script>
+      this.LANGS = ['en', 'fr']
+      this.TZ = 'America/Toronto'
+      this.MAX_ZIP = 40 * 1024 * 1024
+      this.curId = null
+      this.cur = null
+      this.creating = false
+      this.deleting = false
+      this.confirmDelete = false
+      this.confirmLang = null
+      this.removing = null
+      this.over = null
+      this.sched = { issue: '', publish: '', dirty: false, saving: false }
+      this.up = { en: { busy: false, pct: 0, err: '' }, fr: { busy: false, pct: 0, err: '' } }
+      this.text = { en: { title: '', summary: '', dirty: false, saving: false }, fr: { title: '', summary: '', dirty: false, saving: false } }
+
+      // Runs inside the parent's binding effect: defer, or the reads below subscribe it and loop.
+      this.onpropchange = function(k, v) {
+        if (k !== 'issues') return
+        var self = this
+        queueMicrotask(function() { self._issuesChanged(v) })
+      }
+      this._issuesChanged = function(v) {
+        if (this.curId) {
+          var id = this.curId
+          var fresh = (v || []).find(function(n) { return n.id === id })
+          if (fresh) this._setCur(fresh)
+        } else {
+          var want = Number(new URLSearchParams(location.search).get('issue'))
+          var hit = want && (v || []).find(function(n) { return n.id === want })
+          if (hit) this.openIssue(hit)
+        }
+      }
+
+      // Montréal wall-clock parts of an instant.
+      this._parts = function(d) {
+        var o = {}
+        new Intl.DateTimeFormat('en-CA', { timeZone: this.TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+          .formatToParts(d).forEach(function(p) { o[p.type] = p.value })
+        return o
+      }
+      this.toLocalInput = function(iso) {
+        if (!iso) return ''
+        var p = this._parts(new Date(iso))
+        return p.year + '-' + p.month + '-' + p.day + 'T' + p.hour + ':' + p.minute
+      }
+      // "YYYY-MM-DDTHH:mm" in Montréal → UTC ISO; two passes settle the DST offset.
+      this.fromLocalInput = function(v) {
+        if (!v) return null
+        var want = Date.parse(v + ':00Z'), t = want
+        for (var i = 0; i < 2; i++) {
+          var p = this._parts(new Date(t))
+          t += want - Date.parse(p.year + '-' + p.month + '-' + p.day + 'T' + p.hour + ':' + p.minute + ':00Z')
+        }
+        return new Date(t).toISOString().replace('.000Z', 'Z')
+      }
+      this.fmtWhen = function(iso) {
+        if (!iso) return ''
+        var d = new Date(iso)
+        var p = this._parts(d)
+        return new Intl.DateTimeFormat('en-GB', { timeZone: this.TZ, day: 'numeric', month: 'short' }).format(d) + ', ' + Number(p.hour) + ':' + p.minute
+      }
+      this.monthName = function(issue) {
+        var m = /^(\d{4})-(\d{2})$/.exec(issue || '')
+        if (!m) return issue || ''
+        return new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      }
+      this.stateOf = function(n) {
+        if (!n || !n.publish_at) return 'draft'
+        return Date.parse(n.publish_at) > Date.now() ? 'scheduled' : 'published'
+      }
+      this.coverOf = function(n) {
+        var c = (n.en && n.en.cover) || (n.fr && n.fr.cover)
+        return c && this.api.newsletterFileUrl ? this.api.newsletterFileUrl(c) : ''
+      }
+      this.years = function() {
+        var by = {}
+        ;(this.issues || []).slice()
+          .sort(function(a, b) { return a.issue === b.issue ? String(b.publish_at || '').localeCompare(String(a.publish_at || '')) : b.issue.localeCompare(a.issue) })
+          .forEach(function(n) {
+            var y = (n.issue || '').slice(0, 4)
+            ;(by[y] = by[y] || []).push(n)
+          })
+        return Object.keys(by).sort().reverse().map(function(y) { return { year: y, items: by[y] } })
+      }
+      this.ed = function(lang) { return this.cur && this.cur[lang] }
+      this.hasEdition = function() { return !!(this.cur && (this.cur.en || this.cur.fr)) }
+      this.previewSrc = function(lang) {
+        var e = this.ed(lang)
+        return e && e.html && this.api.newsletterFileUrl ? this.api.newsletterFileUrl(e.html) : 'about:blank'
+      }
+      this._staleApi = function() {
+        if (this.api.updateNewsletter) return false
+        this.toast && this.toast('A newer version of Mandir is available — please hard-refresh the page', 'error')
+        return true
+      }
+
+      this._setCur = function(n) {
+        var self = this
+        self.cur = n
+        if (!self.sched.dirty) self.sched = { issue: n.issue || '', publish: self.toLocalInput(n.publish_at), dirty: false, saving: false }
+        self.LANGS.forEach(function(l) {
+          if (!self.text[l].dirty) self.text[l] = { title: (n[l] && n[l].title) || '', summary: (n[l] && n[l].summary) || '', dirty: false, saving: false }
+        })
+      }
+      this._syncUrl = function(id) {
+        var url = new URL(location.href)
+        if (id) url.searchParams.set('issue', id)
+        else url.searchParams.delete('issue')
+        history.replaceState(null, '', url)
+      }
+      this.openIssue = function(n) {
+        this.sched = { issue: '', publish: '', dirty: false, saving: false }
+        this.text = { en: { title: '', summary: '', dirty: false, saving: false }, fr: { title: '', summary: '', dirty: false, saving: false } }
+        this.up = { en: { busy: false, pct: 0, err: '' }, fr: { busy: false, pct: 0, err: '' } }
+        this.confirmDelete = false
+        this.confirmLang = null
+        this.curId = n.id
+        this._setCur(n)
+        this._syncUrl(n.id)
+        window.scrollTo(0, 0)
+      }
+      this.closeIssue = function() {
+        if (this.up.en.busy || this.up.fr.busy) {
+          this.toast && this.toast('A zip is still uploading — please wait', 'error')
+          return
+        }
+        this.curId = null
+        this.cur = null
+        this._syncUrl(null)
+      }
+      this._applied = function(res) {
+        if (res && res.id) this._setCur(res)
+        this.emit('reload')
+      }
+
+      this.createIssue = function() {
+        var self = this
+        if (self._staleApi()) return
+        var d = new Date()
+        var issue = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+        self.creating = true
+        self.api.createNewsletter({ issue: issue, publish_at: null })
+          .then(function(res) {
+            self.creating = false
+            self.emit('reload')
+            if (res && res.id) self.openIssue(res)
+          })
+          .catch(function(e) {
+            self.creating = false
+            self.toast && self.toast(e.message || 'Could not create the issue', 'error')
+          })
+      }
+
+      this.setSched = function(k, v) {
+        this.sched[k] = v
+        this.sched.dirty = true
+      }
+      this.saveSchedule = function(publishAt) {
+        var self = this
+        if (self._staleApi()) return
+        if (!/^\d{4}-\d{2}$/.test(self.sched.issue)) {
+          self.toast && self.toast('Please choose the month this issue covers', 'error')
+          return
+        }
+        var at = publishAt !== undefined ? publishAt : self.fromLocalInput(self.sched.publish)
+        self.sched.saving = true
+        self.api.updateNewsletter(self.curId, { issue: self.sched.issue, publish_at: at })
+          .then(function(res) {
+            self.sched.dirty = false
+            self.sched.saving = false
+            self._applied(res)
+            var st = self.stateOf(res)
+            self.toast && self.toast(st === 'published' ? 'Published on the website' : st === 'scheduled' ? 'Scheduled' : 'Saved as a draft', 'success')
+          })
+          .catch(function(e) {
+            self.sched.saving = false
+            self.toast && self.toast(e.message || 'Could not save', 'error')
+          })
+      }
+      this.publishNow = function() {
+        var now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+        this.sched.publish = this.toLocalInput(now)
+        this.saveSchedule(now)
+      }
+
+      this.browse = function(lang) {
+        var el = (this.host || document).querySelector('#nl-zip-' + lang)
+        el && el.click()
+      }
+      this.dragOver = function(lang) { this.over = lang }
+      this.pickZip = function(lang, file) {
+        var self = this
+        if (!file || self.up[lang].busy) return
+        if (!self.api.uploadNewsletterZip) {
+          self.up[lang].err = 'A newer version of Mandir is available — please hard-refresh the page'
+          return
+        }
+        if (!/\.zip$/i.test(file.name || '')) {
+          self.up[lang].err = 'That is not a zip file. In Canva, choose Share → Download → HTML, then drop the .zip file here.'
+          return
+        }
+        if (file.size > self.MAX_ZIP) {
+          self.up[lang].err = 'This zip is larger than 40 MB. Try making the big animated images smaller in Canva.'
+          return
+        }
+        var id = self.curId
+        self.up[lang] = { busy: true, pct: 0, err: '' }
+        self.api.uploadNewsletterZip(id, lang, file, function(p) { self.up[lang].pct = p })
+          .then(function(res) {
+            self.up[lang] = { busy: false, pct: 0, err: '' }
+            if (self.curId !== id) return self.emit('reload')
+            self._applied(res)
+            self.toast && self.toast((lang === 'en' ? 'English' : 'French') + ' version uploaded', 'success')
+          })
+          .catch(function(e) {
+            self.up[lang] = { busy: false, pct: 0, err: e.message || 'Upload failed' }
+          })
+      }
+
+      this.askRemove = function(lang) { this.confirmLang = lang }
+      this.removeEdition = function(lang) {
+        var self = this
+        self.removing = lang
+        self.api.deleteNewsletterEdition(self.curId, lang)
+          .then(function(res) {
+            self.removing = null
+            self.confirmLang = null
+            self.text[lang].dirty = false
+            if (res && res.id) self._applied(res)
+            else {
+              var copy = Object.assign({}, self.cur)
+              copy[lang] = null
+              self._applied(copy)
+            }
+          })
+          .catch(function(e) {
+            self.removing = null
+            self.confirmLang = null
+            self.toast && self.toast(e.message || 'Could not remove', 'error')
+          })
+      }
+
+      this.setText = function(lang, k, v) {
+        this.text[lang][k] = v
+        this.text[lang].dirty = true
+      }
+      this.saveText = function(lang) {
+        var self = this
+        var t = self.text[lang]
+        t.saving = true
+        self.api.updateNewsletterEdition(self.curId, lang, { title: t.title.trim(), summary: t.summary.trim() })
+          .then(function(res) {
+            self.text[lang] = { title: t.title.trim(), summary: t.summary.trim(), dirty: false, saving: false }
+            self._applied(res)
+            self.toast && self.toast('Saved', 'success')
+          })
+          .catch(function(e) {
+            t.saving = false
+            self.toast && self.toast(e.message || 'Could not save', 'error')
+          })
+      }
+
+      this.askDelete = function(on) { this.confirmDelete = on }
+      this.deleteIssue = function() {
+        var self = this
+        self.deleting = true
+        self.api.deleteNewsletter(self.curId)
+          .then(function() {
+            self.deleting = false
+            self.confirmDelete = false
+            self.curId = null
+            self.cur = null
+            self._syncUrl(null)
+            self.emit('reload')
+            self.toast && self.toast('Issue deleted', 'success')
+          })
+          .catch(function(e) {
+            self.deleting = false
+            self.toast && self.toast(e.message || 'Could not delete', 'error')
+          })
+      }
+    </script>
+  </sankirtan-newsletter-tab>
+</define-element>

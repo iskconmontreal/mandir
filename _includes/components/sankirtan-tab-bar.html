@@ -1,24 +1,27 @@
 <define-element>
-  <sankirtan-tab-bar active:string="catalog" canmanage:boolean="false" ordercount:number="0">
+  <sankirtan-tab-bar active:string="catalog" canmanage:boolean="false" ordercount:number="0" full:boolean="true">
     <style>:host { display: contents; }</style>
     <template>
       <div class="pill-tabs" style="margin-bottom:var(--s-xl)" role="tablist">
-        <button type="button" class="pill-tab" role="tab"
+        <button :if="full" type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'catalog'}"
           :onclick="emit('tabchange', 'catalog')">Catalog</button>
-        <button type="button" class="pill-tab" role="tab"
+        <button :if="full" type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'sessions'}"
           :onclick="emit('tabchange', 'sessions')">Sessions</button>
-        <button type="button" class="pill-tab" role="tab"
+        <button :if="full" type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'leaderboard'}"
           :onclick="emit('tabchange', 'leaderboard')">Leaderboard</button>
-        <button type="button" class="pill-tab" role="tab"
+        <button :if="full" type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'metrics'}"
           :onclick="emit('tabchange', 'metrics')">Metrics</button>
-        <button type="button" class="pill-tab" role="tab"
+        <button :if="full" type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'events'}"
           :onclick="emit('tabchange', 'events')">Events</button>
-        <button :if="canmanage" type="button" class="pill-tab" role="tab"
+        <button type="button" class="pill-tab" role="tab"
+          :class="{'pill-tab-active': active === 'newsletter'}"
+          :onclick="emit('tabchange', 'newsletter')">Newsletter</button>
+        <button :if="full && canmanage" type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'order'}"
           :onclick="emit('tabchange', 'order')"
           :text="ordercount ? 'Order (' + ordercount + ')' : 'Order'"></button>

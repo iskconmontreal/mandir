@@ -8,7 +8,7 @@ const { HASH } = GOLOKA_COMMON
 
 const BOOTSTRAP_SQL = [
   "INSERT OR REPLACE INTO roles (id, role, permissions, permissions_default) VALUES",
-  "(1, json_object('name','Administrator','description','Frontend E2E admin'), 'users:view,users:create,members:view,members:create,members:manage,income:view,income:create,expenses:view,expenses:create,expenses:approve,roles:update,sankirtan:view,sankirtan:manage', 'users:view,users:create,members:view,members:create,members:manage,income:view,income:create,expenses:view,expenses:create,expenses:approve,roles:update,sankirtan:view,sankirtan:manage'),",
+  "(1, json_object('name','Administrator','description','Frontend E2E admin'), 'users:view,users:create,members:view,members:create,members:manage,income:view,income:create,expenses:view,expenses:create,expenses:approve,roles:update,sankirtan:view,sankirtan:manage,newsletter:manage', 'users:view,users:create,members:view,members:create,members:manage,income:view,income:create,expenses:view,expenses:create,expenses:approve,roles:update,sankirtan:view,sankirtan:manage,newsletter:manage'),",
   "(2, json_object('name','Treasurer','description','Frontend E2E treasurer'), 'income:view,income:create,income:delete,expenses:view,expenses:create,expenses:approve,members:view', 'income:view,income:create,income:delete,expenses:view,expenses:create,expenses:approve,members:view'),",
   "(4, json_object('name','Board Member','description','Frontend E2E approver'), 'income:view,expenses:approve,expenses:create,expenses:view,members:view,users:view', 'income:view,expenses:approve,expenses:create,expenses:view,members:view,users:view'),",
   "(5, json_object('name','Volunteer','description','Frontend E2E sevaka'), 'expenses:create', 'expenses:create'),",

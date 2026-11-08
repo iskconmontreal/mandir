@@ -6,14 +6,14 @@ preloads:
 <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:var(--s-lg) var(--s-xl); flex-wrap:wrap">
   <div>
     <h1>Sankirtan</h1>
-    <a :if="can('sankirtan:manage')" href="https://iskconmontrealsankirtan.com/admin/books"
+    <a :if="full && can('sankirtan:manage')" href="https://iskconmontrealsankirtan.com/admin/books"
        target="_blank" rel="noopener" class="btn btn-outline btn-sm">Digital books ledger ↗</a>
   </div>
-  <sankirtan-stats :sessions="sessions" :aliases="placeAliases" :loading="!sessionsLoaded && !sessionsErr"
+  <sankirtan-stats :if="full" :sessions="sessions" :aliases="placeAliases" :loading="!sessionsLoaded && !sessionsErr"
     :canmerge="can('settings:manage')" :onaliases="e => savePlaceAliases(e.detail)"></sankirtan-stats>
 </div>
 
-<sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="draftBookIds.length"
+<sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="draftBookIds.length" :full="full"
   :ontabchange="e => switchTab(e.detail)">
 </sankirtan-tab-bar>
 
@@ -69,6 +69,15 @@ preloads:
   :onreload="loadEvents">
 </sankirtan-events-tab>
 
+<sankirtan-newsletter-tab
+  :active="activeTab === 'newsletter'"
+  :issues="newsletters"
+  :loading="newslettersLoading"
+  :error="newslettersErr"
+  :canmanage="can('newsletter:manage')"
+  :onreload="loadNewsletters">
+</sankirtan-newsletter-tab>
+
 <sankirtan-order-tab
   :active="activeTab === 'order'"
   :books="books"
@@ -84,6 +93,7 @@ preloads:
 {% include components/sankirtan-leaderboard-tab.html %}
 {% include components/sankirtan-metrics-tab.html %}
 {% include components/sankirtan-events-tab.html %}
+{% include components/sankirtan-newsletter-tab.html %}
 {% include components/sankirtan-order-tab.html %}
 
 <script type="module">
@@ -96,7 +106,9 @@ preloads:
 
   setupProcessor(sprae, { fmtAmt, toast, icon, api, downscaleImage })
 
-  if (!auth.can('sankirtan:view') && !auth.can('sankirtan:manage')) {
+  // newsletter:manage alone (the newsletter editor) sees only the Newsletter tab.
+  const full = auth.can('sankirtan:view') || auth.can('sankirtan:manage')
+  if (!full && !auth.can('newsletter:manage')) {
     location.replace(new URL('../', location.href).href)
     throw new Error('redirecting')
   }
@@ -138,13 +150,14 @@ preloads:
     }))
   }
 
-  const VALID_TABS = ['catalog', 'sessions', 'leaderboard', 'metrics', 'events', 'order']
+  const VALID_TABS = full ? ['catalog', 'sessions', 'leaderboard', 'metrics', 'events', 'newsletter', 'order'] : ['newsletter']
   const urlTab = () => {
     const t = new URLSearchParams(location.search).get('tab')
-    return VALID_TABS.includes(t) ? t : 'catalog'
+    return VALID_TABS.includes(t) ? t : VALID_TABS[0]
   }
 
   const s = init({
+    full,
     activeTab: urlTab(),
     loading: false,
     loadErr: null,
@@ -170,6 +183,10 @@ preloads:
     eventsLoaded: false,
     eventsLoading: false,
     eventsErr: null,
+    newsletters: [],
+    newslettersLoaded: false,
+    newslettersLoading: false,
+    newslettersErr: null,
 
     setOrders(list) {
       s.orders = list || []
@@ -213,6 +230,7 @@ preloads:
       if (tab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
       if (tab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
       if (tab === 'events' && !s.eventsLoaded) s.loadEvents()
+      if (tab === 'newsletter' && !s.newslettersLoaded) s.loadNewsletters()
     },
 
     async loadPlaceAliases() {
@@ -246,6 +264,20 @@ preloads:
         s.eventsErr = e.message || 'Failed to load events'
       } finally {
         s.eventsLoading = false
+      }
+    },
+
+    async loadNewsletters() {
+      s.newslettersLoading = true
+      s.newslettersErr = null
+      try {
+        if (!api.listNewsletters) throw new Error('A newer version of Mandir is available — please hard-refresh the page')
+        s.newsletters = await api.listNewsletters() || []
+        s.newslettersLoaded = true
+      } catch (e) {
+        s.newslettersErr = e.message || 'Failed to load the newsletter'
+      } finally {
+        s.newslettersLoading = false
       }
     },
 
@@ -331,11 +363,15 @@ preloads:
     if (s.activeTab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
     if (s.activeTab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
     if (s.activeTab === 'events' && !s.eventsLoaded) s.loadEvents()
+    if (s.activeTab === 'newsletter' && !s.newslettersLoaded) s.loadNewsletters()
   })
 
-  s.loadBooks()
-  s.loadOrders()
-  s.loadSessions()           // header totals need every session, whatever tab opens first
-  s.loadPlaceAliases()
+  if (full) {
+    s.loadBooks()
+    s.loadOrders()
+    s.loadSessions()         // header totals need every session, whatever tab opens first
+    s.loadPlaceAliases()
+  }
   if (s.activeTab === 'events') s.loadEvents()
+  if (s.activeTab === 'newsletter') s.loadNewsletters()
 </script>
