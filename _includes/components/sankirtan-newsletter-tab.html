@@ -232,20 +232,14 @@
 
                 <form :onsubmit.prevent="saveText(lang)">
                   <div class="field">
-                    <label :for="'nl-title-' + lang">Title <span class="dim" style="font-weight:normal">(optional)</span></label>
+                    <label :for="'nl-title-' + lang">Title <span class="dim" style="font-weight:normal">(optional — shown above the newsletter on the website)</span></label>
                     <input type="text" :id="'nl-title-' + lang" :disabled="!canmanage"
-                      :placeholder="lang === 'en' ? 'e.g. The Sacred Month of Kārtika' : 'ex. Le mois sacré de Kārtika'"
+                      :placeholder="lang === 'en' ? 'The headline on the cover, e.g. Festival of Lights' : 'Le titre de la une, ex. Fête des lumières'"
                       :value="text[lang].title" :oninput="e => setText(lang, 'title', e.target.value)">
-                  </div>
-                  <div class="field">
-                    <label :for="'nl-summary-' + lang">Summary <span class="dim" style="font-weight:normal">(optional, two lines)</span></label>
-                    <textarea rows="2" :id="'nl-summary-' + lang" :disabled="!canmanage"
-                      :value="text[lang].summary" :oninput="e => setText(lang, 'summary', e.target.value)"></textarea>
-                    <p class="nl-hint">Shown above the newsletter on the website and in link previews.</p>
                   </div>
                   <div :hidden="!canmanage" class="nl-actions" style="margin-top:var(--s-sm)">
                     <button type="submit" class="btn btn-primary btn-sm" :disabled="!text[lang].dirty"
-                      :class="{'btn-loading': text[lang].saving}">Save title and summary</button>
+                      :class="{'btn-loading': text[lang].saving}">Save title</button>
                   </div>
                 </form>
               </div>
@@ -279,7 +273,7 @@
       this.over = null
       this.sched = { issue: '', publish: '', dirty: false, saving: false }
       this.up = { en: { busy: false, pct: 0, err: '' }, fr: { busy: false, pct: 0, err: '' } }
-      this.text = { en: { title: '', summary: '', dirty: false, saving: false }, fr: { title: '', summary: '', dirty: false, saving: false } }
+      this.text = { en: { title: '', dirty: false, saving: false }, fr: { title: '', dirty: false, saving: false } }
 
       // Runs inside the parent's binding effect: defer, or the reads below subscribe it and loop.
       this.onpropchange = function(k, v) {
@@ -372,7 +366,7 @@
         self.cur = n
         if (!self.sched.dirty) self.sched = { issue: n.issue || '', publish: self.toLocalInput(n.publish_at), dirty: false, saving: false }
         self.LANGS.forEach(function(l) {
-          if (!self.text[l].dirty) self.text[l] = { title: (n[l] && n[l].title) || '', summary: (n[l] && n[l].summary) || '', dirty: false, saving: false }
+          if (!self.text[l].dirty) self.text[l] = { title: (n[l] && n[l].title) || '', dirty: false, saving: false }
         })
       }
       this._syncUrl = function(id) {
@@ -383,7 +377,7 @@
       }
       this.openIssue = function(n) {
         this.sched = { issue: '', publish: '', dirty: false, saving: false }
-        this.text = { en: { title: '', summary: '', dirty: false, saving: false }, fr: { title: '', summary: '', dirty: false, saving: false } }
+        this.text = { en: { title: '', dirty: false, saving: false }, fr: { title: '', dirty: false, saving: false } }
         this.up = { en: { busy: false, pct: 0, err: '' }, fr: { busy: false, pct: 0, err: '' } }
         this.confirmDelete = false
         this.confirmLang = null
@@ -521,9 +515,9 @@
         var self = this
         var t = self.text[lang]
         t.saving = true
-        self.api.updateNewsletterEdition(self.curId, lang, { title: t.title.trim(), summary: t.summary.trim() })
+        self.api.updateNewsletterEdition(self.curId, lang, { title: t.title.trim() })
           .then(function(res) {
-            self.text[lang] = { title: t.title.trim(), summary: t.summary.trim(), dirty: false, saving: false }
+            self.text[lang] = { title: t.title.trim(), dirty: false, saving: false }
             self._applied(res)
             self.toast && self.toast('Saved', 'success')
           })

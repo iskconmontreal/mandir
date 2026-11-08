@@ -64,8 +64,8 @@ test.describe('e2e: sankirtan newsletter', () => {
     await expect(page.locator('.nl-edition[data-lang="fr"]')).toContainText('Missing')
 
     await page.fill('#nl-title-en', marker)
-    await page.getByRole('button', { name: 'Save title and summary' }).first().click()
-    await expect(page.getByRole('button', { name: 'Save title and summary' }).first()).toBeDisabled()
+    await page.getByRole('button', { name: 'Save title' }).first().click()
+    await expect(page.getByRole('button', { name: 'Save title' }).first()).toBeDisabled()
 
     await page.getByRole('button', { name: 'Publish now' }).click()
     await expect(page.locator('.nl-head .nl-next')).toContainText('On the website now')
