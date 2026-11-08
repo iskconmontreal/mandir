@@ -24,8 +24,10 @@
       }
       .nl-row:hover { border-color: var(--c-accent); }
       .nl-thumb {
-        width: 3.5rem;
-        height: 3.5rem;
+        --nl-scale: 0.12;
+        width: calc(600px * var(--nl-scale));
+        height: calc(800px * var(--nl-scale));
+        overflow: hidden;
         flex-shrink: 0;
         border-radius: var(--r-sm);
         border: 1px solid var(--c-border);
@@ -37,6 +39,18 @@
         justify-content: center;
         font-size: var(--f-xs);
         color: var(--c-text-dim);
+      }
+      .nl-thumb-page { display: block; }
+      .nl-thumb iframe {
+        width: 600px;
+        height: 800px;
+        border: 0;
+        transform: scale(var(--nl-scale));
+        transform-origin: top left;
+        pointer-events: none;
+        background: var(--c-white);
+        align-self: flex-start;
+        flex-shrink: 0;
       }
       .nl-main { flex: 1; min-width: 0; }
       .nl-month { font-weight: var(--f-wt-b); }
@@ -111,9 +125,12 @@
           <div :each="g in years()">
             <div class="section-label" :text="g.year"></div>
             <div class="nl-list">
-              <button :each="n in g.items" type="button" class="card nl-row" :onclick="openIssue(n)">
+              <div :each="n in g.items" class="card nl-row" role="button" tabindex="0" :onclick="openIssue(n)" :onkeydown.enter="openIssue(n)">
                 <img :if="coverOf(n)" class="nl-thumb" alt="" :src="coverOf(n)">
-                <span :if="!coverOf(n)" class="nl-thumb">—</span>
+                <span :if="!coverOf(n) && pageOf(n)" class="nl-thumb nl-thumb-page">
+                  <iframe sandbox scrolling="no" tabindex="-1" loading="lazy" title="" :src="pageOf(n)"></iframe>
+                </span>
+                <span :if="!coverOf(n) && !pageOf(n)" class="nl-thumb">No zip</span>
                 <span class="nl-main">
                   <span class="nl-month" :text="monthName(n.issue)"></span>
                   <span class="nl-title" style="display:block"
@@ -125,7 +142,7 @@
                   <span class="nl-state" :class="'nl-state-' + stateOf(n)"
                     :text="{ draft: 'Draft', scheduled: 'Scheduled for ' + fmtWhen(n.publish_at), published: 'Published' }[stateOf(n)]"></span>
                 </span>
-              </button>
+              </div>
             </div>
           </div>
         </div>
@@ -178,13 +195,13 @@
                 <span class="badge badge-sm" :class="ed(lang) ? 'badge-paid' : 'cat-gray'" :text="ed(lang) ? 'Uploaded' : 'Missing'"></span>
               </h3>
 
-              <input type="file" accept=".zip,application/zip" style="display:none" :id="'nl-zip-' + lang"
+              <input type="file" style="display:none" :id="'nl-zip-' + lang"
                 :onchange="e => { pickZip(lang, e.target.files[0]); e.target.value = '' }">
 
               <div :hidden="!!ed(lang) || !canmanage" class="nl-drop" :class="{'is-over': over === lang}"
                 :ondragover.prevent="e => dragOver(lang)"
                 :ondragleave="e => dragOver(null)"
-                :ondrop.prevent="e => { dragOver(null); pickZip(lang, e.dataTransfer.files[0]) }"
+                :ondrop.prevent="e => { dragOver(null); pickZip(lang, e.dataTransfer.files[0], e.dataTransfer.items[0]?.webkitGetAsEntry?.()?.isDirectory) }"
                 :onclick="browse(lang)">
                 <strong>Drop Canva's HTML zip here</strong>
                 or tap to choose the file
@@ -323,6 +340,11 @@
         var c = (n.en && n.en.cover) || (n.fr && n.fr.cover)
         return c && this.api.newsletterFileUrl ? this.api.newsletterFileUrl(c) : ''
       }
+      // No cover image: the list shows a scaled-down render of the newsletter's first screen.
+      this.pageOf = function(n) {
+        var h = (n.en && n.en.html) || (n.fr && n.fr.html)
+        return h && this.api.newsletterFileUrl ? this.api.newsletterFileUrl(h) : ''
+      }
       this.years = function() {
         var by = {}
         ;(this.issues || []).slice()
@@ -439,15 +461,15 @@
         el && el.click()
       }
       this.dragOver = function(lang) { this.over = lang }
-      this.pickZip = function(lang, file) {
+      this.pickZip = function(lang, file, isFolder) {
         var self = this
         if (!file || self.up[lang].busy) return
         if (!self.api.uploadNewsletterZip) {
           self.up[lang].err = 'A newer version of Mandir is available — please hard-refresh the page'
           return
         }
-        if (!/\.zip$/i.test(file.name || '')) {
-          self.up[lang].err = 'That is not a zip file. In Canva, choose Share → Download → HTML, then drop the .zip file here.'
+        if (isFolder || !/\.zip$/i.test(file.name || '')) {
+          self.up[lang].err = 'That is not a zip file. If your Mac opened Canva\'s download as a folder: right-click the folder in Finder → Compress, then drop the new .zip here.'
           return
         }
         if (file.size > self.MAX_ZIP) {
