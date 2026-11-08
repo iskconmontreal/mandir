@@ -24,4 +24,5 @@ exclude:
   - .mcp_data
   - .well-known
   - "*.xlsx"
+  - "*.zip"
   - "sankirtan-sessions-backup-*.json"
