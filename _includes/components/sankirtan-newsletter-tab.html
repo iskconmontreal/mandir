@@ -98,6 +98,10 @@
           <div :hidden="!canmanage" style="display:flex; justify-content:flex-end; margin-bottom:var(--s-md)">
             <button type="button" class="btn btn-primary" :class="{'btn-loading': creating}" :onclick="createIssue()">+ New issue</button>
           </div>
+          <div :hidden="canmanage" class="nl-next" style="margin:0 0 var(--s-md)">
+            To add an issue and upload Canva's zip, you need the <strong>newsletter:manage</strong> permission.
+            Sign out and sign back in; if this message stays, ask an administrator to turn it on in Roles.
+          </div>
 
           <div :hidden="!(loading && !issues.length)" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
           <div :hidden="!(!loading && !issues.length && !error)" class="dim" style="padding:var(--s-lg); text-align:center">
