@@ -94,11 +94,11 @@
       .nl-preview {
         border: 1px solid var(--c-border);
         border-radius: var(--r-sm);
-        overflow: auto;
+        overflow: hidden;
         height: 70vh;
         background: var(--c-white);
       }
-      .nl-preview iframe { width: 600px; height: 100%; border: 0; display: block; margin: 0 auto; }
+      .nl-preview iframe { width: 600px; border: 0; display: block; margin: 0 auto; transform-origin: top left; }
       .nl-edition .field { margin-top: var(--s-md); }
       .nl-edition textarea { resize: vertical; }
     </style>
@@ -166,14 +166,10 @@
                     :value="sched.publish" :oninput="e => setSched('publish', e.target.value)">
                 </div>
               </div>
-              <p class="nl-hint">Set this to the Mailchimp send time. Leave it empty to keep the issue as a draft.</p>
+              <p class="nl-hint">The newsletter appears on the website at this time — set it to the Mailchimp send time, or to now. Empty = not on the website yet.</p>
               <div :hidden="!canmanage" class="nl-actions">
                 <button type="submit" class="btn btn-primary btn-sm" :disabled="!sched.dirty"
                   :class="{'btn-loading': sched.saving}">Save</button>
-                <button type="button" class="btn btn-outline btn-sm" :disabled="!hasEdition()"
-                  :title="hasEdition() ? '' : 'Upload a zip first'" :onclick="publishNow()">Publish now</button>
-                <button type="button" class="btn-link" style="font-size:var(--f-sm)" :hidden="!sched.publish"
-                  :onclick="setSched('publish', '')">Make it a draft</button>
               </div>
             </form>
             <div class="nl-next" :text="(() => {
@@ -182,9 +178,9 @@
               if (!cur.en && !cur.fr) return 'Next: drop the English zip from Canva into the English card below.'
               if (st === 'published') return cur.fr && cur.en ? 'On the website now, in English and French.' : 'On the website now. The ' + (cur.en ? 'French' : 'English') + ' version is missing.'
               if (st === 'scheduled') return 'Goes on the website on ' + fmtWhen(cur.publish_at) + ' (Montréal time).'
-              if (!cur.fr) return 'Next: drop the French zip into the Français card, then set Publish on.'
-              if (!cur.en) return 'Next: drop the English zip into the English card, then set Publish on.'
-              return 'Next: set Publish on to the Mailchimp send time, then Save.'
+              if (!cur.fr) return 'Next: drop the French zip into the Français card, then set Publish on and Save.'
+              if (!cur.en) return 'Next: drop the English zip into the English card, then set Publish on and Save.'
+              return 'Next: set Publish on to the Mailchimp send time (or now), then Save.'
             })()"></div>
           </div>
 
@@ -216,8 +212,9 @@
               <div :hidden="!up[lang].err" class="login-error" style="margin-top:var(--s-sm)" :text="up[lang].err"></div>
 
               <div :hidden="!ed(lang)">
-                <div class="nl-preview">
-                  <iframe sandbox title="Newsletter preview" loading="lazy" :src="previewSrc(lang)"></iframe>
+                <div class="nl-preview" :resize="e => setFit(lang, e.width)">
+                  <iframe sandbox="allow-popups allow-popups-to-escape-sandbox" title="Newsletter preview" loading="lazy" :src="previewSrc(lang)"
+                    :style="'transform:scale(' + fit[lang] + ');height:calc(70vh / ' + fit[lang] + ')'"></iframe>
                 </div>
                 <div :hidden="!canmanage" class="nl-actions">
                   <button type="button" class="btn btn-outline btn-sm" :disabled="up[lang].busy" :onclick="browse(lang)">Replace zip</button>
@@ -236,6 +233,11 @@
                     <input type="text" :id="'nl-title-' + lang" :disabled="!canmanage"
                       :placeholder="lang === 'en' ? 'The headline on the cover, e.g. Festival of Lights' : 'Le titre de la une, ex. Fête des lumières'"
                       :value="text[lang].title" :oninput="e => setText(lang, 'title', e.target.value)">
+                    <p class="nl-hint" :hidden="!text[lang].reading">Reading the title from the newsletter…</p>
+                    <p class="nl-hint" :hidden="!text[lang].read || text[lang].reading">Read from the newsletter picture — fix it if it's wrong, then Save.</p>
+                    <p class="nl-hint" :hidden="!canmanage || !!text[lang].title || text[lang].reading">
+                      <button type="button" class="btn-link" style="font-size:var(--f-sm)" :onclick="suggestTitle(lang)">Read it from the newsletter</button>
+                    </p>
                   </div>
                   <div :hidden="!canmanage" class="nl-actions" style="margin-top:var(--s-sm)">
                     <button type="submit" class="btn btn-primary btn-sm" :disabled="!text[lang].dirty"
@@ -274,6 +276,7 @@
       this.sched = { issue: '', publish: '', dirty: false, saving: false }
       this.up = { en: { busy: false, pct: 0, err: '' }, fr: { busy: false, pct: 0, err: '' } }
       this.text = { en: { title: '', dirty: false, saving: false }, fr: { title: '', dirty: false, saving: false } }
+      this.fit = { en: 1, fr: 1 }
 
       // Runs inside the parent's binding effect: defer, or the reads below subscribe it and loop.
       this.onpropchange = function(k, v) {
@@ -378,6 +381,7 @@
       this.openIssue = function(n) {
         this.sched = { issue: '', publish: '', dirty: false, saving: false }
         this.text = { en: { title: '', dirty: false, saving: false }, fr: { title: '', dirty: false, saving: false } }
+        this.fit = { en: 1, fr: 1 }
         this.up = { en: { busy: false, pct: 0, err: '' }, fr: { busy: false, pct: 0, err: '' } }
         this.confirmDelete = false
         this.confirmLang = null
@@ -444,11 +448,6 @@
             self.toast && self.toast(e.message || 'Could not save', 'error')
           })
       }
-      this.publishNow = function() {
-        var now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
-        this.sched.publish = this.toLocalInput(now)
-        this.saveSchedule(now)
-      }
 
       this.browse = function(lang) {
         var el = (this.host || document).querySelector('#nl-zip-' + lang)
@@ -478,6 +477,7 @@
             if (self.curId !== id) return self.emit('reload')
             self._applied(res)
             self.toast && self.toast((lang === 'en' ? 'English' : 'French') + ' version uploaded', 'success')
+            self.suggestTitle(lang)
           })
           .catch(function(e) {
             self.up[lang] = { busy: false, pct: 0, err: e.message || 'Upload failed' }
@@ -511,15 +511,15 @@
         this.text[lang][k] = v
         this.text[lang].dirty = true
       }
-      this.saveText = function(lang) {
+      this.saveText = function(lang, msg) {
         var self = this
         var t = self.text[lang]
         t.saving = true
         self.api.updateNewsletterEdition(self.curId, lang, { title: t.title.trim() })
           .then(function(res) {
-            self.text[lang] = { title: t.title.trim(), dirty: false, saving: false }
+            self.text[lang] = { title: t.title.trim(), dirty: false, saving: false, read: !!t.read }
             self._applied(res)
-            self.toast && self.toast('Saved', 'success')
+            self.toast && self.toast(msg || 'Saved', 'success')
           })
           .catch(function(e) {
             t.saving = false
@@ -527,6 +527,106 @@
           })
       }
 
+      // ── Title read from the newsletter ──────────────────────
+      // Canva draws headlines set in decorative fonts as wide, short image
+      // strips; the first such strip near the top is the headline. OCR it in the
+      // browser (tesseract.js, loaded on first use) and save it as the title.
+      this.setFit = function(lang, w) {
+        if (w < 50) return
+        var f = Math.min(1, Math.round((w / 600) * 1000) / 1000)
+        if (f !== this.fit[lang]) this.fit[lang] = f
+      }
+      // Never Object.assign from sprae state: the copy carries sprae's internal
+      // keys and is then taken for an already-reactive store, so bindings go dead.
+      this._patchText = function(lang, patch) {
+        var t = this.text[lang]
+        var n = { title: t.title, dirty: !!t.dirty, saving: !!t.saving, reading: !!t.reading, read: !!t.read }
+        for (var k in patch) n[k] = patch[k]
+        this.text[lang] = n
+      }
+      this._loadTesseract = function() {
+        if (window.Tesseract) return Promise.resolve(window.Tesseract)
+        if (!this._tess) this._tess = new Promise(function(ok, fail) {
+          var el = document.createElement('script')
+          el.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js'
+          el.onload = function() { ok(window.Tesseract) }
+          el.onerror = function() { fail(new Error('OCR library did not load')) }
+          document.head.appendChild(el)
+        })
+        return this._tess
+      }
+      this._imageSize = function(url) {
+        return new Promise(function(ok) {
+          var im = new Image()
+          im.onload = function() { ok({ url: url, w: im.naturalWidth, h: im.naturalHeight }) }
+          im.onerror = function() { ok(null) }
+          im.src = url
+        })
+      }
+      // Tesseract reads ~35 px letters best and Canva's strips are 3× that, on a
+      // transparent background: redraw on white at that size. Fresh URL: the
+      // preview already cached this image without CORS headers.
+      this._stripCanvas = function(url) {
+        return new Promise(function(ok, fail) {
+          var im = new Image()
+          im.crossOrigin = 'anonymous'
+          im.onload = function() {
+            var k = Math.min(1, 70 / im.naturalHeight)
+            var c = document.createElement('canvas')
+            c.width = Math.round(im.naturalWidth * k)
+            c.height = Math.round(im.naturalHeight * k)
+            var g = c.getContext('2d')
+            g.fillStyle = '#fff'
+            g.fillRect(0, 0, c.width, c.height)
+            g.drawImage(im, 0, 0, c.width, c.height)
+            ok(c)
+          }
+          im.onerror = function() { fail(new Error('Could not load the picture')) }
+          im.src = url + '?ocr'
+        })
+      }
+      this._headlineStrip = function(htmlUrl) {
+        var self = this
+        return fetch(htmlUrl).then(function(r) { return r.text() }).then(function(html) {
+          var doc = new DOMParser().parseFromString(html, 'text/html')
+          var srcs = Array.prototype.slice.call(doc.images, 0, 8)
+            .map(function(i) { return i.getAttribute('src') }).filter(Boolean)
+          return Promise.all(srcs.map(function(src) { return self._imageSize(new URL(src, htmlUrl).href) }))
+        }).then(function(sizes) {
+          return sizes.filter(function(x) { return x && x.w >= 500 && x.h <= 320 && x.w / x.h >= 3.5 })[0] || null
+        })
+      }
+      this.suggestTitle = function(lang) {
+        var self = this
+        var e = self.ed(lang)
+        var id = self.curId
+        if (!e || !e.html || !self.api.newsletterFileUrl || self.text[lang].title || self.text[lang].reading) return
+        self._patchText(lang, { reading: true })
+        self._headlineStrip(self.api.newsletterFileUrl(e.html))
+          .then(function(strip) {
+            if (!strip) return ''
+            return Promise.all([self._loadTesseract(), self._stripCanvas(strip.url)])
+              .then(function(x) {
+                var T = x[0], canvas = x[1]
+                return T.createWorker(lang === 'fr' ? 'fra' : 'eng').then(function(w) {
+                  return w.setParameters({ tessedit_pageseg_mode: (T.PSM && T.PSM.SINGLE_LINE) || '7' })
+                    .then(function() { return w.recognize(canvas) })
+                    .then(function(r) { w.terminate(); return r })
+                })
+              })
+              .then(function(r) {
+                return (r.data.text || '').replace(/\s+/g, ' ').trim()
+                  .replace(/^[^\p{L}\p{N}"«]+|[^\p{L}\p{N}!?.)"»]+$/gu, '').slice(0, 120)
+              })
+          })
+          .then(function(title) {
+            if (self.curId !== id) return
+            if ((title.match(/\p{L}/gu) || []).length < 3 || self.text[lang].title) return self._patchText(lang, { reading: false })
+            self.text[lang] = { title: title, dirty: true, saving: false, reading: false, read: true }
+            self.saveText(lang, 'Title read from the newsletter: ' + title)
+          })
+          .catch(function() { self._patchText(lang, { reading: false }) })
+      }
       this.askDelete = function(on) { this.confirmDelete = on }
       this.deleteIssue = function() {
         var self = this

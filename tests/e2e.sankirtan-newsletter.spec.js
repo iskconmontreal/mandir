@@ -67,7 +67,8 @@ test.describe('e2e: sankirtan newsletter', () => {
     await page.getByRole('button', { name: 'Save title' }).first().click()
     await expect(page.getByRole('button', { name: 'Save title' }).first()).toBeDisabled()
 
-    await page.getByRole('button', { name: 'Publish now' }).click()
+    await page.fill('#nl-publish', '2026-01-01T09:00')
+    await page.locator('.nl-head button[type=submit]').click()
     await expect(page.locator('.nl-head .nl-next')).toContainText('On the website now')
 
     await page.getByRole('button', { name: '← All issues' }).click()
