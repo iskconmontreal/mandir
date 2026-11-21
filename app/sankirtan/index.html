@@ -13,7 +13,7 @@ preloads:
     :canmerge="can('settings:manage')" :onaliases="e => savePlaceAliases(e.detail)"></sankirtan-stats>
 </div>
 
-<sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="draftBookIds.length" :full="full"
+<sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="draftBookIds.length" :donationcount="donationsTodo" :full="full"
   :ontabchange="e => switchTab(e.detail)">
 </sankirtan-tab-bar>
 
@@ -78,6 +78,15 @@ preloads:
   :onreload="loadNewsletters">
 </sankirtan-newsletter-tab>
 
+<sankirtan-donations-tab
+  :active="activeTab === 'donations'"
+  :donations="donations"
+  :templeemail="templeEmail"
+  :loading="donationsLoading"
+  :error="donationsErr"
+  :onreload="loadDonations">
+</sankirtan-donations-tab>
+
 <sankirtan-order-tab
   :active="activeTab === 'order'"
   :books="books"
@@ -94,6 +103,7 @@ preloads:
 {% include components/sankirtan-metrics-tab.html %}
 {% include components/sankirtan-events-tab.html %}
 {% include components/sankirtan-newsletter-tab.html %}
+{% include components/sankirtan-donations-tab.html %}
 {% include components/sankirtan-order-tab.html %}
 
 <script type="module">
@@ -150,7 +160,7 @@ preloads:
     }))
   }
 
-  const VALID_TABS = full ? ['catalog', 'sessions', 'leaderboard', 'metrics', 'events', 'newsletter', 'order'] : ['newsletter']
+  const VALID_TABS = full ? ['catalog', 'sessions', 'leaderboard', 'metrics', 'events', 'newsletter', 'donations', 'order'] : ['newsletter']
   const urlTab = () => {
     const t = new URLSearchParams(location.search).get('tab')
     return VALID_TABS.includes(t) ? t : VALID_TABS[0]
@@ -187,6 +197,28 @@ preloads:
     newslettersLoaded: false,
     newslettersLoading: false,
     newslettersErr: null,
+    donations: [],           // website sponsorships (goloka's donations register)
+    donationsLoading: false,
+    donationsErr: null,
+    donationsTodo: 0,        // to verify + to send to the temple: the tab's counter
+    templeEmail: '',
+
+    async loadDonations() {
+      if (!auth.can('sankirtan:manage')) return
+      s.donationsLoading = true
+      s.donationsErr = null
+      try {
+        if (!api.listSankirtanDonations) throw new Error('A newer version of Mandir is available — please hard-refresh the page')
+        const res = await api.listSankirtanDonations()
+        s.donations = res.donations || []
+        s.templeEmail = res.temple_email || ''
+        s.donationsTodo = s.donations.filter(d => !d.verified_at || (d.tax_receipt_requested && !d.sent_to_temple_at)).length
+      } catch (e) {
+        s.donationsErr = e.message || 'Failed to load donations'
+      } finally {
+        s.donationsLoading = false
+      }
+    },
 
     setOrders(list) {
       s.orders = list || []
@@ -371,6 +403,7 @@ preloads:
     s.loadOrders()
     s.loadSessions()         // header totals need every session, whatever tab opens first
     s.loadPlaceAliases()
+    s.loadDonations()        // the tab shows how many wait for a check or for the temple
   }
   if (s.activeTab === 'events') s.loadEvents()
   if (s.activeTab === 'newsletter') s.loadNewsletters()

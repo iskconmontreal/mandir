@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-tab-bar active:string="catalog" canmanage:boolean="false" ordercount:number="0" full:boolean="true">
+  <sankirtan-tab-bar active:string="catalog" canmanage:boolean="false" ordercount:number="0" donationcount:number="0" full:boolean="true">
     <style>:host { display: contents; }</style>
     <template>
       <div class="pill-tabs" style="margin-bottom:var(--s-xl)" role="tablist">
@@ -21,6 +21,10 @@
         <button type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'newsletter'}"
           :onclick="emit('tabchange', 'newsletter')">Newsletter</button>
+        <button :if="full && canmanage" type="button" class="pill-tab" role="tab"
+          :class="{'pill-tab-active': active === 'donations'}"
+          :onclick="emit('tabchange', 'donations')"
+          :text="donationcount ? 'Donations (' + donationcount + ')' : 'Donations'"></button>
         <button :if="full && canmanage" type="button" class="pill-tab" role="tab"
           :class="{'pill-tab-active': active === 'order'}"
           :onclick="emit('tabchange', 'order')"

@@ -1,0 +1,208 @@
+<!-- Donations: book sponsorships from the public website ("Sponsor books").
+     Step 1 — check the money arrived (Interac only; card is proven by Stripe).
+     Step 2 — send those who asked for a tax receipt to the temple office,
+     which issues the receipts itself. -->
+<define-element>
+  <sankirtan-donations-tab active:boolean="false" donations:array templeemail:string="" loading:boolean="false" error:string="">
+    <style>:host { display: contents; }</style>
+    <template>
+      <section :if="active">
+
+        <div :if="error" class="login-error" :text="error"></div>
+
+        <div class="filter-bar" style="margin-bottom:var(--s-md)">
+          <div class="seg-group">
+            <span class="seg" :class="{'seg-active': view === 'all'}" :onclick="setView('all')">All</span>
+            <span class="seg" :class="{'seg-active': view === 'verify'}" :onclick="setView('verify')"
+              :text="'1 · To verify' + (count('verify') ? ' (' + count('verify') + ')' : '')"></span>
+            <span class="seg" :class="{'seg-active': view === 'send'}" :onclick="setView('send')"
+              :text="'2 · To send to the temple' + (count('send') ? ' (' + count('send') + ')' : '')"></span>
+            <span class="seg" :class="{'seg-active': view === 'sent'}" :onclick="setView('sent')">Sent</span>
+          </div>
+        </div>
+
+        <p class="dim" style="margin:0 0 var(--s-lg); font-size:var(--f-sm); max-width:46rem"
+          :text="view === 'verify' ? 'Interac e-Transfers the donor says were sent. Find the bank’s deposit email for the same amount, then press “Money received”. Card payments never appear here: Stripe is the proof.'
+            : view === 'send' ? 'Verified donations whose donor asked for a tax receipt. Tick them and send the list to the temple office' + (templeemail ? ' (' + templeemail + ')' : '') + ' — the temple issues the receipts, once or twice a year.'
+            : view === 'sent' ? 'Already sent to the temple office. Nothing more to do here.'
+            : 'Every sponsorship made on the website. “Anonymous” means the donor asked for no tax receipt, so no personal details were collected.'"></p>
+
+        <!-- Step 2 action -->
+        <div :if="view === 'send' && rows().length" class="card"
+          style="display:flex; align-items:center; gap:var(--s-md); flex-wrap:wrap; padding:var(--s-md); margin-bottom:var(--s-md)">
+          <label style="display:flex; align-items:center; gap:var(--s-xs); cursor:pointer">
+            <input type="checkbox" :checked="allSelected()" :onclick="toggleAll()"> Select all
+          </label>
+          <span class="dim" style="flex:1; font-size:var(--f-sm)"
+            :text="selectedCount() ? selectedCount() + ' selected · $' + fmtAmt(selectedTotal()) : 'Nothing selected'"></span>
+          <button :if="!confirming" type="button" class="btn btn-primary btn-sm" :disabled="!selectedCount()"
+            :onclick="confirming = true"
+            :text="'Send to the temple' + (selectedCount() ? ' (' + selectedCount() + ')' : '')"></button>
+          <span :if="confirming" style="display:inline-flex; align-items:center; gap:var(--s-sm); flex-wrap:wrap">
+            <span style="font-size:var(--f-sm)"
+              :text="'Email ' + selectedCount() + (selectedCount() === 1 ? ' donation' : ' donations') + ' to ' + (templeemail || 'the temple') + '?'"></span>
+            <button type="button" class="btn btn-primary btn-sm" :class="{'btn-loading': sending}" :onclick="send()">Yes, send</button>
+            <button type="button" class="btn-link" style="font-size:var(--f-sm)" :onclick="confirming = false">No</button>
+          </span>
+        </div>
+
+        <div :if="loading" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
+        <div :if="!loading && !error && !rows().length" class="dim" style="padding:var(--s-lg); text-align:center"
+          :text="view === 'verify' ? 'Nothing to verify.' : view === 'send' ? 'Nothing to send.' : view === 'sent' ? 'Nothing sent yet.' : 'No donations yet.'"></div>
+
+        <div :each="d in rows()" class="card donation-card" style="margin-top:var(--s-sm); padding:var(--s-md); cursor:pointer"
+          :onclick="toggle(d)">
+          <div style="display:flex; align-items:center; gap:var(--s-md); flex-wrap:wrap">
+            <span :html="icon('chevron_right')" style="flex-shrink:0; transition:transform .15s"
+              :style="{transform: open[d.ref] ? 'rotate(90deg)' : 'none'}"></span>
+            <input :if="view === 'send'" type="checkbox" style="flex-shrink:0"
+              :checked="!!selected[d.ref]" :onclick.stop="toggleSelect(d)" title="Include in the email to the temple">
+            <div style="flex:1; min-width:9rem; display:flex; flex-direction:column">
+              <span style="font-weight:var(--f-wt-b)" :text="d.donor_name || 'Anonymous'"></span>
+              <span class="dim" style="font-size:var(--f-sm)" :text="[fmtDay(d.occurred_at), d.what, d.ref].filter(Boolean).join(' · ')"></span>
+            </div>
+            <span class="badge" :class="d.method === 'card' ? 'cat-blue' : 'cat-amber'" :text="d.method === 'card' ? 'Card' : 'Interac'"></span>
+            <span :if="d.tax_receipt_requested" class="badge cat-purple">Tax receipt</span>
+            <span :if="!d.verified_at" class="badge cat-amber">To verify</span>
+            <span :if="d.verified_at && !d.sent_to_temple_at" class="badge cat-green">Money received ✓</span>
+            <span :if="d.sent_to_temple_at" class="badge cat-green">Sent to temple ✓</span>
+            <span style="font-weight:var(--f-wt-b); min-width:5rem; text-align:right" :text="'$' + fmtAmt(d.amount_cents)"></span>
+          </div>
+
+          <div :if="open[d.ref]" style="margin-top:var(--s-md); padding-top:var(--s-md); border-top:1px solid var(--c-border); cursor:default"
+            :onclick.stop="0">
+            <div :if="!d.donor_name && !d.donor_email" class="dim" style="font-size:var(--f-sm)">Anonymous — no tax receipt asked, no details collected.</div>
+            <div :each="f in fields(d)" style="display:flex; gap:var(--s-md); font-size:var(--f-sm); padding:2px 0">
+              <span class="dim" style="flex:0 0 7.5rem" :text="f.label"></span>
+              <a :if="f.href" :href="f.href" :target="f.blank ? '_blank' : null" rel="noopener" :text="f.value"></a>
+              <span :if="!f.href" style="min-width:0; overflow-wrap:anywhere" :text="f.value"></span>
+              <button :if="f.copy" type="button" class="btn-link" style="font-size:var(--f-xs)" :onclick.stop="copy(f.value)">copy</button>
+            </div>
+
+            <!-- Step 1: the money -->
+            <div :if="d.method === 'interac' && !d.verified_at"
+              style="display:flex; align-items:center; gap:var(--s-sm); flex-wrap:wrap; margin-top:var(--s-md)">
+              <label :for="'don-amt-' + d.ref" style="font-size:var(--f-sm)">Amount in the bank's email</label>
+              <span class="input-prefix" style="flex:0 0 8rem; width:8rem">
+                <span class="input-prefix-label">$</span>
+                <input :id="'don-amt-' + d.ref" type="text" inputmode="decimal"
+                  :value="amountOf(d)" :oninput="e => setAmount(d, e.target.value)">
+              </span>
+              <button type="button" class="btn btn-primary btn-sm" :class="{'btn-loading': busy[d.ref]}"
+                :onclick.stop="verify(d, true)">Money received</button>
+            </div>
+            <div :if="d.method === 'interac' && d.verified_at && !d.sent_to_temple_at" style="margin-top:var(--s-md)">
+              <button type="button" class="btn-link" style="font-size:var(--f-sm)" :class="{'btn-loading': busy[d.ref]}"
+                :onclick.stop="verify(d, false)">Undo “Money received”</button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </template>
+    <script>
+      // fmtAmt, icon, api, toast injected via setupProcessor
+      this.view = 'all'       // all | verify | send | sent
+      this.open = {}
+      this.selected = {}
+      this.busy = {}
+      this.amounts = {}       // ref → amount typed before "Money received"
+      this.confirming = false
+      this.sending = false
+
+      this.setView = function(v) { this.view = v; this.selected = {}; this.confirming = false }
+      this.is = function(d, v) {
+        if (v === 'verify') return !d.verified_at
+        if (v === 'send') return !!d.verified_at && d.tax_receipt_requested && !d.sent_to_temple_at
+        if (v === 'sent') return !!d.sent_to_temple_at
+        return true
+      }
+      this.rows = function() { var self = this; return (self.donations || []).filter(function(d) { return self.is(d, self.view) }) }
+      this.count = function(v) { var self = this; return (self.donations || []).filter(function(d) { return self.is(d, v) }).length }
+      // Replaced rather than mutated — sprae doesn't track an in-place edit here.
+      this.flip = function(key, ref, on) {
+        var next = Object.assign({}, this[key])
+        if (on === undefined ? next[ref] : !on) delete next[ref]
+        else next[ref] = true
+        this[key] = next
+      }
+      this.toggle = function(d) { this.flip('open', d.ref) }
+      this.toggleSelect = function(d) { this.flip('selected', d.ref); this.confirming = false }
+      this.selectedRows = function() { var self = this; return self.rows().filter(function(d) { return self.selected[d.ref] }) }
+      this.selectedCount = function() { return this.selectedRows().length }
+      this.selectedTotal = function() { return this.selectedRows().reduce(function(n, d) { return n + (d.amount_cents || 0) }, 0) }
+      this.allSelected = function() { var r = this.rows(); return r.length > 0 && this.selectedCount() === r.length }
+      this.toggleAll = function() {
+        var next = {}
+        if (!this.allSelected()) this.rows().forEach(function(d) { next[d.ref] = true })
+        this.selected = next
+        this.confirming = false
+      }
+      this.fmtDay = function(day) {
+        if (!day) return ''
+        return new Date(day.slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+      }
+      this.fmtStamp = function(iso, by) {
+        return iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) + (by ? ' · ' + by : '') : ''
+      }
+      this.fields = function(d) {
+        var address = [d.addr_line1, d.addr_city, d.addr_province, d.addr_postal_code, d.addr_country].filter(Boolean).join(', ')
+        return [
+          { label: 'Full name', value: d.donor_name, copy: true },
+          { label: 'Address', value: address, copy: true },
+          { label: 'Phone', value: d.donor_phone, href: d.donor_phone ? 'tel:' + d.donor_phone.replace(/\s+/g, '') : '' },
+          { label: 'Email', value: d.donor_email, href: d.donor_email ? 'mailto:' + d.donor_email : '' },
+          { label: 'Tax receipt', value: d.tax_receipt_requested ? 'Requested' : 'Not requested' },
+          { label: 'Reference', value: d.ref, copy: true },
+          { label: 'Stripe transaction', value: d.stripe_payment, copy: true },
+          { label: 'Stripe receipt', value: d.stripe_receipt_url ? 'Open the receipt ↗' : '', href: d.stripe_receipt_url, blank: true },
+          { label: 'Money received', value: this.fmtStamp(d.verified_at, d.verified_by) },
+          { label: 'Sent to temple', value: this.fmtStamp(d.sent_to_temple_at, d.sent_to_temple_by) },
+          { label: 'Note', value: d.admin_note },
+        ].filter(function(f) { return f.value })
+      }
+      this.copy = function(text) {
+        var self = this
+        navigator.clipboard && navigator.clipboard.writeText(text).then(function() { self.toast && self.toast('Copied', 'success') })
+      }
+      // not `in`: a sprae store answers true for every key
+      this.amountOf = function(d) { var v = this.amounts[d.ref]; return v != null ? v : ((d.amount_cents || 0) / 100).toFixed(2) }
+      this.setAmount = function(d, v) { this.amounts = Object.assign({}, this.amounts, { [d.ref]: v }) }
+
+      // "Money received": the amount typed is the one the bank reported; a
+      // different figure corrects the row before it is stamped.
+      this.verify = function(d, done) {
+        var self = this
+        if (self.busy[d.ref]) return
+        var cents = Math.round(Number(String(self.amountOf(d)).replace(',', '.')) * 100)
+        if (done && !(cents > 0)) { self.toast && self.toast('Enter the amount received', 'error'); return }
+        self.flip('busy', d.ref, true)
+        var fix = done && cents !== d.amount_cents
+          ? self.api.updateSankirtanDonation(d.ref, { amount_cents: cents })
+          : Promise.resolve()
+        fix.then(function() { return done ? self.api.verifySankirtanDonation(d.ref) : self.api.unverifySankirtanDonation(d.ref) })
+          .then(function() {
+            self.toast && self.toast(done ? 'Marked as received' : 'Back to “to verify”', 'success')
+            self.emit('reload')
+          })
+          .catch(function(e) { self.toast && self.toast(e.message || 'Could not update the donation', 'error') })
+          .finally(function() { self.flip('busy', d.ref, false) })
+      }
+
+      this.send = function() {
+        var self = this
+        var refs = self.selectedRows().map(function(d) { return d.ref })
+        if (!refs.length || self.sending) return
+        self.sending = true
+        self.api.sendSankirtanDonationsToTemple(refs)
+          .then(function(res) {
+            self.toast && self.toast(res.sent + (res.sent === 1 ? ' donation' : ' donations') + ' sent to ' + res.to, 'success')
+            self.selected = {}
+            self.emit('reload')
+          })
+          .catch(function(e) { self.toast && self.toast(e.message || 'The email could not be sent', 'error') })
+          .finally(function() { self.sending = false; self.confirming = false })
+      }
+    </script>
+  </sankirtan-donations-tab>
+</define-element>
