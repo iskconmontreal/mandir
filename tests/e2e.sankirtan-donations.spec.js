@@ -41,9 +41,13 @@ test.describe('e2e: sankirtan donations', () => {
     await mine.getByRole('button', { name: 'Money received' }).click()
     await expect(mine).toHaveCount(0, { timeout: 15_000 })
 
-    // step 2: send to the temple office
+    // step 2: attach the proof, then send to the temple office
     await page.locator('.seg', { hasText: 'To send to the temple' }).click()
     await expect(mine).toContainText('$55.00')
+    await mine.click()
+    await page.setInputFiles(`#don-proof-${interac}`, { name: 'bank deposit.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n') })
+    await expect(mine).toContainText('Proof ✓', { timeout: 15_000 })
+    await expect(mine).toContainText('bank deposit.pdf')
     await mine.locator('input[type=checkbox]').check()
     await page.getByRole('button', { name: /Send to the temple \(1\)/ }).click()
     await page.getByRole('button', { name: 'Yes, send' }).click()

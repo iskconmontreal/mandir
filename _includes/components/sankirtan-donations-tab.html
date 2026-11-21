@@ -23,7 +23,7 @@
 
         <p class="dim" style="margin:0 0 var(--s-lg); font-size:var(--f-sm); max-width:46rem"
           :text="view === 'verify' ? 'Interac e-Transfers the donor says were sent. Find the bank’s deposit email for the same amount, then press “Money received”. Card payments never appear here: Stripe is the proof.'
-            : view === 'send' ? 'Verified donations whose donor asked for a tax receipt. Tick them and send the list to the temple office' + (templeemail ? ' (' + templeemail + ')' : '') + ' — the temple issues the receipts, once or twice a year.'
+            : view === 'send' ? 'Verified donations whose donor asked for a tax receipt. Open one to attach its proof (PDF or screenshot), then tick them and send the list to the temple office' + (templeemail ? ' (' + templeemail + ')' : '') + ' — the temple issues the receipts, once or twice a year.'
             : view === 'sent' ? 'Already sent to the temple office. Nothing more to do here.'
             : 'Every sponsorship made on the website. “Anonymous” means the donor asked for no tax receipt, so no personal details were collected.'"></p>
 
@@ -63,6 +63,7 @@
             </div>
             <span class="badge" :class="d.method === 'card' ? 'cat-blue' : 'cat-amber'" :text="d.method === 'card' ? 'Card' : 'Interac'"></span>
             <span :if="d.tax_receipt_requested" class="badge cat-purple">Tax receipt</span>
+            <span :if="d.proof_name" class="badge cat-gray" title="A proof is attached">Proof ✓</span>
             <span :if="!d.verified_at" class="badge cat-amber">To verify</span>
             <span :if="d.verified_at && !d.sent_to_temple_at" class="badge cat-green">Money received ✓</span>
             <span :if="d.sent_to_temple_at" class="badge cat-green">Sent to temple ✓</span>
@@ -77,6 +78,22 @@
               <a :if="f.href" :href="f.href" :target="f.blank ? '_blank' : null" rel="noopener" :text="f.value"></a>
               <span :if="!f.href" style="min-width:0; overflow-wrap:anywhere" :text="f.value"></span>
               <button :if="f.copy" type="button" class="btn-link" style="font-size:var(--f-xs)" :onclick.stop="copy(f.value)">copy</button>
+            </div>
+
+            <!-- The proof that travels to the temple with this donation -->
+            <div style="display:flex; align-items:center; gap:var(--s-sm); flex-wrap:wrap; font-size:var(--f-sm); padding:var(--s-xs) 0">
+              <span class="dim" style="flex:0 0 7.5rem">Proof</span>
+              <button :if="d.proof_name" type="button" class="btn-link" style="font-size:var(--f-sm)"
+                :onclick.stop="openProof(d)" :text="d.proof_name"></button>
+              <span :if="!d.proof_name" class="dim"
+                :text="d.method === 'card' ? 'None — the Stripe receipt as a PDF or a screenshot' : 'None — a screenshot or PDF of the bank’s deposit email'"></span>
+              <label class="btn btn-outline btn-sm" style="cursor:pointer" :class="{'btn-loading': busy[d.ref]}">
+                <span :text="d.proof_name ? 'Replace' : 'Attach a file'"></span>
+                <input type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden
+                  :id="'don-proof-' + d.ref" :onchange="e => attachProof(d, e.target)">
+              </label>
+              <button :if="d.proof_name" type="button" class="btn-link" style="font-size:var(--f-sm)"
+                :onclick.stop="removeProof(d)">Remove</button>
             </div>
 
             <!-- Step 1: the money -->
@@ -187,6 +204,29 @@
           })
           .catch(function(e) { self.toast && self.toast(e.message || 'Could not update the donation', 'error') })
           .finally(function() { self.flip('busy', d.ref, false) })
+      }
+
+      // One PDF or picture per donation; it is attached to the temple's email.
+      this.attachProof = function(d, input) {
+        var self = this, file = input.files && input.files[0]
+        input.value = ''
+        if (!file || self.busy[d.ref]) return
+        if (file.size > 5 * 1024 * 1024) { self.toast && self.toast('File too large — 5 MB at most', 'error'); return }
+        self.flip('busy', d.ref, true)
+        self.api.uploadSankirtanDonationProof(d.ref, file)
+          .then(function() { self.toast && self.toast('Proof attached', 'success'); self.emit('reload') })
+          .catch(function(e) { self.toast && self.toast(e.message || 'Could not attach the file', 'error') })
+          .finally(function() { self.flip('busy', d.ref, false) })
+      }
+      this.openProof = function(d) {
+        var self = this
+        self.api.openSankirtanDonationProof(d.ref).catch(function(e) { self.toast && self.toast(e.message || 'Could not open the file', 'error') })
+      }
+      this.removeProof = function(d) {
+        var self = this
+        self.api.deleteSankirtanDonationProof(d.ref)
+          .then(function() { self.toast && self.toast('Proof removed', 'success'); self.emit('reload') })
+          .catch(function(e) { self.toast && self.toast(e.message || 'Could not remove the file', 'error') })
       }
 
       this.send = function() {
