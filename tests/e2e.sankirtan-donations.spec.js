@@ -32,9 +32,14 @@ test.describe('e2e: sankirtan donations', () => {
     await expect(anon).toContainText('Anonymous')
     await expect(anon).toContainText('Money received')
 
+    // a test row is deleted for good
+    await anon.click()
+    await anon.getByRole('button', { name: 'Delete' }).click()
+    await anon.getByRole('button', { name: 'Yes, delete' }).click()
+    await expect(anon).toHaveCount(0, { timeout: 15_000 })
+
     // step 1: the bank says 55 $, not 50 $
     await page.locator('.seg', { hasText: 'To verify' }).click()
-    await expect(page.locator('.donation-card', { hasText: card })).toHaveCount(0)
     await mine.click()
     await expect(mine.locator(`#don-amt-${interac}`)).toHaveValue('50.00')
     await mine.locator(`#don-amt-${interac}`).fill('55')
@@ -55,5 +60,8 @@ test.describe('e2e: sankirtan donations', () => {
 
     await page.locator('.seg', { hasText: 'Sent' }).click()
     await expect(mine).toContainText('Sent to temple')
+    // what went to the temple can no longer be deleted
+    await mine.click()
+    await expect(mine.getByRole('button', { name: 'Delete' })).toHaveCount(0)
   })
 })

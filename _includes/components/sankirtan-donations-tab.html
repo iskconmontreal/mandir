@@ -112,6 +112,19 @@
               <button type="button" class="btn-link" style="font-size:var(--f-sm)" :class="{'btn-loading': busy[d.ref]}"
                 :onclick.stop="verify(d, false)">Undo “Money received”</button>
             </div>
+
+            <!-- A test, or a payment refunded in Stripe -->
+            <div :if="!d.sent_to_temple_at" style="display:flex; align-items:center; gap:var(--s-sm); flex-wrap:wrap; margin-top:var(--s-md)">
+              <button :if="!confirmDel[d.ref]" type="button" class="btn btn-outline btn-sm" style="color:var(--c-err)"
+                :onclick.stop="askDelete(d, true)">Delete</button>
+              <span :if="confirmDel[d.ref]" style="display:inline-flex; align-items:center; gap:var(--s-xs); flex-wrap:wrap">
+                <span class="dim" style="font-size:var(--f-sm)"
+                  :text="d.method === 'card' ? 'Delete this row? Only for a test, or after refunding it in Stripe.' : 'Delete this row? Only for a test or a mistake.'"></span>
+                <button type="button" class="btn btn-danger btn-sm" :class="{'btn-loading': busy[d.ref]}"
+                  :onclick.stop="remove(d)">Yes, delete</button>
+                <button type="button" class="btn-link" style="font-size:var(--f-sm)" :onclick.stop="askDelete(d, false)">No</button>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -126,6 +139,7 @@
       this.amounts = {}       // ref → amount typed before "Money received"
       this.confirming = false
       this.sending = false
+      this.confirmDel = {}    // ref → the "Delete this row?" question is showing
 
       this.setView = function(v) { this.view = v; this.selected = {}; this.confirming = false }
       this.is = function(d, v) {
@@ -227,6 +241,19 @@
         self.api.deleteSankirtanDonationProof(d.ref)
           .then(function() { self.toast && self.toast('Proof removed', 'success'); self.emit('reload') })
           .catch(function(e) { self.toast && self.toast(e.message || 'Could not remove the file', 'error') })
+      }
+
+      this.askDelete = function(d, on) { this.flip('confirmDel', d.ref, on) }
+      // A card row deleted without a refund comes back: the website's nightly
+      // job re-sends every paid, un-refunded sponsorship of the last 7 days.
+      this.remove = function(d) {
+        var self = this
+        if (self.busy[d.ref]) return
+        self.flip('busy', d.ref, true)
+        self.api.deleteSankirtanDonation(d.ref)
+          .then(function() { self.toast && self.toast('Donation deleted', 'success'); self.emit('reload') })
+          .catch(function(e) { self.toast && self.toast(e.message || 'Could not delete the donation', 'error') })
+          .finally(function() { self.flip('busy', d.ref, false); self.flip('confirmDel', d.ref, false) })
       }
 
       this.send = function() {
