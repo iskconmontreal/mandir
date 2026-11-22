@@ -473,7 +473,7 @@
             self.publishing = null
             self.sched.publish = self.toLocalInput(at)
             self._applied(res)
-            self.toast && self.toast(on ? 'Published on the website' : 'Taken off the website — now a draft', 'success')
+            self.toast && self.toast(on ? 'Published — on the website within a minute' : 'Unpublished — off the website within a minute', 'success')
           })
           .catch(function(e) {
             self.publishing = null
