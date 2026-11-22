@@ -63,7 +63,10 @@
 
       .nl-back { margin-bottom: var(--s-md); }
       .nl-head { padding: var(--s-md) var(--s-lg); margin-bottom: var(--s-lg); }
-      .nl-head h2 { margin: 0 0 var(--s-md); font-size: var(--f-lg); }
+      .nl-head h2 { margin: 0; font-size: var(--f-lg); }
+      .nl-pub { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-sm); margin-bottom: var(--s-md); }
+      .nl-pub h2 { flex: 1; }
+      .nl-pub .nl-state { font-size: var(--f-sm); }
       .nl-head .form-row { align-items: flex-end; }
       .nl-hint { font-size: var(--f-sm); color: var(--c-text-dim); margin: var(--s-xs) 0 0; }
       .nl-next {
@@ -152,25 +155,31 @@
           <button type="button" class="btn-link nl-back" style="color:var(--c-text-dim)" :onclick="closeIssue()">← All issues</button>
 
           <div class="card nl-head">
-            <h2 :text="cur ? monthName(cur.issue) : ''"></h2>
+            <div class="nl-pub">
+              <h2 :text="cur ? monthName(cur.issue) : ''"></h2>
+              <span class="nl-state" :class="'nl-state-' + stateOf(cur)"
+                :text="{ draft: 'Draft — not on the website', scheduled: 'Scheduled for ' + fmtWhen(cur && cur.publish_at), published: 'Published' }[stateOf(cur)]"></span>
+              <button type="button" class="btn btn-primary btn-sm nl-pub-on" :hidden="!canmanage || stateOf(cur) === 'published'"
+                :disabled="!cur || !(cur.en || cur.fr)" :title="cur && (cur.en || cur.fr) ? '' : 'Upload a zip first'"
+                :class="{'btn-loading': publishing === 'on'}" :onclick="setPublished(true)">Publish now</button>
+              <button type="button" class="btn btn-outline btn-sm nl-pub-off" :hidden="!canmanage || stateOf(cur) === 'draft'"
+                :class="{'btn-loading': publishing === 'off'}" :onclick="setPublished(false)"
+                :text="stateOf(cur) === 'scheduled' ? 'Cancel schedule' : 'Unpublish'"></button>
+            </div>
             <form :onsubmit.prevent="saveSchedule()">
               <div class="form-row">
                 <div class="field">
                   <label for="nl-issue">Month</label>
                   <input id="nl-issue" type="month" required :disabled="!canmanage"
-                    :value="sched.issue" :oninput="e => setSched('issue', e.target.value)">
+                    :value="sched.issue" :oninput="e => setSched('issue', e.target.value)" :onblur="autoSave()">
                 </div>
                 <div class="field">
                   <label for="nl-publish">Publish on <span class="dim" style="font-weight:normal">(Montréal time)</span></label>
                   <input id="nl-publish" type="datetime-local" :disabled="!canmanage"
-                    :value="sched.publish" :oninput="e => setSched('publish', e.target.value)">
+                    :value="sched.publish" :oninput="e => setSched('publish', e.target.value)" :onblur="autoSave()">
                 </div>
               </div>
-              <p class="nl-hint">The newsletter appears on the website at this time — set it to the Mailchimp send time, or to now. Empty = not on the website yet.</p>
-              <div :hidden="!canmanage" class="nl-actions">
-                <button type="submit" class="btn btn-primary btn-sm" :disabled="!sched.dirty"
-                  :class="{'btn-loading': sched.saving}">Save</button>
-              </div>
+              <p class="nl-hint" :text="sched.saving ? 'Saving…' : 'To schedule, set this to the Mailchimp send time — the newsletter appears on the website at that time. Changes save by themselves. Or use Publish now / Unpublish above.'"></p>
             </form>
             <div class="nl-next" :text="(() => {
               if (!cur) return ''
@@ -178,9 +187,9 @@
               if (!cur.en && !cur.fr) return 'Next: drop the English zip from Canva into the English card below.'
               if (st === 'published') return cur.fr && cur.en ? 'On the website now, in English and French.' : 'On the website now. The ' + (cur.en ? 'French' : 'English') + ' version is missing.'
               if (st === 'scheduled') return 'Goes on the website on ' + fmtWhen(cur.publish_at) + ' (Montréal time).'
-              if (!cur.fr) return 'Next: drop the French zip into the Français card, then set Publish on and Save.'
-              if (!cur.en) return 'Next: drop the English zip into the English card, then set Publish on and Save.'
-              return 'Next: set Publish on to the Mailchimp send time (or now), then Save.'
+              if (!cur.fr) return 'Next: drop the French zip into the Français card, then Publish now or schedule it.'
+              if (!cur.en) return 'Next: drop the English zip into the English card, then Publish now or schedule it.'
+              return 'Next: Publish now, or set Publish on to the Mailchimp send time.'
             })()"></div>
           </div>
 
@@ -272,6 +281,7 @@
       this.confirmDelete = false
       this.confirmLang = null
       this.removing = null
+      this.publishing = null
       this.over = null
       this.sched = { issue: '', publish: '', dirty: false, saving: false }
       this.up = { en: { busy: false, pct: 0, err: '' }, fr: { busy: false, pct: 0, err: '' } }
@@ -426,6 +436,9 @@
         this.sched[k] = v
         this.sched.dirty = true
       }
+      this.autoSave = function() {
+        if (this.sched.dirty && !this.sched.saving) this.saveSchedule()
+      }
       this.saveSchedule = function(publishAt) {
         var self = this
         if (self._staleApi()) return
@@ -445,6 +458,25 @@
           })
           .catch(function(e) {
             self.sched.saving = false
+            self.toast && self.toast(e.message || 'Could not save', 'error')
+          })
+      }
+
+      // Publish switch: publish_at = now puts the issue on the website, null takes it off.
+      this.setPublished = function(on) {
+        var self = this
+        if (self._staleApi() || self.publishing || !self.cur) return
+        var at = on ? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') : null
+        self.publishing = on ? 'on' : 'off'
+        self.api.updateNewsletter(self.curId, { issue: self.cur.issue, publish_at: at })
+          .then(function(res) {
+            self.publishing = null
+            self.sched.publish = self.toLocalInput(at)
+            self._applied(res)
+            self.toast && self.toast(on ? 'Published on the website' : 'Taken off the website — now a draft', 'success')
+          })
+          .catch(function(e) {
+            self.publishing = null
             self.toast && self.toast(e.message || 'Could not save', 'error')
           })
       }

@@ -68,8 +68,14 @@ test.describe('e2e: sankirtan newsletter', () => {
     await expect(page.getByRole('button', { name: 'Save title' }).first()).toBeDisabled()
 
     await page.fill('#nl-publish', '2026-01-01T09:00')
-    await page.locator('.nl-head button[type=submit]').click()
+    await page.locator('#nl-publish').blur()
     await expect(page.locator('.nl-head .nl-next')).toContainText('On the website now')
+
+    await page.locator('.nl-pub-off').click()
+    await expect(page.locator('.nl-pub .nl-state')).toContainText('Draft')
+    await expect(page.locator('#nl-publish')).toHaveValue('')
+    await page.locator('.nl-pub-on').click()
+    await expect(page.locator('.nl-pub .nl-state')).toHaveText('Published')
 
     await page.getByRole('button', { name: '← All issues' }).click()
     const row = page.locator('.nl-row', { hasText: marker })
