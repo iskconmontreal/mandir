@@ -90,14 +90,25 @@
               <button type="button" class="pill-tab" role="tab" :class="{'pill-tab-active': topperiod === 'all'}" :onclick="emit('topperiod', 'all')">All Time</button>
             </div>
           </div>
+          <div :if="(topbooks || []).length" style="display:flex; flex-wrap:wrap; gap:var(--s-sm); margin-bottom:var(--s-sm)">
+            <select aria-label="Language" style="width:auto; font-size:var(--f-sm)" :onchange="e => topLang = e.target.value">
+              <option value="" :selected="!topLang">All languages</option>
+              <option :each="l in topOptions('language')" :value="l" :text="l" :selected="l === topLang"></option>
+            </select>
+            <select aria-label="Cover type" style="width:auto; font-size:var(--f-sm)" :onchange="e => topCover = e.target.value">
+              <option value="" :selected="!topCover">All cover types</option>
+              <option :each="c in topOptions('cover')" :value="c" :text="c" :selected="c === topCover"></option>
+            </select>
+          </div>
           <div :if="toperror" class="login-error" :text="toperror"></div>
           <div :if="toploading" class="dim" style="padding:var(--s-md) 0">Loading…</div>
-          <div :if="!toploading && !toperror && !top.rows.length" class="dim" style="padding:var(--s-md) 0">No books distributed in this period.</div>
+          <div :if="!toploading && !toperror && !top.rows.length" class="dim" style="padding:var(--s-md) 0"
+            :text="topLang || topCover ? 'No books match these filters.' : 'No books distributed in this period.'"></div>
           <div :each="(r, i) in top.rows" class="lang-row">
             <span>
               <span class="dim" style="display:inline-block; min-width:2rem" :text="i + 1"></span>
               <span class="lang-name" :text="r.title"></span>
-              <span class="dim" style="font-size:var(--f-sm)" :text="r.language ? ' · ' + r.language : ''"></span>
+              <span class="dim" style="font-size:var(--f-sm)" :text="' · ' + [r.language, r.cover].filter(Boolean).join(' · ')"></span>
             </span>
             <div class="lang-bar-track"><div class="lang-bar" :style="{width: r.pct + '%'}"></div></div>
             <span class="lang-stats">
@@ -133,14 +144,33 @@
       </section>
     </template>
     <script>
+      // Filters for the ranking; labels match the catalog and sessions tabs.
+      this.topLang = ''
+      this.topCover = ''
+      this.coverLabel = function(cat) {
+        if (cat === 'STK') return 'Stack'
+        return ({ H:'Hard cover', A:'Audiobook', E:'Audiobook + Ebook' })[cat && cat[0]] || 'Soft cover'
+      }
+      this.topOptions = function(kind) {
+        var self = this, seen = {}
+        ;(this.topbooks || []).forEach(function(r) {
+          var v = kind === 'cover' ? self.coverLabel(r.category) : r.language
+          if (v) seen[v] = true
+        })
+        return Object.keys(seen).sort()
+      }
       // Ranked titles with a bar relative to the top one, plus stock on hand from the catalog.
       this.topRows = function() {
         var stock = {}
         ;(this.books || []).forEach(function(b) { stock[b.id] = b.stock })
-        var list = this.topbooks || [], max = list.length ? list[0].qty : 0, total = 0
+        var self = this, lang = this.topLang, cover = this.topCover
+        var list = (this.topbooks || []).filter(function(r) {
+          return (!lang || r.language === lang) && (!cover || self.coverLabel(r.category) === cover)
+        })
+        var max = list.length ? list[0].qty : 0, total = 0
         var rows = list.map(function(r) {
           total += r.qty
-          return { title: r.title, language: r.language, qty: r.qty, pct: max ? Math.round(r.qty / max * 100) : 0, stock: stock[r.book_id] }
+          return { title: r.title, language: r.language, cover: self.coverLabel(r.category), qty: r.qty, pct: max ? Math.round(r.qty / max * 100) : 0, stock: stock[r.book_id] }
         })
         return { rows: rows, total: total }
       }

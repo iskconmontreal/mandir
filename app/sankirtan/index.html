@@ -169,7 +169,7 @@ preloads:
       const who = (x.distributor_name || '').trim().toLowerCase()
       for (const l of x.books || []) {
         const key = who + '|' + l.book_id + '|' + (l.language_snapshot || '')
-        const r = by.get(key) || { who, book_id: l.book_id, title: l.title_snapshot || '—', language: l.language_snapshot || '', qty: 0 }
+        const r = by.get(key) || { who, book_id: l.book_id, title: l.title_snapshot || '—', language: l.language_snapshot || '', category: l.category_snapshot || '', qty: 0 }
         r.qty += l.qty || 0
         by.set(key, r)
       }
@@ -187,7 +187,7 @@ preloads:
     const by = new Map()
     for (const l of booksForPeriod(sessions, bounds)) {
       const key = l.book_id + '|' + l.language
-      const r = by.get(key) || { book_id: l.book_id, title: l.title, language: l.language, qty: 0 }
+      const r = by.get(key) || { book_id: l.book_id, title: l.title, language: l.language, category: l.category, qty: 0 }
       r.qty += l.qty
       by.set(key, r)
     }
@@ -221,7 +221,7 @@ preloads:
     lbLoading: false,
     lbErr: null,
     lbBooks: [],
-    topBooks: [],            // Metrics tab: [{ book_id, title, language, qty }] most distributed first
+    topBooks: [],            // Metrics tab: [{ book_id, title, language, category, qty }] most distributed first
     topPeriod: 'all',        // all | year | 90d
     topLoading: false,
     topErr: null,

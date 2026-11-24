@@ -2,7 +2,7 @@ import { expect } from '@playwright/test'
 import { test, loginAsReal } from './e2e.fixtures.js'
 
 const day = new Date().toISOString().slice(0, 8) + '01T00:00:00Z'
-const line = (book_id, title, qty) => ({ book_id, title_snapshot: title, language_snapshot: 'English', qty })
+const line = (book_id, title, qty, lang = 'English', cat = 'S1') => ({ book_id, title_snapshot: title, language_snapshot: lang, category_snapshot: cat, qty })
 
 test('books distributed: total card plus each row\'s own titles', async ({ page }) => {
   await loginAsReal(page, 'admin')
@@ -15,7 +15,7 @@ test('books distributed: total card plus each row\'s own titles', async ({ page 
   ] } }))
   await page.route('**/api/sankirtan/sessions-export.json', route => route.fulfill({ json: { sessions: [
     { distributor_name: 'Joy', occurred_at: day, books: [line(1, 'Bhagavad-gita', 5)] },
-    { distributor_name: 'Amala', occurred_at: day, books: [line(2, 'Science of Self-Realization', 4)] },
+    { distributor_name: 'Amala', occurred_at: day, books: [line(2, 'La Science de la Réalisation', 4, 'French', 'H2')] },
     { distributor_name: 'Luv Das', occurred_at: day, books: [line(1, 'Bhagavad-gita', 3)] },
   ] } }))
   await page.goto('/app/sankirtan/?tab=leaderboard')
@@ -33,7 +33,7 @@ test('books distributed: total card plus each row\'s own titles', async ({ page 
   await page.getByRole('tab', { name: 'Groups' }).click()
   await table.locator('tr', { hasText: 'Bhakti Academy' }).first().click()
   await expect(table).toContainText('2 devotees')
-  await expect(table).toContainText('Science of Self-Realization')
+  await expect(table).toContainText('La Science de la Réalisation')
   await expect(table).toContainText('×5')
   await expect(table).toContainText('×4')
 
@@ -50,6 +50,14 @@ test('books distributed: total card plus each row\'s own titles', async ({ page 
   await expect(top.locator('.lang-row').first()).toContainText('Bhagavad-gita')
   await expect(top.locator('.lang-row').first()).toContainText('8')
   await top.getByRole('tab', { name: 'Last 90 days' }).click()
+  await top.getByLabel('Language').selectOption('French')
+  await expect(top.locator('.lang-row')).toHaveCount(1)
+  await expect(top).toContainText('4 books · 1 title')
+  await top.getByLabel('Cover type').selectOption('Soft cover')
+  await expect(top).toContainText('No books match these filters.')
+  await top.getByLabel('Language').selectOption('')
+  await expect(top.locator('.lang-row').first()).toContainText('Bhagavad-gita')
+  await top.getByLabel('Cover type').selectOption('')
   await expect(top.locator('.lang-row')).toHaveCount(2)
 
   await expect(teams.locator('tr', { hasText: 'Bhakti Academy' })).toContainText('$2,681.11')
