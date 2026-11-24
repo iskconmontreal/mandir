@@ -86,15 +86,22 @@
 
         <!-- Titles distributed in the selected period -->
         <div :if="canbooks" class="card table-wrap" style="margin-top:var(--s-lg)">
-          <div class="card-header">
+          <div class="card-header" style="gap:var(--s-md); flex-wrap:wrap">
             <h3 style="margin:0">Books distributed</h3>
-            <span :if="(distributed || []).length" class="dim" style="font-size:var(--f-sm)"
-              :text="bookTotal() + ' books · ' + distributed.length + (distributed.length === 1 ? ' title' : ' titles')"></span>
+            <select :if="results.length" aria-label="Distributor" style="width:auto; font-size:var(--f-sm); margin-right:auto"
+              :onchange="e => bookWho = e.target.value">
+              <option value="" :selected="!whoRow()" :text="view === 'group' ? 'All distributors & groups' : 'All distributors'"></option>
+              <option :each="row in sortedResults()" :value="row.distributor_name" :text="row.distributor_name"
+                :selected="whoRow() === row"></option>
+            </select>
+            <span :if="bookRows().length" class="dim" style="font-size:var(--f-sm)"
+              :text="bookTotal() + ' books · ' + bookRows().length + (bookRows().length === 1 ? ' title' : ' titles')"></span>
           </div>
           <div :if="bookserror" class="login-error" :text="bookserror"></div>
           <div :if="booksloading" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
-          <div :if="!booksloading && !bookserror && !(distributed || []).length" class="dim" style="padding:var(--s-lg); text-align:center">No books distributed in this period.</div>
-          <table :if="!booksloading && (distributed || []).length">
+          <div :if="!booksloading && !bookserror && !bookRows().length" class="dim" style="padding:var(--s-lg); text-align:center"
+            :text="whoRow() ? whoRow().distributor_name + ' has no books in this period.' : 'No books distributed in this period.'"></div>
+          <table :if="!booksloading && bookRows().length">
             <thead>
               <tr>
                 <th>Book</th>
@@ -103,7 +110,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr :each="b in distributed">
+              <tr :each="b in bookRows()">
                 <td style="font-weight:var(--f-wt-b)" :text="b.title"></td>
                 <td class="dim" :text="b.language || '—'"></td>
                 <td style="text-align:right" :text="b.qty"></td>
@@ -151,7 +158,27 @@
         if (this.view === 'individual') rows = rows.flatMap(function(r) { return r.is_group && r.members?.length ? r.members : [r] })
         return this.sortRows(rows)
       }
-      this.bookTotal = function() { return (this.distributed || []).reduce(function(n, b) { return n + b.qty }, 0) }
+      // Books card: '' = everyone; else a leaderboard row's name. A group row covers
+      // its members plus sessions recorded under the group's own name.
+      this.bookWho = ''
+      this.whoRow = function() {
+        var who = this.bookWho
+        return who ? this.sortedResults().find(function(r) { return r.distributor_name === who }) || null : null
+      }
+      this.bookRows = function() {
+        var row = this.whoRow(), names = null
+        if (row) names = [row.distributor_name].concat((row.members || []).map(function(m) { return m.distributor_name }))
+          .map(function(n) { return (n || '').trim().toLowerCase() })
+        var by = {}
+        ;(this.distributed || []).forEach(function(l) {
+          if (names && names.indexOf(l.who) < 0) return
+          var key = l.book_id + '|' + l.language
+          var r = by[key] || (by[key] = { title: l.title, language: l.language, qty: 0 })
+          r.qty += l.qty
+        })
+        return Object.values(by).sort(function(a, b) { return b.qty - a.qty || a.title.localeCompare(b.title) })
+      }
+      this.bookTotal = function() { return this.bookRows().reduce(function(n, b) { return n + b.qty }, 0) }
       this.sortedMembers = function(row) { return this.sortRows(row.members || []) }
     </script>
   </sankirtan-leaderboard-tab>

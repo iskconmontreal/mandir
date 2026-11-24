@@ -158,14 +158,16 @@ preloads:
     const by = new Map()
     for (const x of sessions) {
       if ((from && x.occurred_at < from) || (to && x.occurred_at >= to)) continue
+      // who: lowercased distributor name, matched against leaderboard rows/members.
+      const who = (x.distributor_name || '').trim().toLowerCase()
       for (const l of x.books || []) {
-        const key = l.book_id + '|' + (l.language_snapshot || '')
-        const r = by.get(key) || { book_id: l.book_id, title: l.title_snapshot || '—', language: l.language_snapshot || '', qty: 0 }
+        const key = who + '|' + l.book_id + '|' + (l.language_snapshot || '')
+        const r = by.get(key) || { who, book_id: l.book_id, title: l.title_snapshot || '—', language: l.language_snapshot || '', qty: 0 }
         r.qty += l.qty || 0
         by.set(key, r)
       }
     }
-    return [...by.values()].filter(r => r.qty > 0).sort((a, b) => b.qty - a.qty || a.title.localeCompare(b.title))
+    return [...by.values()].filter(r => r.qty > 0)
   }
 
   const VALID_TABS = full ? ['catalog', 'sessions', 'leaderboard', 'metrics', 'events', 'newsletter', 'donations', 'order'] : ['newsletter']
@@ -439,6 +441,7 @@ preloads:
     s.loadPlaceAliases()
     s.loadDonations()        // the tab shows how many wait for a check or for the temple
   }
+  if (s.activeTab === 'leaderboard') s.loadLeaderboard()
   if (s.activeTab === 'events') s.loadEvents()
   if (s.activeTab === 'newsletter') s.loadNewsletters()
 </script>
