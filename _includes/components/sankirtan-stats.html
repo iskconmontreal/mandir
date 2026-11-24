@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-stats sessions:array aliases:object loading:boolean="false" canmerge:boolean="false">
+  <sankirtan-stats sessions:array aliases:object groups:array loading:boolean="false" canmerge:boolean="false">
     <style>
       :host { display: contents; }
       .sk-stats {
@@ -70,9 +70,9 @@
       .sk-rename { font: inherit; width: 100%; padding: var(--s-xs) var(--s-sm); }
       .sk-hint { padding: var(--s-xs) 0 var(--s-sm); font-size: var(--f-xs); color: var(--c-text-dim); }
       @media (max-width: 48rem) {
-        .sk-stats { gap: var(--s-sm); width: 100%; }
-        .sk-stat { flex: 1; min-width: 0; padding-left: var(--s-sm); }
-        .sk-stat .stat-label { font-size: var(--f-xs); white-space: nowrap; }
+        .sk-stats { gap: var(--s-md) var(--s-sm); width: 100%; flex-wrap: wrap; }
+        .sk-stat { flex: 1 1 calc(50% - var(--s-sm)); min-width: 0; padding-left: var(--s-sm); }
+        .sk-stat .stat-label { font-size: var(--f-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .sk-stat .stat-value { font-size: var(--f-xl); }
         .sk-stat .stat-sub { font-size: var(--f-xs); }
         .sk-stat-btn { position: static; }
@@ -126,6 +126,13 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- One tile per sankirtan group (e.g. Bhakti Academy): its books, all time and this month -->
+        <div :each="g in groups || []" class="sk-stat">
+          <div class="stat-label" :text="g.name"></div>
+          <div class="stat-value" :text="g.books.toLocaleString()"></div>
+          <div class="stat-sub dim" :text="g.month_books ? g.month_books.toLocaleString() + ' books this month' : 'no books this month'"></div>
         </div>
 
       </div>

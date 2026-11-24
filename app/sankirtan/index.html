@@ -9,7 +9,7 @@ preloads:
     <a :if="full && can('sankirtan:manage')" href="https://iskconmontrealsankirtan.com/admin/books"
        target="_blank" rel="noopener" class="btn btn-outline btn-sm">Digital books ledger ↗</a>
   </div>
-  <sankirtan-stats :if="full" :sessions="sessions" :aliases="placeAliases" :loading="!sessionsLoaded && !sessionsErr"
+  <sankirtan-stats :if="full" :sessions="sessions" :aliases="placeAliases" :groups="groupStats" :loading="!sessionsLoaded && !sessionsErr"
     :canmerge="can('settings:manage')" :onaliases="e => savePlaceAliases(e.detail)"></sankirtan-stats>
 </div>
 
@@ -197,6 +197,7 @@ preloads:
     lbLoading: false,
     lbErr: null,
     lbBooks: [],
+    groupStats: [],          // header tiles: [{ name, books, month_books }] per leaderboard group
     lbBooksLoading: false,
     lbBooksErr: null,
     orders: [],
@@ -386,6 +387,16 @@ preloads:
       s.loadLeaderboard()
     },
 
+    // Group totals come from goloka's leaderboard, which knows who belongs to which group.
+    async loadGroupStats() {
+      try {
+        const [all, month] = await Promise.all([api.getSankirtanLeaderboard('all'), api.getSankirtanLeaderboard('month')])
+        const monthBooks = new Map((month?.results || []).filter(r => r.is_group).map(r => [r.distributor_name, r.books]))
+        s.groupStats = (all?.results || []).filter(r => r.is_group)
+          .map(r => ({ name: r.distributor_name, books: r.books || 0, month_books: monthBooks.get(r.distributor_name) || 0 }))
+      } catch { /* the other tiles don't depend on it */ }
+    },
+
     async loadLbBooks() {
       if (!auth.can('sankirtan:manage')) return
       s.lbBooksErr = null
@@ -438,6 +449,7 @@ preloads:
     s.loadBooks()
     s.loadOrders()
     s.loadSessions()         // header totals need every session, whatever tab opens first
+    s.loadGroupStats()
     s.loadPlaceAliases()
     s.loadDonations()        // the tab shows how many wait for a check or for the temple
   }

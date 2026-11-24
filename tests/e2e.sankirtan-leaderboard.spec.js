@@ -35,6 +35,11 @@ test('books distributed: total card plus each row\'s own titles', async ({ page 
   await expect(table).toContainText('×5')
   await expect(table).toContainText('×4')
 
+  // Header gets a tile for the group.
+  const tile = page.locator('.sk-stat', { hasText: 'Bhakti Academy' })
+  await expect(tile).toContainText('9')
+  await expect(tile).toContainText('9 books this month')
+
   // The total card is unaffected.
   await expect(card).toContainText('12 books · 2 titles')
 })
