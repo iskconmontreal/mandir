@@ -9,7 +9,7 @@ preloads:
     <a :if="full && can('sankirtan:manage')" href="https://iskconmontrealsankirtan.com/admin/books"
        target="_blank" rel="noopener" class="btn btn-outline btn-sm">Digital books ledger ↗</a>
   </div>
-  <sankirtan-stats :if="full" :sessions="sessions" :aliases="placeAliases" :groups="groupStats" :loading="!sessionsLoaded && !sessionsErr"
+  <sankirtan-stats :if="full" :sessions="sessions" :aliases="placeAliases" :loading="!sessionsLoaded && !sessionsErr"
     :canmerge="can('settings:manage')" :onaliases="e => savePlaceAliases(e.detail)"></sankirtan-stats>
 </div>
 
@@ -61,6 +61,7 @@ preloads:
 <sankirtan-metrics-tab
   :active="activeTab === 'metrics'"
   :books="books"
+  :groups="groupStats"
   :loading="loading"
   :error="loadErr">
 </sankirtan-metrics-tab>
@@ -197,7 +198,7 @@ preloads:
     lbLoading: false,
     lbErr: null,
     lbBooks: [],
-    groupStats: [],          // header tiles: [{ name, books, cents, month_books, month_cents }] per leaderboard group
+    groupStats: [],          // Metrics tab teams: [{ name, books, cents, month_books, month_cents }] per leaderboard group
     lbBooksLoading: false,
     lbBooksErr: null,
     orders: [],

@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-metrics-tab active:boolean="false" books:array loading:boolean="false" error:string="">
+  <sankirtan-metrics-tab active:boolean="false" books:array groups:array loading:boolean="false" error:string="">
     <style>
       :host { display: contents; }
       .lang-row {
@@ -28,6 +28,33 @@
       <section :if="active">
 
         <div :if="error" class="login-error" :text="error"></div>
+
+        <!-- Teams: each sankirtan group's share, all time and this month -->
+        <div :if="(groups || []).length" class="card table-wrap" style="margin-bottom:var(--s-md)">
+          <div class="card-header"><h3 style="margin:0; font-size:var(--f-lg)">Teams</h3></div>
+          <table>
+            <thead>
+              <tr>
+                <th>Team</th>
+                <th style="text-align:right">Books</th>
+                <th style="text-align:right">Collected</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :each="g in groups">
+                <td style="font-weight:var(--f-wt-b)" :text="g.name"></td>
+                <td style="text-align:right">
+                  <div :text="g.books.toLocaleString()"></div>
+                  <div class="dim" style="font-size:var(--f-sm)" :text="g.month_books ? g.month_books.toLocaleString() + ' this month' : 'none this month'"></div>
+                </td>
+                <td style="text-align:right">
+                  <div class="stat-ok" :text="'$' + fmtAmt(g.cents)"></div>
+                  <div class="dim" style="font-size:var(--f-sm)" :text="g.month_cents ? '$' + fmtAmt(g.month_cents) + ' this month' : 'none this month'"></div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <div :if="loading && !books.length" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
         <div :if="!loading && !books.length && !error" class="dim" style="padding:var(--s-lg); text-align:center">No books in catalog yet.</div>

@@ -56,7 +56,7 @@
             <div>
               <div class="stat-label">Sankirtan group</div>
               <div :if="!can('users:manage')" style="margin-top:var(--s-xs)" :text="groupName || 'None'"></div>
-              <input :if="can('users:manage')" type="text" placeholder="None" title="Devotees sharing a group appear together on the leaderboard"
+              <input :if="can('users:manage')" type="text" placeholder="None" aria-label="Sankirtan group" title="Devotees sharing a group appear together on the leaderboard"
                 style="width:12rem; font-size:var(--f-sm); padding:var(--s-xs) var(--s-sm)"
                 :value="groupName" :onchange="e => saveGroup(e.target.value)" :onkeydown.enter="e => e.target.blur()">
             </div>

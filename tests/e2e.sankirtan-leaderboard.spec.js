@@ -37,14 +37,13 @@ test('books distributed: total card plus each row\'s own titles', async ({ page 
   await expect(table).toContainText('×5')
   await expect(table).toContainText('×4')
 
-  // Header gets a tile for the group.
-  const tile = page.locator('.sk-stat', { hasText: 'Bhakti Academy' })
-  await expect(tile).toContainText('9')
-  await expect(tile).toContainText('9 books this month')
-  await expect(tile).toContainText('$2,681.11 collected · $2,681.11 this month')
-
-  await expect(page.locator('.sk-stat', { hasText: 'Remy&Fern' })).toContainText('$500.00 collected')
-
   // The total card is unaffected.
   await expect(card).toContainText('12 books · 2 titles')
+
+  // Teams live in the Metrics tab; the header keeps its three totals.
+  await expect(page.locator('.sk-stat')).toHaveCount(3)
+  await page.getByRole('tab', { name: 'Metrics' }).click()
+  const teams = page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Teams' }) })
+  await expect(teams.locator('tr', { hasText: 'Bhakti Academy' })).toContainText('$2,681.11')
+  await expect(teams.locator('tr', { hasText: 'Remy&Fern' })).toContainText('$500.00')
 })

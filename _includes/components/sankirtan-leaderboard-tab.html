@@ -51,7 +51,10 @@
             </thead>
             <tbody :each="(row, i) in sortedResults()">
               <tr :style="{cursor: canOpen(row) ? 'pointer' : ''}"
-                :onclick.stop="canOpen(row) && toggleGroup(row)">
+                :tabindex="canOpen(row) ? 0 : -1"
+                :aria-expanded="canOpen(row) ? (groupOpen[row.distributor_name] ? 'true' : 'false') : null"
+                :onclick.stop="canOpen(row) && toggleGroup(row)"
+                :onkeydown="e => { if (canOpen(row) && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleGroup(row) } }">
                 <td class="dim" :text="i + 1"></td>
                 <td style="font-weight:var(--f-wt-b)">
                   <span :if="canOpen(row)" :html="icon('chevron_right')"
