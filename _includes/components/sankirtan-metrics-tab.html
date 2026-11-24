@@ -38,6 +38,7 @@
                 <th>Team</th>
                 <th style="text-align:right">Books</th>
                 <th style="text-align:right">Collected</th>
+                <th style="text-align:right" title="Temple cost ÷ donation — lower means more goes to the temple">BBT %</th>
               </tr>
             </thead>
             <tbody>
@@ -51,6 +52,10 @@
                   <div class="stat-ok" :text="'$' + fmtAmt(g.cents)"></div>
                   <div class="dim" style="font-size:var(--f-sm)" :text="g.month_cents ? '$' + fmtAmt(g.month_cents) + ' this month' : 'none this month'"></div>
                 </td>
+                <td style="text-align:right">
+                  <div :class="pct(g.cost_cents, g.cents) != null && pct(g.cost_cents, g.cents) <= 50 ? 'stat-ok' : ''" :text="fmtPct(pct(g.cost_cents, g.cents))"></div>
+                  <div class="dim" style="font-size:var(--f-sm); font-weight:normal" :text="pct(g.month_cost_cents, g.month_cents) == null ? 'none this month' : fmtPct(pct(g.month_cost_cents, g.month_cents)) + ' this month'"></div>
+                </td>
               </tr>
             </tbody>
             <tfoot :scope="{t: teamTotal()}">
@@ -63,6 +68,10 @@
                 <td style="text-align:right">
                   <div class="stat-ok" :text="'$' + fmtAmt(t.cents)"></div>
                   <div class="dim" style="font-size:var(--f-sm); font-weight:normal" :text="'$' + fmtAmt(t.month_cents) + ' this month'"></div>
+                </td>
+                <td style="text-align:right">
+                  <div :class="pct(t.cost_cents, t.cents) != null && pct(t.cost_cents, t.cents) <= 50 ? 'stat-ok' : ''" :text="fmtPct(pct(t.cost_cents, t.cents))"></div>
+                  <div class="dim" style="font-size:var(--f-sm); font-weight:normal" :text="pct(t.month_cost_cents, t.month_cents) == null ? 'none this month' : fmtPct(pct(t.month_cost_cents, t.month_cents)) + ' this month'"></div>
                 </td>
               </tr>
             </tfoot>
@@ -95,10 +104,14 @@
       </section>
     </template>
     <script>
+      // BBT % = temple cost ÷ donation; null when nothing was collected.
+      this.pct = function(cost, collected) { return collected > 0 ? cost / collected * 100 : null }
+      this.fmtPct = function(p) { return p == null ? '—' : Math.round(p) + '%' }
       this.teamTotal = function() {
-        var t = { books: 0, cents: 0, month_books: 0, month_cents: 0 }
+        var t = { books: 0, cents: 0, cost_cents: 0, month_books: 0, month_cents: 0, month_cost_cents: 0 }
         ;(this.groups || []).forEach(function(g) {
-          t.books += g.books; t.cents += g.cents; t.month_books += g.month_books; t.month_cents += g.month_cents
+          t.books += g.books; t.cents += g.cents; t.cost_cents += g.cost_cents
+          t.month_books += g.month_books; t.month_cents += g.month_cents; t.month_cost_cents += g.month_cost_cents
         })
         return t
       }

@@ -398,6 +398,8 @@ preloads:
           name: r.distributor_name,
           books: r.books || 0,
           cents: r.collected_cents || 0,
+          cost_cents: r.cost_cents || 0,
+          month_cost_cents: monthBy.get(r.distributor_name)?.cost_cents || 0,
           month_books: monthBy.get(r.distributor_name)?.books || 0,
           month_cents: monthBy.get(r.distributor_name)?.collected_cents || 0,
         }))

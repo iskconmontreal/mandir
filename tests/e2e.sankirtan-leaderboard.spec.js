@@ -7,7 +7,7 @@ const line = (book_id, title, qty) => ({ book_id, title_snapshot: title, languag
 test('books distributed: total card plus each row\'s own titles', async ({ page }) => {
   await loginAsReal(page, 'admin')
   await page.route('**/api/sankirtan/leaderboard?*', route => route.fulfill({ json: { results: [
-    { distributor_name: 'Bhakti Academy', points: 9, books: 9, collected_cents: 268111, is_group: true,
+    { distributor_name: 'Bhakti Academy', points: 9, books: 9, collected_cents: 268111, cost_cents: 134055, is_group: true,
       members: [{ distributor_name: 'Joy', points: 5, books: 5 }, { distributor_name: 'Amala', points: 4, books: 4 }] },
     { distributor_name: 'Luv Das', points: 3, books: 3, collected_cents: 0 },
     { distributor_name: 'Remy&Fern', points: 2, books: 2, collected_cents: 50000, is_group: true,
@@ -45,6 +45,7 @@ test('books distributed: total card plus each row\'s own titles', async ({ page 
   await page.getByRole('tab', { name: 'Metrics' }).click()
   const teams = page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Teams' }) })
   await expect(teams.locator('tr', { hasText: 'Bhakti Academy' })).toContainText('$2,681.11')
+  await expect(teams.locator('tr', { hasText: 'Bhakti Academy' })).toContainText('50%')
   await expect(teams.locator('tr', { hasText: 'Remy&Fern' })).toContainText('$500.00')
   await expect(teams.locator('tbody tr')).toHaveCount(3)   // lone distributors are listed too
   await expect(teams.locator('tfoot')).toContainText('14')
