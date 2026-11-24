@@ -7,9 +7,11 @@ const line = (book_id, title, qty) => ({ book_id, title_snapshot: title, languag
 test('books distributed: total card plus each row\'s own titles', async ({ page }) => {
   await loginAsReal(page, 'admin')
   await page.route('**/api/sankirtan/leaderboard?*', route => route.fulfill({ json: { results: [
-    { distributor_name: 'Bhakti Academy', points: 9, books: 9, collected_cents: 0, is_group: true,
+    { distributor_name: 'Bhakti Academy', points: 9, books: 9, collected_cents: 268111, is_group: true,
       members: [{ distributor_name: 'Joy', points: 5, books: 5 }, { distributor_name: 'Amala', points: 4, books: 4 }] },
     { distributor_name: 'Luv Das', points: 3, books: 3, collected_cents: 0 },
+    { distributor_name: 'Remy&Fern', points: 2, books: 2, collected_cents: 50000, is_group: true,
+      members: [{ distributor_name: 'Remy', points: 1, books: 1 }, { distributor_name: 'Fern', points: 1, books: 1 }] },
   ] } }))
   await page.route('**/api/sankirtan/sessions-export.json', route => route.fulfill({ json: { sessions: [
     { distributor_name: 'Joy', occurred_at: day, books: [line(1, 'Bhagavad-gita', 5)] },
@@ -39,6 +41,9 @@ test('books distributed: total card plus each row\'s own titles', async ({ page 
   const tile = page.locator('.sk-stat', { hasText: 'Bhakti Academy' })
   await expect(tile).toContainText('9')
   await expect(tile).toContainText('9 books this month')
+  await expect(tile).toContainText('$2,681.11 collected · $2,681.11 this month')
+
+  await expect(page.locator('.sk-stat', { hasText: 'Remy&Fern' })).toContainText('$500.00 collected')
 
   // The total card is unaffected.
   await expect(card).toContainText('12 books · 2 titles')

@@ -197,7 +197,7 @@ preloads:
     lbLoading: false,
     lbErr: null,
     lbBooks: [],
-    groupStats: [],          // header tiles: [{ name, books, month_books }] per leaderboard group
+    groupStats: [],          // header tiles: [{ name, books, cents, month_books, month_cents }] per leaderboard group
     lbBooksLoading: false,
     lbBooksErr: null,
     orders: [],
@@ -391,9 +391,14 @@ preloads:
     async loadGroupStats() {
       try {
         const [all, month] = await Promise.all([api.getSankirtanLeaderboard('all'), api.getSankirtanLeaderboard('month')])
-        const monthBooks = new Map((month?.results || []).filter(r => r.is_group).map(r => [r.distributor_name, r.books]))
-        s.groupStats = (all?.results || []).filter(r => r.is_group)
-          .map(r => ({ name: r.distributor_name, books: r.books || 0, month_books: monthBooks.get(r.distributor_name) || 0 }))
+        const monthBy = new Map((month?.results || []).filter(r => r.is_group).map(r => [r.distributor_name, r]))
+        s.groupStats = (all?.results || []).filter(r => r.is_group).map(r => ({
+          name: r.distributor_name,
+          books: r.books || 0,
+          cents: r.collected_cents || 0,
+          month_books: monthBy.get(r.distributor_name)?.books || 0,
+          month_cents: monthBy.get(r.distributor_name)?.collected_cents || 0,
+        }))
       } catch { /* the other tiles don't depend on it */ }
     },
 
