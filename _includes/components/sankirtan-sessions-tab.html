@@ -175,6 +175,9 @@
               <div :if="canmanage" style="display:flex; align-items:center; gap:var(--s-sm); margin-top:var(--s-md)">
                 <button type="button" class="btn btn-outline btn-sm"
                   :onclick.stop="openEditModal(sess)">Edit</button>
+                <button :if="!isWeb(sess)" type="button" class="btn btn-outline btn-sm"
+                  title="Open a new event for this day and place, ready for photos"
+                  :onclick.stop="emit('createevent', { date: (sess.occurred_at || '').slice(0, 10), place: sess.location || '' })">Create event</button>
                 <span :if="!sess._confirm">
                   <button type="button" class="btn btn-outline btn-sm" style="color:var(--c-err)"
                     :onclick.stop="sess._confirm = true">Delete</button>

@@ -38,7 +38,8 @@ preloads:
   :error="sessionsErr"
   :canmanage="can('sankirtan:manage')"
   :canhandover="can('sankirtan:create') || can('sankirtan:manage')"
-  :onreload="() => { loadSessions(); loadBooks() }">
+  :onreload="() => { loadSessions(); loadBooks() }"
+  :oncreateevent="e => eventFromSession(e.detail)">
 </sankirtan-sessions-tab>
 
 <sankirtan-leaderboard-tab
@@ -49,6 +50,10 @@ preloads:
   :error="lbErr"
   :monthlabel="lbMonthLabel"
   :monthoffset="lbMonthOffset"
+  :canbooks="can('sankirtan:manage')"
+  :distributed="lbBooks"
+  :booksloading="lbBooksLoading"
+  :bookserror="lbBooksErr"
   :onperiodchange="e => setLbPeriod(e.detail)"
   :onmonthstep="e => stepLbMonth(e.detail)">
 </sankirtan-leaderboard-tab>
@@ -66,6 +71,7 @@ preloads:
   :loading="eventsLoading"
   :error="eventsErr"
   :canmanage="can('sankirtan:manage')"
+  :draft="eventDraft"
   :onreload="loadEvents">
 </sankirtan-events-tab>
 
@@ -139,25 +145,27 @@ preloads:
     }
   }
 
-  // Sessions → leaderboard rows, matching GET /leaderboard so sorting and the
-  // table work unchanged for a past month.
-  const aggregateSessions = (sessions) => {
+  // Book lines only come with the sessions backup export (one bulk call, sankirtan:manage).
+  // Fetched once per page load and filtered per leaderboard period here.
+  let lineSessions = null
+  const periodBounds = (period, offset) => {
+    if (period === 'all') return {}
+    if (period === 'year') return { from: `${new Date().getFullYear()}-01-01` }
+    const { from, to } = monthRange(offset)
+    return offset > 0 ? { from, to } : { from }
+  }
+  const booksForPeriod = (sessions, { from, to }) => {
     const by = new Map()
     for (const x of sessions) {
-      const name = x.distributor_name || '—'
-      const r = by.get(name) || { distributor_name: name, books: 0, points: 0, collected_cents: 0, cost_cents: 0, session_count: 0, bbt_pct: null }
-      r.books += x.total_books || 0
-      r.points += x.total_points || 0
-      r.collected_cents += x.collected_cents || 0
-      r.cost_cents += x.total_cost_cents || 0
-      r.session_count += 1
-      by.set(name, r)
+      if ((from && x.occurred_at < from) || (to && x.occurred_at >= to)) continue
+      for (const l of x.books || []) {
+        const key = l.book_id + '|' + (l.language_snapshot || '')
+        const r = by.get(key) || { book_id: l.book_id, title: l.title_snapshot || '—', language: l.language_snapshot || '', qty: 0 }
+        r.qty += l.qty || 0
+        by.set(key, r)
+      }
     }
-    return [...by.values()].map(r => ({
-      ...r,
-      points: Math.round(r.points * 100) / 100,
-      bbt_pct: r.collected_cents > 0 ? (r.cost_cents / r.collected_cents) * 100 : null,
-    }))
+    return [...by.values()].filter(r => r.qty > 0).sort((a, b) => b.qty - a.qty || a.title.localeCompare(b.title))
   }
 
   const VALID_TABS = full ? ['catalog', 'sessions', 'leaderboard', 'metrics', 'events', 'newsletter', 'donations', 'order'] : ['newsletter']
@@ -186,6 +194,9 @@ preloads:
     lbMonthLabel: monthRange(0).label,
     lbLoading: false,
     lbErr: null,
+    lbBooks: [],
+    lbBooksLoading: false,
+    lbBooksErr: null,
     orders: [],
     draftBookIds: [],
     placeAliases: {},        // typed location → canonical place, shared via org settings
@@ -193,6 +204,7 @@ preloads:
     eventsLoaded: false,
     eventsLoading: false,
     eventsErr: null,
+    eventDraft: null,        // { date, place } handed from a session to the New Event form
     newsletters: [],
     newslettersLoaded: false,
     newslettersLoading: false,
@@ -282,6 +294,11 @@ preloads:
       }
     },
 
+    eventFromSession(d) {
+      s.eventDraft = { date: d.date, place: d.place }
+      s.switchTab('events')
+    },
+
     async loadEvents() {
       s.eventsLoading = true
       s.eventsErr = null
@@ -367,20 +384,37 @@ preloads:
       s.loadLeaderboard()
     },
 
+    async loadLbBooks() {
+      if (!auth.can('sankirtan:manage')) return
+      s.lbBooksErr = null
+      try {
+        if (!lineSessions) {
+          s.lbBooksLoading = true
+          lineSessions = (await api.get('/api/sankirtan/sessions-export.json'))?.sessions || []
+        }
+        s.lbBooks = booksForPeriod(lineSessions, periodBounds(s.lbPeriod, s.lbMonthOffset))
+      } catch (e) {
+        s.lbBooksErr = e.message || 'Failed to load books'
+      } finally {
+        s.lbBooksLoading = false
+      }
+    },
+
     async loadLeaderboard() {
+      s.loadLbBooks()
       s.lbLoading = true
       s.lbErr = null
       try {
-        let rows
+        let res
         if (s.lbPeriod === 'month' && s.lbMonthOffset > 0) {
-          // No endpoint for a past month — aggregate its sessions into the same
-          // row shape the leaderboard returns.
           const { from, to } = monthRange(s.lbMonthOffset)
-          rows = aggregateSessions(await api.getSankirtanSessions({ from, to }) || [])
+          res = await api.get(`/api/sankirtan/leaderboard?${new URLSearchParams({ from, to })}`)
+          // An older goloka ignores from/to and silently answers the current month.
+          if (res?.from !== from) throw new Error('The server does not support past months yet — deploy the latest goloka')
         } else {
-          rows = (await api.getSankirtanLeaderboard(s.lbPeriod)).results || []
+          res = await api.getSankirtanLeaderboard(s.lbPeriod)
         }
-        s.leaderboard = rows
+        s.leaderboard = res?.results || []
         s.lbLoaded = true
       } catch (e) {
         s.lbErr = e.message || 'Failed to load leaderboard'

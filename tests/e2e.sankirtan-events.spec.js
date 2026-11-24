@@ -37,6 +37,30 @@ test.describe('e2e: sankirtan events', () => {
     await expect(page.locator('.event-card', { hasText: title })).toContainText('Published')
   })
 
+  test('"Create event" on a session opens a prefilled New Event form', async ({ page }) => {
+    const place = `E2E Park ${Date.now()}`
+    // Session list mocked (creating one needs a catalog book); the event itself hits goloka.
+    await page.route('**/api/sankirtan/sessions?*', route => route.fulfill({ json: [{
+      id: 990001, distributor_name: 'E2E Devotee', occurred_at: '2030-09-26T00:00:00Z', location: place,
+      total_books: 1, total_points: 1, collected_cents: 0, books: [], payments: [], created_at: '2030-09-26T15:00:00Z',
+    }] }))
+    await page.goto('/app/sankirtan/?tab=sessions')
+
+    await page.locator('.card', { hasText: 'E2E Devotee' }).first().click()
+    await page.getByRole('button', { name: 'Create event' }).click()
+
+    await expect(page.locator('.modal h2')).toHaveText('New Event')
+    await expect(page).toHaveURL(/tab=events/)
+    await expect(page.locator('#ev-starts')).toHaveValue('2030-09-26')
+    await expect(page.locator('#ev-place-en')).toHaveValue(place)
+    await expect(page.locator('#ev-title-en')).toHaveValue(`Book distribution at ${place}`)
+
+    await page.setInputFiles('#ev-photo-file', { name: 'table.jpg', mimeType: 'image/jpeg', buffer: uniqueJpeg('session-event') })
+    await page.getByRole('button', { name: 'Create Event with 1 photo' }).click()
+    await expect(page.locator('.modal')).toHaveCount(0, { timeout: 30_000 })
+    await expect(page.locator('.event-card', { hasText: place })).toContainText('Photos:1')
+  })
+
   test('rejects an end date before the start date client-side', async ({ page }) => {
     await page.goto('/app/sankirtan/?tab=events')
     await page.getByRole('button', { name: '+ New event' }).click()

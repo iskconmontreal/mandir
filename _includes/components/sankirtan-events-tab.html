@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-events-tab active:boolean="false" events:array loading:boolean="false" error:string="" canmanage:boolean="false">
+  <sankirtan-events-tab active:boolean="false" events:array loading:boolean="false" error:string="" canmanage:boolean="false" draft:object>
     <style>
       :host { display: contents; }
       .event-list { display: flex; flex-direction: column; gap: var(--s-md); }
@@ -345,8 +345,15 @@
         this.form.starts_on = v
         if (!this.form.ends_on || this.form.ends_on < v) this.form.ends_on = v
       }
-      this.openAdd = function() {
-        this.form = { starts_on:'', ends_on:'', title_en:'', title_fr:'', place_en:'', place_fr:'', when_en:'', when_fr:'', published:true }
+      // d: optional { date, place } from a session's "Create event" button.
+      this.openAdd = function(d) {
+        var day = (d && d.date) || '', place = (d && d.place) || ''
+        this.form = {
+          starts_on: day, ends_on: day,
+          title_en: place ? 'Book distribution at ' + place : '',
+          title_fr: place ? 'Distribution de livres à ' + place : '',
+          place_en: place, place_fr: place, when_en: '', when_fr: '', published: true,
+        }
         this.modalEvent = null
         this.photos = []
         this.queue = []
@@ -354,6 +361,12 @@
         this._publishAfter = null
         this._closeAfter = false
         this.showModal = true
+      }
+      // Deferred: reading state inside onpropchange would run in the parent's effect.
+      this.onpropchange = function(k, v) {
+        if (k !== 'draft' || !v) return
+        var self = this
+        queueMicrotask(function() { if (self.canmanage) self.openAdd(v) })
       }
       this.openEdit = function(e) {
         this.form = {
