@@ -4,7 +4,7 @@ import { test, loginAsReal } from './e2e.fixtures.js'
 const day = new Date().toISOString().slice(0, 8) + '01T00:00:00Z'
 const line = (book_id, title, qty) => ({ book_id, title_snapshot: title, language_snapshot: 'English', qty })
 
-test('books distributed: total, per devotee, and per group', async ({ page }) => {
+test('books distributed: total card plus each row\'s own titles', async ({ page }) => {
   await loginAsReal(page, 'admin')
   await page.route('**/api/sankirtan/leaderboard?*', route => route.fulfill({ json: { results: [
     { distributor_name: 'Bhakti Academy', points: 9, books: 9, collected_cents: 0, is_group: true,
@@ -18,18 +18,23 @@ test('books distributed: total, per devotee, and per group', async ({ page }) =>
   ] } }))
   await page.goto('/app/sankirtan/?tab=leaderboard')
 
-  const card = page.locator('.card', { hasText: 'Books distributed' })
+  const card = page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Books distributed' }) })
   await expect(card).toContainText('12 books · 2 titles')
   await expect(card.locator('tr', { hasText: 'Bhagavad-gita' })).toContainText('8')
 
-  const pick = card.locator('select')
-  await pick.selectOption('Luv Das')
-  await expect(card).toContainText('3 books · 1 title')
+  // Devotees view: a row opens to its own titles.
+  const table = page.locator('.card').filter({ has: page.locator('th', { hasText: 'Distributor' }) })
+  await table.locator('tr', { hasText: 'Luv Das' }).first().click()
+  await expect(table).toContainText('×3')
 
+  // Groups view: the group row lists its devotees and their combined titles.
   await page.getByRole('tab', { name: 'Groups' }).click()
-  await pick.selectOption('Bhakti Academy')
-  await expect(card).toContainText('9 books · 2 titles')
+  await table.locator('tr', { hasText: 'Bhakti Academy' }).first().click()
+  await expect(table).toContainText('2 devotees')
+  await expect(table).toContainText('Science of Self-Realization')
+  await expect(table).toContainText('×5')
+  await expect(table).toContainText('×4')
 
-  await pick.selectOption('')
+  // The total card is unaffected.
   await expect(card).toContainText('12 books · 2 titles')
 })

@@ -50,15 +50,15 @@
               </tr>
             </thead>
             <tbody :each="(row, i) in sortedResults()">
-              <tr :style="{cursor: row.is_group ? 'pointer' : ''}"
-                :onclick.stop="row.is_group && toggleGroup(row)">
+              <tr :style="{cursor: canOpen(row) ? 'pointer' : ''}"
+                :onclick.stop="canOpen(row) && toggleGroup(row)">
                 <td class="dim" :text="i + 1"></td>
                 <td style="font-weight:var(--f-wt-b)">
-                  <span :if="row.is_group" :html="icon('chevron_right')"
+                  <span :if="canOpen(row)" :html="icon('chevron_right')"
                     style="display:inline-flex; vertical-align:middle; margin-right:var(--s-xs); transition:transform .15s"
                     :style="{transform: groupOpen[row.distributor_name] ? 'rotate(90deg)' : 'none'}"></span>
                   <span :text="row.distributor_name"></span>
-                  <span :if="row.is_group" class="dim" :text="' · ' + row.members.length + ' devotees'"></span>
+                  <span :if="row.is_group" class="dim" :text="' · ' + row.members.length + (row.members.length === 1 ? ' devotee' : ' devotees')"></span>
                 </td>
                 <td style="text-align:right"
                   :class="(sortBy === 'points' && i === 0) ? 'stat-ok' : ''"
@@ -69,14 +69,27 @@
                   :class="row.bbt_pct != null && row.bbt_pct <= 50 ? 'stat-ok' : ''"
                   :text="row.bbt_pct == null ? '—' : Math.round(row.bbt_pct) + '%'"></td>
               </tr>
-              <tr :if="row.is_group && groupOpen[row.distributor_name]">
+              <tr :if="canOpen(row) && groupOpen[row.distributor_name]">
                 <td colspan="6" style="padding-left:var(--s-xl)">
+                  <div :if="row.is_group" class="stat-label" style="margin-bottom:var(--s-xs)">Devotees</div>
                   <div :each="m in sortedMembers(row)"
                     style="display:flex; align-items:center; gap:var(--s-sm); padding:var(--s-xs) 0; font-size:var(--f-sm)">
                     <span style="flex:1" :text="m.distributor_name"></span>
                     <span :text="m.points + ' pts'"></span>
                     <span class="dim" :text="m.books + ' books'"></span>
                     <span class="dim" :text="'$' + fmtAmt(m.collected_cents)"></span>
+                  </div>
+                  <!-- This row's titles for the period -->
+                  <div :if="canbooks">
+                    <div class="stat-label" style="margin:var(--s-sm) 0 var(--s-xs)">Books distributed</div>
+                    <div :if="booksloading" class="dim" style="font-size:var(--f-sm)">Loading…</div>
+                    <div :if="!booksloading && !bookRows(row).length" class="dim" style="font-size:var(--f-sm)">No book details for this period.</div>
+                    <div :each="b in bookRows(row)"
+                      style="display:flex; align-items:center; gap:var(--s-sm); padding:var(--s-xs) 0; font-size:var(--f-sm)">
+                      <span style="flex:1" :text="b.title"></span>
+                      <span class="dim" :text="b.language || '—'"></span>
+                      <span style="min-width:3rem; text-align:right" :text="'×' + b.qty"></span>
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -86,21 +99,15 @@
 
         <!-- Titles distributed in the selected period -->
         <div :if="canbooks" class="card table-wrap" style="margin-top:var(--s-lg)">
-          <div class="card-header" style="gap:var(--s-md); flex-wrap:wrap">
+          <div class="card-header">
             <h3 style="margin:0">Books distributed</h3>
-            <select :if="results.length" aria-label="Distributor" style="width:auto; font-size:var(--f-sm); margin-right:auto"
-              :onchange="e => bookWho = e.target.value">
-              <option value="" :selected="!whoRow()" :text="view === 'group' ? 'All distributors & groups' : 'All distributors'"></option>
-              <option :each="row in sortedResults()" :value="row.distributor_name" :text="row.distributor_name"
-                :selected="whoRow() === row"></option>
-            </select>
             <span :if="bookRows().length" class="dim" style="font-size:var(--f-sm)"
               :text="bookTotal() + ' books · ' + bookRows().length + (bookRows().length === 1 ? ' title' : ' titles')"></span>
           </div>
           <div :if="bookserror" class="login-error" :text="bookserror"></div>
           <div :if="booksloading" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
           <div :if="!booksloading && !bookserror && !bookRows().length" class="dim" style="padding:var(--s-lg); text-align:center"
-            :text="whoRow() ? whoRow().distributor_name + ' has no books in this period.' : 'No books distributed in this period.'"></div>
+            >No books distributed in this period.</div>
           <table :if="!booksloading && bookRows().length">
             <thead>
               <tr>
@@ -158,15 +165,12 @@
         if (this.view === 'individual') rows = rows.flatMap(function(r) { return r.is_group && r.members?.length ? r.members : [r] })
         return this.sortRows(rows)
       }
-      // Books card: '' = everyone; else a leaderboard row's name. A group row covers
-      // its members plus sessions recorded under the group's own name.
-      this.bookWho = ''
-      this.whoRow = function() {
-        var who = this.bookWho
-        return who ? this.sortedResults().find(function(r) { return r.distributor_name === who }) || null : null
-      }
-      this.bookRows = function() {
-        var row = this.whoRow(), names = null
+      // Rows open to show their books (and members, for a group).
+      this.canOpen = function(row) { return row.is_group || this.canbooks }
+      // row: a leaderboard row, or none for everyone. A group covers its members plus
+      // sessions recorded under the group's own name; matched by lowercased name.
+      this.bookRows = function(row) {
+        var names = null
         if (row) names = [row.distributor_name].concat((row.members || []).map(function(m) { return m.distributor_name }))
           .map(function(n) { return (n || '').trim().toLowerCase() })
         var by = {}
