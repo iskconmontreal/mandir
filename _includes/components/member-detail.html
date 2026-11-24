@@ -53,6 +53,13 @@
               <button class="btn btn-outline btn-sm" :onclick="pendingRoleId = null">Cancel</button>
               <span :if="rolePasswordErr" class="login-error" style="font-size:var(--f-xs)" :text="rolePasswordErr"></span>
             </div>
+            <div>
+              <div class="stat-label">Sankirtan group</div>
+              <div :if="!can('users:manage')" style="margin-top:var(--s-xs)" :text="groupName || 'None'"></div>
+              <input :if="can('users:manage')" type="text" placeholder="None" title="Devotees sharing a group appear together on the leaderboard"
+                style="width:12rem; font-size:var(--f-sm); padding:var(--s-xs) var(--s-sm)"
+                :value="groupName" :onchange="e => saveGroup(e.target.value)" :onkeydown.enter="e => e.target.blur()">
+            </div>
             <div><div class="stat-label">Last Login</div><div :text="userDetail.last_login?.slice(0, 10) || 'Never'"></div></div>
             <div :if="userDetail.id">
               <div class="stat-label">Trusted Devices</div>
@@ -135,6 +142,10 @@
       this.inviting = false
       this.revoking = false
       this.rolePerms = []
+      // meta/roles kept as plain snapshots: PUT /users replaces both wholesale
+      this.groupName = ''
+      this.metaJson = '{}'
+      this.roleIds = []
       this.can = window.appState ? window.appState.can : window.auth?.can || (() => false)
 
       this.sysRoleName = function(id) {
@@ -147,6 +158,7 @@
           this.tab = 'overview'
           this.userDetail = {}; this.pendingRoleId = null; this.rolePassword = ''; this.rolePasswordErr = null
           this.inviteConfirm = false; this.inviting = false; this.revoking = false; this.rolePerms = []
+          this.groupName = ''; this.metaJson = '{}'; this.roleIds = []
           if (this.member?._user_id) this.loadUser()
         }
       }
@@ -154,6 +166,10 @@
       this.loadUser = function() {
         var self = this
         self.api.getUser(self.member._user_id).then(function(u) {
+          self.metaJson = JSON.stringify(u.meta || {})
+          self.groupName = (u.meta && u.meta.group) || ''
+          self.roleIds = (u.roles || []).map(function(r) { return r.id })
+          u.role_id = self.roleIds[0] || 0  // API sends roles[], the dropdown reads one role_id
           self.userDetail = u
           self.updateRolePerms()
         }).catch(function() {})
@@ -172,7 +188,8 @@
       this.changeRole = function(roleId) {
         var self = this; self.rolePassword = ''; self.rolePasswordErr = null; self.pendingRoleId = null
         self.api.updateUser(self.userDetail.id, { role_ids: roleId ? [roleId] : [] }).then(function() {
-          self.userDetail = Object.assign({}, self.userDetail, { role_id: roleId })
+          self.roleIds = roleId ? [roleId] : []
+          self.userDetail.role_id = roleId
           self.updateRolePerms()
         }).catch(function(e) {
           if (e.message === 'Password required for this role') { self.pendingRoleId = roleId; return }
@@ -184,16 +201,30 @@
         if (!this.rolePassword) return
         var self = this; self.rolePasswordErr = null
         self.api.updateUser(self.userDetail.id, { role_ids: self.pendingRoleId ? [self.pendingRoleId] : [], password: self.rolePassword }).then(function() {
-          self.userDetail = Object.assign({}, self.userDetail, { role_id: self.pendingRoleId })
+          self.roleIds = self.pendingRoleId ? [self.pendingRoleId] : []
+          self.userDetail.role_id = self.pendingRoleId
           self.pendingRoleId = null; self.rolePassword = ''
           self.updateRolePerms()
         }).catch(function(e) { self.rolePasswordErr = e.message || 'Failed to change role' })
       }
 
+      this.saveGroup = function(value) {
+        var self = this, group = value.trim()
+        if (group === self.groupName) return
+        var meta = JSON.parse(self.metaJson)
+        if (group) meta.group = group
+        else delete meta.group
+        self.api.updateUser(self.userDetail.id, { role_ids: self.roleIds.slice(), meta: meta }).then(function() {
+          self.metaJson = JSON.stringify(meta)
+          self.groupName = group
+          self.toast(group ? 'Added to ' + group : 'Removed from group', 'success')
+        }).catch(function(e) { self.toast(e.message || 'Failed to save group') })
+      }
+
       this.revokeDevice = function() {
         var self = this; self.revoking = true
         self.api.revokeDevice(self.userDetail.id).then(function() {
-          self.userDetail = Object.assign({}, self.userDetail, { devices: [] })
+          self.userDetail.devices = []
         }).catch(function(e) { self.toast(e.message || 'Failed to revoke') })
         .finally(function() { self.revoking = false })
       }

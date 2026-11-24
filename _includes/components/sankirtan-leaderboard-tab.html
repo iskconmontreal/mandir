@@ -23,7 +23,8 @@
             :onclick="emit('periodchange', 'all')">All Time</button>
         </div>
 
-        <div :if="hasGroups()" class="pill-tabs" style="margin-left:var(--s-md); margin-bottom:var(--s-lg)" role="tablist">
+        <!-- Always shown: groups are resolved per period, so hiding it made the toggle jump between months -->
+        <div class="pill-tabs" style="margin-left:var(--s-md); margin-bottom:var(--s-lg)" role="tablist">
           <button type="button" class="pill-tab" role="tab"
             :class="{'pill-tab-active': view === 'individual'}"
             :onclick="setView('individual')">Devotees</button>
@@ -112,7 +113,6 @@
       // Devotees sharing a meta.group arrive merged into one row carrying its members.
       this.view = 'individual'
       this.groupOpen = {}
-      this.hasGroups = function() { return (this.results || []).some(function(r) { return r.is_group }) }
       this.setView = function(v) { this.view = v; this.groupOpen = {} }
       // Replaced rather than mutated — sprae doesn't track an in-place edit here.
       this.toggleGroup = function(row) {
