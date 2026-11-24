@@ -19,6 +19,10 @@ exclude:
   - agents.md
   - tests
   - playwright.config.js
+  - "playwright.*.js"
+  - vitest.config.js
+  - shot-tmp.mjs
+  - books-beatify-fr
   - playwright-report
   - test-results
   - .mcp_data
