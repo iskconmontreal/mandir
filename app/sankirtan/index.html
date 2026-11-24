@@ -198,7 +198,7 @@ preloads:
     lbLoading: false,
     lbErr: null,
     lbBooks: [],
-    groupStats: [],          // Metrics tab teams: [{ name, books, cents, month_books, month_cents }] per leaderboard group
+    groupStats: [],          // Metrics tab teams: [{ name, books, cents, month_books, month_cents }] per group or lone distributor
     lbBooksLoading: false,
     lbBooksErr: null,
     orders: [],
@@ -388,12 +388,13 @@ preloads:
       s.loadLeaderboard()
     },
 
-    // Group totals come from goloka's leaderboard, which knows who belongs to which group.
+    // Every leaderboard row (groups folded, the rest individual) so the Teams table
+    // adds up to the header totals. Grouping comes from goloka.
     async loadGroupStats() {
       try {
         const [all, month] = await Promise.all([api.getSankirtanLeaderboard('all'), api.getSankirtanLeaderboard('month')])
-        const monthBy = new Map((month?.results || []).filter(r => r.is_group).map(r => [r.distributor_name, r]))
-        s.groupStats = (all?.results || []).filter(r => r.is_group).map(r => ({
+        const monthBy = new Map((month?.results || []).map(r => [r.distributor_name, r]))
+        s.groupStats = (all?.results || []).map(r => ({
           name: r.distributor_name,
           books: r.books || 0,
           cents: r.collected_cents || 0,

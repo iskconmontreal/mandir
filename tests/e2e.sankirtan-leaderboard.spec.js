@@ -46,4 +46,7 @@ test('books distributed: total card plus each row\'s own titles', async ({ page 
   const teams = page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Teams' }) })
   await expect(teams.locator('tr', { hasText: 'Bhakti Academy' })).toContainText('$2,681.11')
   await expect(teams.locator('tr', { hasText: 'Remy&Fern' })).toContainText('$500.00')
+  await expect(teams.locator('tbody tr')).toHaveCount(3)   // lone distributors are listed too
+  await expect(teams.locator('tfoot')).toContainText('14')
+  await expect(teams.locator('tfoot')).toContainText('$3,181.11')
 })

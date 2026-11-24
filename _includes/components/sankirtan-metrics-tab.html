@@ -29,7 +29,7 @@
 
         <div :if="error" class="login-error" :text="error"></div>
 
-        <!-- Teams: each sankirtan group's share, all time and this month -->
+        <!-- Teams: every group and lone distributor, all time and this month; totals match the header -->
         <div :if="(groups || []).length" class="card table-wrap" style="margin-bottom:var(--s-md)">
           <div class="card-header"><h3 style="margin:0; font-size:var(--f-lg)">Teams</h3></div>
           <table>
@@ -53,6 +53,19 @@
                 </td>
               </tr>
             </tbody>
+            <tfoot :scope="{t: teamTotal()}">
+              <tr style="font-weight:var(--f-wt-b)">
+                <td>Total</td>
+                <td style="text-align:right">
+                  <div :text="t.books.toLocaleString()"></div>
+                  <div class="dim" style="font-size:var(--f-sm); font-weight:normal" :text="t.month_books.toLocaleString() + ' this month'"></div>
+                </td>
+                <td style="text-align:right">
+                  <div class="stat-ok" :text="'$' + fmtAmt(t.cents)"></div>
+                  <div class="dim" style="font-size:var(--f-sm); font-weight:normal" :text="'$' + fmtAmt(t.month_cents) + ' this month'"></div>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
 
@@ -82,6 +95,13 @@
       </section>
     </template>
     <script>
+      this.teamTotal = function() {
+        var t = { books: 0, cents: 0, month_books: 0, month_cents: 0 }
+        ;(this.groups || []).forEach(function(g) {
+          t.books += g.books; t.cents += g.cents; t.month_books += g.month_books; t.month_cents += g.month_cents
+        })
+        return t
+      }
       this.SECTIONS = [
         { title: 'Inventory by language', field: 'language', nameWidth: '8rem' },
         { title: 'Inventory by author', field: 'author', nameWidth: '18rem' },
