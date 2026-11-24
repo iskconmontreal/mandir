@@ -44,6 +44,14 @@ test('books distributed: total card plus each row\'s own titles', async ({ page 
   await expect(page.locator('.sk-stat')).toHaveCount(3)
   await page.getByRole('tab', { name: 'Metrics' }).click()
   const teams = page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Teams' }) })
+  // Most distributed books, top first, with a period switch.
+  const top = page.locator('.card').filter({ has: page.locator('h3', { hasText: 'Most distributed books' }) })
+  await expect(top).toContainText('12 books · 2 titles')
+  await expect(top.locator('.lang-row').first()).toContainText('Bhagavad-gita')
+  await expect(top.locator('.lang-row').first()).toContainText('8')
+  await top.getByRole('tab', { name: 'Last 90 days' }).click()
+  await expect(top.locator('.lang-row')).toHaveCount(2)
+
   await expect(teams.locator('tr', { hasText: 'Bhakti Academy' })).toContainText('$2,681.11')
   await expect(teams.locator('tr', { hasText: 'Bhakti Academy' })).toContainText('50%')
   await expect(teams.locator('tr', { hasText: 'Remy&Fern' })).toContainText('$500.00')

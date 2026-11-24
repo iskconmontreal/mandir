@@ -1,5 +1,5 @@
 <define-element>
-  <sankirtan-metrics-tab active:boolean="false" books:array groups:array loading:boolean="false" error:string="">
+  <sankirtan-metrics-tab active:boolean="false" books:array groups:array cantop:boolean="false" topbooks:array topperiod:string="all" toploading:boolean="false" toperror:string="" loading:boolean="false" error:string="">
     <style>
       :host { display: contents; }
       .lang-row {
@@ -78,6 +78,35 @@
           </table>
         </div>
 
+        <!-- Most distributed titles, to guide the next order -->
+        <div :if="cantop" class="card" style="padding:var(--s-md) var(--s-lg); margin-bottom:var(--s-md); --name-w:22rem" :scope="{top: topRows()}">
+          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:var(--s-sm) var(--s-md); margin-bottom:var(--s-sm)">
+            <h3 style="margin:0; font-size:var(--f-lg)">Most distributed books</h3>
+            <span :if="top.rows.length" class="dim" style="font-size:var(--f-sm)"
+              :text="top.total.toLocaleString() + ' books · ' + top.rows.length + (top.rows.length === 1 ? ' title' : ' titles')"></span>
+            <div class="pill-tabs" style="margin-left:auto" role="tablist">
+              <button type="button" class="pill-tab" role="tab" :class="{'pill-tab-active': topperiod === '90d'}" :onclick="emit('topperiod', '90d')">Last 90 days</button>
+              <button type="button" class="pill-tab" role="tab" :class="{'pill-tab-active': topperiod === 'year'}" :onclick="emit('topperiod', 'year')">This Year</button>
+              <button type="button" class="pill-tab" role="tab" :class="{'pill-tab-active': topperiod === 'all'}" :onclick="emit('topperiod', 'all')">All Time</button>
+            </div>
+          </div>
+          <div :if="toperror" class="login-error" :text="toperror"></div>
+          <div :if="toploading" class="dim" style="padding:var(--s-md) 0">Loading…</div>
+          <div :if="!toploading && !toperror && !top.rows.length" class="dim" style="padding:var(--s-md) 0">No books distributed in this period.</div>
+          <div :each="(r, i) in top.rows" class="lang-row">
+            <span>
+              <span class="dim" style="display:inline-block; min-width:2rem" :text="i + 1"></span>
+              <span class="lang-name" :text="r.title"></span>
+              <span class="dim" style="font-size:var(--f-sm)" :text="r.language ? ' · ' + r.language : ''"></span>
+            </span>
+            <div class="lang-bar-track"><div class="lang-bar" :style="{width: r.pct + '%'}"></div></div>
+            <span class="lang-stats">
+              <span class="lang-pct" :text="r.qty.toLocaleString()"></span>
+              <span class="dim" :text="r.stock == null ? '' : ' · ' + r.stock + ' in stock'"></span>
+            </span>
+          </div>
+        </div>
+
         <div :if="loading && !books.length" class="dim" style="padding:var(--s-lg); text-align:center">Loading…</div>
         <div :if="!loading && !books.length && !error" class="dim" style="padding:var(--s-lg); text-align:center">No books in catalog yet.</div>
 
@@ -104,6 +133,17 @@
       </section>
     </template>
     <script>
+      // Ranked titles with a bar relative to the top one, plus stock on hand from the catalog.
+      this.topRows = function() {
+        var stock = {}
+        ;(this.books || []).forEach(function(b) { stock[b.id] = b.stock })
+        var list = this.topbooks || [], max = list.length ? list[0].qty : 0, total = 0
+        var rows = list.map(function(r) {
+          total += r.qty
+          return { title: r.title, language: r.language, qty: r.qty, pct: max ? Math.round(r.qty / max * 100) : 0, stock: stock[r.book_id] }
+        })
+        return { rows: rows, total: total }
+      }
       // BBT % = temple cost ÷ donation; null when nothing was collected.
       this.pct = function(cost, collected) { return collected > 0 ? cost / collected * 100 : null }
       this.fmtPct = function(p) { return p == null ? '—' : Math.round(p) + '%' }

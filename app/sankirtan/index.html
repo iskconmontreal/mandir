@@ -62,6 +62,12 @@ preloads:
   :active="activeTab === 'metrics'"
   :books="books"
   :groups="groupStats"
+  :cantop="can('sankirtan:manage')"
+  :topbooks="topBooks"
+  :topperiod="topPeriod"
+  :toploading="topLoading"
+  :toperror="topErr"
+  :ontopperiod="e => loadTopBooks(e.detail)"
   :loading="loading"
   :error="loadErr">
 </sankirtan-metrics-tab>
@@ -171,6 +177,23 @@ preloads:
     return [...by.values()].filter(r => r.qty > 0)
   }
 
+  // Titles ranked by copies distributed, every distributor and language together.
+  const topBounds = (period) => {
+    if (period === 'year') return { from: `${new Date().getFullYear()}-01-01` }
+    if (period === '90d') return { from: new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10) }
+    return {}
+  }
+  const rankBooks = (sessions, bounds) => {
+    const by = new Map()
+    for (const l of booksForPeriod(sessions, bounds)) {
+      const key = l.book_id + '|' + l.language
+      const r = by.get(key) || { book_id: l.book_id, title: l.title, language: l.language, qty: 0 }
+      r.qty += l.qty
+      by.set(key, r)
+    }
+    return [...by.values()].sort((a, b) => b.qty - a.qty || a.title.localeCompare(b.title))
+  }
+
   const VALID_TABS = full ? ['catalog', 'sessions', 'leaderboard', 'metrics', 'events', 'newsletter', 'donations', 'order'] : ['newsletter']
   const urlTab = () => {
     const t = new URLSearchParams(location.search).get('tab')
@@ -198,6 +221,10 @@ preloads:
     lbLoading: false,
     lbErr: null,
     lbBooks: [],
+    topBooks: [],            // Metrics tab: [{ book_id, title, language, qty }] most distributed first
+    topPeriod: 'all',        // all | year | 90d
+    topLoading: false,
+    topErr: null,
     groupStats: [],          // Metrics tab teams: [{ name, books, cents, month_books, month_cents }] per group or lone distributor
     lbBooksLoading: false,
     lbBooksErr: null,
@@ -277,6 +304,7 @@ preloads:
       history.pushState(null, '', url)
       if (tab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
       if (tab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
+      if (tab === 'metrics') s.loadTopBooks()
       if (tab === 'events' && !s.eventsLoaded) s.loadEvents()
       if (tab === 'newsletter' && !s.newslettersLoaded) s.loadNewsletters()
     },
@@ -406,6 +434,23 @@ preloads:
       } catch { /* the other tiles don't depend on it */ }
     },
 
+    async loadTopBooks(period) {
+      if (!auth.can('sankirtan:manage')) return
+      if (period) s.topPeriod = period
+      s.topErr = null
+      try {
+        if (!lineSessions) {
+          s.topLoading = true
+          lineSessions = (await api.get('/api/sankirtan/sessions-export.json'))?.sessions || []
+        }
+        s.topBooks = rankBooks(lineSessions, topBounds(s.topPeriod))
+      } catch (e) {
+        s.topErr = e.message || 'Failed to load books'
+      } finally {
+        s.topLoading = false
+      }
+    },
+
     async loadLbBooks() {
       if (!auth.can('sankirtan:manage')) return
       s.lbBooksErr = null
@@ -450,6 +495,7 @@ preloads:
     s.activeTab = urlTab()
     if (s.activeTab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
     if (s.activeTab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
+    if (s.activeTab === 'metrics') s.loadTopBooks()
     if (s.activeTab === 'events' && !s.eventsLoaded) s.loadEvents()
     if (s.activeTab === 'newsletter' && !s.newslettersLoaded) s.loadNewsletters()
   })
@@ -463,6 +509,7 @@ preloads:
     s.loadDonations()        // the tab shows how many wait for a check or for the temple
   }
   if (s.activeTab === 'leaderboard') s.loadLeaderboard()
+  if (s.activeTab === 'metrics') s.loadTopBooks()
   if (s.activeTab === 'events') s.loadEvents()
   if (s.activeTab === 'newsletter') s.loadNewsletters()
 </script>
