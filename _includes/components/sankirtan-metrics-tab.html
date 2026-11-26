@@ -105,15 +105,17 @@
           <div :if="!toploading && !toperror && !top.rows.length" class="dim" style="padding:var(--s-md) 0"
             :text="topLang || topCover ? 'No books match these filters.' : 'No books distributed in this period.'"></div>
           <div :each="(r, i) in top.rows" class="lang-row">
-            <span>
-              <span class="dim" style="display:inline-block; min-width:2rem" :text="i + 1"></span>
-              <span class="lang-name" :text="r.title"></span>
-              <span class="dim" style="font-size:var(--f-sm)" :text="' · ' + [r.language, r.cover].filter(Boolean).join(' · ')"></span>
+            <span style="display:flex; gap:var(--s-sm); min-width:0">
+              <span class="dim" style="flex-shrink:0; min-width:1.5rem" :text="i + 1"></span>
+              <span style="min-width:0">
+                <span class="lang-name" style="display:block" :text="r.title"></span>
+                <span class="dim" style="display:block; font-size:var(--f-sm)" :text="[r.language, r.cover].filter(Boolean).join(' · ')"></span>
+              </span>
             </span>
             <div class="lang-bar-track"><div class="lang-bar" :style="{width: r.pct + '%'}"></div></div>
             <span class="lang-stats">
-              <span class="lang-pct" :text="r.qty.toLocaleString()"></span>
-              <span class="dim" :text="r.stock == null ? '' : ' · ' + r.stock + ' in stock'"></span>
+              <span class="lang-pct" :text="r.qty.toLocaleString() + ' distributed'"></span>
+              <span class="dim" :text="r.stock == null ? '' : ' · ' + r.stock.toLocaleString() + ' in stock'"></span>
             </span>
           </div>
         </div>
