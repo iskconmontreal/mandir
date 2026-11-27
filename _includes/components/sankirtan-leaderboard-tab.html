@@ -1,8 +1,13 @@
 <define-element>
-  <sankirtan-leaderboard-tab active:boolean="false" results:array period:string="month" loading:boolean="false" error:string="" monthlabel:string="" monthoffset:number="0" canbooks:boolean="false" distributed:array booksloading:boolean="false" bookserror:string="">
+  <sankirtan-leaderboard-tab active:boolean="false" results:array period:string="month" loading:boolean="false" error:string="" monthlabel:string="" monthoffset:number="0" canbooks:boolean="false" canswitch:boolean="false" shown:boolean="false" distributed:array booksloading:boolean="false" bookserror:string="">
     <style>:host { display: contents; }</style>
     <template>
       <section :if="active">
+
+        <label :if="canswitch" style="display:flex; align-items:center; gap:var(--s-sm); margin-bottom:var(--s-lg); cursor:pointer">
+          <input type="checkbox" style="width:auto; margin:0" :checked="shown" :onchange="e => emit('switch', e.target.checked)">
+          Show the leaderboard to devotees (POS and Mandir)
+        </label>
 
         <!-- Period selector — the month pill steps back through past months -->
         <div class="pill-tabs" style="margin-bottom:var(--s-lg)" role="tablist">

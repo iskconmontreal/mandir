@@ -13,7 +13,7 @@ preloads:
     :canmerge="can('settings:manage')" :onaliases="e => savePlaceAliases(e.detail)"></sankirtan-stats>
 </div>
 
-<sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :ordercount="draftBookIds.length" :donationcount="donationsTodo" :full="full"
+<sankirtan-tab-bar :active="activeTab" :canmanage="can('sankirtan:manage')" :leaderboard="lbShown" :ordercount="draftBookIds.length" :donationcount="donationsTodo" :full="full"
   :ontabchange="e => switchTab(e.detail)">
 </sankirtan-tab-bar>
 
@@ -43,7 +43,7 @@ preloads:
 </sankirtan-sessions-tab>
 
 <sankirtan-leaderboard-tab
-  :active="activeTab === 'leaderboard'"
+  :active="activeTab === 'leaderboard' && lbShown"
   :results="leaderboard"
   :period="lbPeriod"
   :loading="lbLoading"
@@ -51,6 +51,9 @@ preloads:
   :monthlabel="lbMonthLabel"
   :monthoffset="lbMonthOffset"
   :canbooks="can('sankirtan:manage')"
+  :canswitch="can('settings:manage')"
+  :shown="lbOn"
+  :onswitch="e => saveLeaderboardSwitch(e.detail)"
   :distributed="lbBooks"
   :booksloading="lbBooksLoading"
   :bookserror="lbBooksErr"
@@ -61,7 +64,7 @@ preloads:
 <sankirtan-metrics-tab
   :active="activeTab === 'metrics'"
   :books="books"
-  :groups="groupStats"
+  :groups="lbShown ? groupStats : []"
   :cantop="can('sankirtan:manage')"
   :topbooks="topBooks"
   :topperiod="topPeriod"
@@ -221,6 +224,7 @@ preloads:
     lbLoading: false,
     lbErr: null,
     lbBooks: [],
+    lbOn: false,             // org setting; hidden until it loads so a devotee never sees it flash
     topBooks: [],            // Metrics tab: [{ book_id, title, language, category, qty }] most distributed first
     topPeriod: 'all',        // all | year | 90d
     topLoading: false,
@@ -303,16 +307,44 @@ preloads:
       url.searchParams.set('tab', tab)
       history.pushState(null, '', url)
       if (tab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
-      if (tab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
+      if (tab === 'leaderboard' && !s.lbLoaded && s.lbShown) s.loadLeaderboard()
       if (tab === 'metrics') s.loadTopBooks()
       if (tab === 'events' && !s.eventsLoaded) s.loadEvents()
       if (tab === 'newsletter' && !s.newslettersLoaded) s.loadNewsletters()
     },
 
-    async loadPlaceAliases() {
+    get lbShown() { return this.lbOn || auth.can('sankirtan:manage') },
+
+    async loadOrgSettings() {
+      let res
+      try { res = await api.getOrgSettings() } catch { return }
+      s.lbOn = res.sankirtan_leaderboard !== false
+      if (s.activeTab === 'leaderboard') {
+        if (!s.lbShown) s.leaveLeaderboard()
+        else if (!s.lbLoaded) s.loadLeaderboard()
+      }
       try {
-        s.placeAliases = JSON.parse((await api.getOrgSettings()).sankirtan_place_aliases || '{}')
+        s.placeAliases = JSON.parse(res.sankirtan_place_aliases || '{}')
       } catch { /* grouping still works on spelling alone */ }
+    },
+
+    leaveLeaderboard() {
+      s.activeTab = 'catalog'
+      const url = new URL(location.href)
+      url.searchParams.set('tab', 'catalog')
+      history.replaceState(null, '', url)
+    },
+
+    async saveLeaderboardSwitch(on) {
+      s.lbOn = on
+      try {
+        const res = await api.updateOrgSettings({ sankirtan_leaderboard: on })
+        if (!('sankirtan_leaderboard' in res)) throw new Error('The server needs an update before the leaderboard can be switched off')
+        toast(on ? 'Leaderboard shown to devotees' : 'Leaderboard hidden from devotees', 'success')
+      } catch (e) {
+        s.lbOn = !on
+        toast(e.message || 'Failed to save', 'error')
+      }
     },
 
     async savePlaceAliases(map) {
@@ -494,7 +526,7 @@ preloads:
   window.addEventListener('popstate', () => {
     s.activeTab = urlTab()
     if (s.activeTab === 'sessions' && !s.sessionsLoaded) s.loadSessions()
-    if (s.activeTab === 'leaderboard' && !s.lbLoaded) s.loadLeaderboard()
+    if (s.activeTab === 'leaderboard' && !s.lbLoaded && s.lbShown) s.loadLeaderboard()
     if (s.activeTab === 'metrics') s.loadTopBooks()
     if (s.activeTab === 'events' && !s.eventsLoaded) s.loadEvents()
     if (s.activeTab === 'newsletter' && !s.newslettersLoaded) s.loadNewsletters()
@@ -505,10 +537,10 @@ preloads:
     s.loadOrders()
     s.loadSessions()         // header totals need every session, whatever tab opens first
     s.loadGroupStats()
-    s.loadPlaceAliases()
+    s.loadOrgSettings()
     s.loadDonations()        // the tab shows how many wait for a check or for the temple
   }
-  if (s.activeTab === 'leaderboard') s.loadLeaderboard()
+  if (s.activeTab === 'leaderboard' && s.lbShown) s.loadLeaderboard()
   if (s.activeTab === 'metrics') s.loadTopBooks()
   if (s.activeTab === 'events') s.loadEvents()
   if (s.activeTab === 'newsletter') s.loadNewsletters()
